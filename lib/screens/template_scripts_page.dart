@@ -142,10 +142,16 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
           ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Scripts the assistant uses during calls. Prebuilt templates are provided by default; you can edit them or create your own. Use placeholders: {{student_name}}, {{balance}}, {{due_date}}, {{school_name}}, {{late_fee}}.',
-                style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: SpeariaSpacing.lg),
+                  child: Text(
+                    'Scripts the assistant uses during calls. Prebuilt templates are provided by default; you can edit them or create your own. Use placeholders: {{student_name}}, {{balance}}, {{due_date}}, {{school_name}}, {{late_fee}}.',
+                    style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+                  ),
+                ),
               ),
               FilledButton.icon(
                 onPressed: () => _openEditor(),

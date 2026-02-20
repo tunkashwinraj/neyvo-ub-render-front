@@ -344,6 +344,14 @@ class NeyvoPulseApi {
     }
   }
 
+  /// Get a single campaign by id (full details).
+  static Future<Map<String, dynamic>> getCampaign(String campaignId) async =>
+      _get('/api/pulse/campaigns/$campaignId');
+
+  /// List calls placed for a campaign.
+  static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
+      _get('/api/pulse/campaigns/$campaignId/calls', params: {'limit': limit});
+
   /// Create a campaign (name, audience filters or student_ids, template_id, scheduled_at).
   static Future<Map<String, dynamic>> createCampaign({
     required String name,
@@ -362,7 +370,13 @@ class NeyvoPulseApi {
     return _post('/api/pulse/campaigns', body);
   }
 
-  /// Start a campaign (queue outbound calls).
-  static Future<Map<String, dynamic>> startCampaign(String campaignId) async =>
-      _post('/api/pulse/campaigns/$campaignId/start', {});
+  /// Start a campaign (places outbound calls sequentially; may take a while).
+  static Future<Map<String, dynamic>> startCampaign(String campaignId) async {
+    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    return SpeariaApi.postJsonMap(
+      '/api/pulse/campaigns/$campaignId/start',
+      body: body,
+      timeout: const Duration(seconds: 120),
+    );
+  }
 }

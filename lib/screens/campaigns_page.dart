@@ -20,6 +20,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   String? _error;
   bool _showCreateWizard = false;
   int _wizardStep = 0;
+  String? _selectedCampaignId;
+  int _campaignDetailRefreshKey = 0;
 
   // Wizard state
   final _nameController = TextEditingController();
@@ -171,12 +173,16 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _campaigns.isEmpty) {
+    if (_loading && _campaigns.isEmpty && _selectedCampaignId == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_showCreateWizard) {
       return _buildWizard();
+    }
+
+    if (_selectedCampaignId != null) {
+      return _buildCampaignDetailScreen(_selectedCampaignId!);
     }
 
     return SingleChildScrollView(
@@ -238,20 +244,35 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     leading: const CircleAvatar(child: Icon(Icons.campaign_outlined)),
                     title: Text(c['name']?.toString() ?? 'Unnamed'),
                     subtitle: Text(
-                      '${c['total_planned'] ?? c['student_count'] ?? 0} students • ${c['status'] ?? 'draft'}',
+                      '${c['total_planned'] ?? c['student_count'] ?? 0} students • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
                       style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
                     ),
-                    trailing: (c['status'] == 'draft' || c['status'] == 'scheduled')
-                        ? IconButton(
+                    onTap: () => setState(() => _selectedCampaignId = c['id']?.toString()),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.visibility_outlined),
+                          tooltip: 'View & manage',
+                          onPressed: () => setState(() => _selectedCampaignId = c['id']?.toString()),
+                        ),
+                        if (c['status'] == 'draft' || c['status'] == 'scheduled')
+                          IconButton(
                             icon: const Icon(Icons.play_arrow),
+                            tooltip: 'Start campaign',
                             onPressed: () async {
                               final id = c['id']?.toString();
                               if (id == null) return;
                               try {
-                                await NeyvoPulseApi.startCampaign(id);
+                                final res = await NeyvoPulseApi.startCampaign(id);
                                 if (mounted) {
+                                  final initiated = res['total_initiated'] ?? 0;
+                                  final failed = res['total_failed'] ?? 0;
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Campaign started'), backgroundColor: SpeariaAura.success),
+                                    SnackBar(
+                                      content: Text('Campaign started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
+                                      backgroundColor: SpeariaAura.success,
+                                    ),
                                   );
                                   _load();
                                 }
@@ -259,12 +280,161 @@ class _CampaignsPageState extends State<CampaignsPage> {
                                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
                               }
                             },
-                          )
-                        : null,
+                          ),
+                      ],
+                    ),
                   ),
                 )),
         ],
       ),
+    );
+  }
+
+  Widget _buildCampaignDetailScreen(String campaignId) {
+    return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey('campaign_detail_${campaignId}_$_campaignDetailRefreshKey'),
+      future: Future.wait([
+        NeyvoPulseApi.getCampaign(campaignId),
+        NeyvoPulseApi.getCampaignCalls(campaignId),
+      ]).then((list) => {'campaign': list[0]['campaign'], 'calls': (list[1]['calls'] as List?) ?? []}),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _selectedCampaignId = null),
+              ),
+              title: const Text('Campaign details'),
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final data = snapshot.data!;
+        final c = data['campaign'] as Map<String, dynamic>? ?? {};
+        final calls = (data['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final status = c['status']?.toString() ?? 'draft';
+        final canStart = status == 'draft' || status == 'scheduled';
+        final templateId = c['template_id']?.toString();
+        final templateList = templateId != null ? _templates.where((t) => t['id']?.toString() == templateId).toList() : <Map<String, dynamic>>[];
+        final templateName = templateList.isNotEmpty ? (templateList.first['name']?.toString() ?? templateId) : (templateId ?? '—');
+        final created = c['created_at'];
+        final started = c['started_at'];
+        String formatDate(dynamic v) {
+          if (v == null) return '—';
+          if (v is String) return v.length > 19 ? v.substring(0, 19) : v;
+          return v.toString();
+        }
+        return Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => setState(() => _selectedCampaignId = null),
+            ),
+            title: const Text('Campaign details'),
+            actions: [
+              if (canStart)
+                TextButton.icon(
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('Start campaign'),
+                  onPressed: () async {
+                    try {
+                      final res = await NeyvoPulseApi.startCampaign(campaignId);
+                      if (mounted) {
+                        final initiated = res['total_initiated'] ?? 0;
+                        final failed = res['total_failed'] ?? 0;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
+                            backgroundColor: SpeariaAura.success,
+                          ),
+                        );
+                        setState(() => _campaignDetailRefreshKey++);
+                      }
+                    } catch (e) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+                    }
+                  },
+                ),
+            ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(SpeariaSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(SpeariaSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c['name']?.toString() ?? 'Unnamed', style: SpeariaType.titleLarge),
+                        const SizedBox(height: SpeariaSpacing.md),
+                        Wrap(
+                          spacing: SpeariaSpacing.lg,
+                          runSpacing: SpeariaSpacing.sm,
+                          children: [
+                            _detailChip('Status', status),
+                            _detailChip('Planned', '${c['total_planned'] ?? 0}'),
+                            _detailChip('Placed', '${c['total_initiated'] ?? 0}'),
+                            _detailChip('Failed', '${c['total_failed'] ?? 0}'),
+                          ],
+                        ),
+                        const Divider(height: SpeariaSpacing.xl),
+                        ListTile(title: const Text('Created'), trailing: Text(formatDate(created))),
+                        ListTile(title: const Text('Started'), trailing: Text(formatDate(started))),
+                        ListTile(title: const Text('Script template'), trailing: Text(templateName ?? '—')),
+                        if ((c['filters'] ?? c['student_ids']) != null)
+                          ListTile(
+                            title: const Text('Audience'),
+                            subtitle: Text(
+                              c['student_ids'] != null
+                                  ? '${(c['student_ids'] as List).length} students selected'
+                                  : 'Filters: ${c['filters']?.toString() ?? '—'}',
+                              style: SpeariaType.bodySmall,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: SpeariaSpacing.xl),
+                Text('Calls (${calls.length})', style: SpeariaType.titleMedium),
+                const SizedBox(height: SpeariaSpacing.sm),
+                if (calls.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(SpeariaSpacing.lg),
+                    child: Text('No calls yet. Start the campaign to place calls.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary)),
+                  )
+                else
+                  ...calls.take(50).map((call) => Card(
+                        margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
+                        child: ListTile(
+                          leading: Icon(Icons.phone_outlined, color: SpeariaAura.primary),
+                          title: Text(call['student_name']?.toString() ?? '—'),
+                          subtitle: Text('${call['student_phone'] ?? '—'} • ${call['status'] ?? '—'}'),
+                          trailing: Text(formatDate(call['created_at']), style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                        ),
+                      )),
+                if (calls.length > 50)
+                  Padding(
+                    padding: const EdgeInsets.only(top: SpeariaSpacing.sm),
+                    child: Text('Showing first 50 of ${calls.length} calls', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detailChip(String label, String value) {
+    return Chip(
+      label: Text('$label: $value', style: SpeariaType.labelSmall),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
     );
   }
 
