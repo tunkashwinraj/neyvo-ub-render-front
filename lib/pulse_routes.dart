@@ -15,6 +15,9 @@ import 'screens/payments_page.dart';
 import 'screens/ai_insights_page.dart';
 import 'screens/training_page.dart';
 import 'screens/audit_log_page.dart';
+import 'screens/integration_page.dart';
+import 'screens/campaigns_page.dart';
+import 'screens/template_scripts_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -22,6 +25,8 @@ class PulseRouter {
       case PulseRouteNames.auth:
         return MaterialPageRoute(builder: (_) => const PulseAuthPage());
       case PulseRouteNames.dashboard:
+      case PulseRouteNames.campaigns:
+      case PulseRouteNames.templateScripts:
         return MaterialPageRoute(builder: (_) => const PulseShell());
       case PulseRouteNames.outbound:
         return MaterialPageRoute(builder: (_) => const OutboundCallsPage());
@@ -45,6 +50,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const TrainingPage());
       case PulseRouteNames.auditLog:
         return MaterialPageRoute(builder: (_) => const AuditLogPage());
+      case PulseRouteNames.integration:
+        return MaterialPageRoute(builder: (_) => const IntegrationPage());
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

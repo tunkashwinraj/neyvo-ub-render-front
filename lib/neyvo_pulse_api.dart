@@ -253,4 +253,116 @@ class NeyvoPulseApi {
       return {};
     }
   }
+
+  // -------------------------------------------------------------------------
+  // Data integration (school DB → Firestore: webhook, CSV, API pull)
+  // -------------------------------------------------------------------------
+
+  /// GET integration config (modes, webhook_secret_set, api_pull_url, field_mapping, last_sync_at)
+  static Future<Map<String, dynamic>> getIntegrationConfig() async =>
+      _get('/api/pulse/integration/config');
+
+  /// PUT/PATCH integration config (admin). Pass only fields to update.
+  static Future<Map<String, dynamic>> setIntegrationConfig({
+    bool? enabled,
+    List<String>? modes,
+    String? webhookSecret,
+    String? apiPullUrl,
+    Map<String, String>? apiPullHeaders,
+    Map<String, String>? fieldMapping,
+  }) async {
+    final body = <String, dynamic>{};
+    if (enabled != null) body['enabled'] = enabled;
+    if (modes != null) body['modes'] = modes;
+    if (webhookSecret != null) body['webhook_secret'] = webhookSecret;
+    if (apiPullUrl != null) body['api_pull_url'] = apiPullUrl;
+    if (apiPullHeaders != null) body['api_pull_headers'] = apiPullHeaders;
+    if (fieldMapping != null) body['field_mapping'] = fieldMapping;
+    return _patch('/api/pulse/integration/config', body);
+  }
+
+  /// Ingest CSV (admin/staff). Pass CSV string in body.
+  static Future<Map<String, dynamic>> ingestCsv({
+    required String csv,
+    String? encoding,
+  }) async =>
+      _post('/api/pulse/integration/ingest/csv', {
+        'csv': csv,
+        if (encoding != null) 'encoding': encoding,
+      });
+
+  /// Trigger API pull sync for the school (admin/staff).
+  static Future<Map<String, dynamic>> triggerIntegrationSync() async =>
+      _post('/api/pulse/integration/sync', {});
+
+  // -------------------------------------------------------------------------
+  // Call templates (scripts for assistant)
+  // -------------------------------------------------------------------------
+
+  /// List call templates for the school.
+  static Future<Map<String, dynamic>> listCallTemplates() async {
+    try {
+      return await _get('/api/pulse/call_templates');
+    } catch (_) {
+      return {'templates': []};
+    }
+  }
+
+  /// Create a call template (name, body/script with placeholders).
+  static Future<Map<String, dynamic>> createCallTemplate({
+    required String name,
+    required String body,
+  }) async =>
+      _post('/api/pulse/call_templates', {'name': name, 'body': body});
+
+  /// Update a call template.
+  static Future<Map<String, dynamic>> updateCallTemplate(
+    String id, {
+    String? name,
+    String? body,
+  }) async {
+    final b = <String, dynamic>{};
+    if (name != null) b['name'] = name;
+    if (body != null) b['body'] = body;
+    return _patch('/api/pulse/call_templates/$id', b);
+  }
+
+  /// Delete a call template.
+  static Future<void> deleteCallTemplate(String id) async =>
+      SpeariaApi.deleteJson('/api/pulse/call_templates/$id', params: {'school_id': _defaultSchoolId});
+
+  // -------------------------------------------------------------------------
+  // Campaigns (bulk outbound calls by filters)
+  // -------------------------------------------------------------------------
+
+  /// List campaigns for the school.
+  static Future<Map<String, dynamic>> listCampaigns() async {
+    try {
+      return await _get('/api/pulse/campaigns');
+    } catch (_) {
+      return {'campaigns': []};
+    }
+  }
+
+  /// Create a campaign (name, audience filters or student_ids, template_id, scheduled_at).
+  static Future<Map<String, dynamic>> createCampaign({
+    required String name,
+    String? templateId,
+    List<String>? studentIds,
+    Map<String, dynamic>? filters,
+    DateTime? scheduledAt,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      if (templateId != null) 'template_id': templateId,
+      if (studentIds != null) 'student_ids': studentIds,
+      if (filters != null) 'filters': filters,
+      if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
+    };
+    return _post('/api/pulse/campaigns', body);
+  }
+
+  /// Start a campaign (queue outbound calls).
+  static Future<Map<String, dynamic>> startCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/start', {});
 }

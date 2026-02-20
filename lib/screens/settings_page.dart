@@ -4,6 +4,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
 import '../../theme/spearia_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
@@ -406,6 +407,18 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         
         const SizedBox(height: SpeariaSpacing.lg),
         
+        // Data integration (link to dedicated page)
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.integration_instructions_outlined),
+            title: const Text('Data integration'),
+            subtitle: const Text('Connect your school DB: webhook, CSV upload, API pull'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.integration),
+          ),
+        ),
+        const SizedBox(height: SpeariaSpacing.md),
+
         // System Info
         Card(
           color: SpeariaAura.bgDark,

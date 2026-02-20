@@ -15,4 +15,7 @@ abstract class PulseRouteNames {
   static const String aiInsights = '/pulse/ai-insights';
   static const String training = '/pulse/training';
   static const String auditLog = '/pulse/audit-log';
+  static const String integration = '/pulse/integration';
+  static const String campaigns = '/pulse/campaigns';
+  static const String templateScripts = '/pulse/template-scripts';
 }
