@@ -370,7 +370,25 @@ class NeyvoPulseApi {
     return _post('/api/pulse/campaigns', body);
   }
 
-  /// Start a campaign (places outbound calls sequentially; may take a while).
+  /// Update campaign (name, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
+  static Future<Map<String, dynamic>> updateCampaign(
+    String campaignId, {
+    String? name,
+    String? templateId,
+    List<String>? studentIds,
+    Map<String, dynamic>? filters,
+    DateTime? scheduledAt,
+  }) async {
+    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    if (name != null) body['name'] = name;
+    if (templateId != null) body['template_id'] = templateId;
+    if (studentIds != null) body['student_ids'] = studentIds;
+    if (filters != null) body['filters'] = filters;
+    if (scheduledAt != null) body['scheduled_at'] = scheduledAt.toIso8601String();
+    return _patch('/api/pulse/campaigns/$campaignId', body);
+  }
+
+  /// Start a campaign (places outbound calls sequentially; may take a while). Can rerun completed campaigns.
   static Future<Map<String, dynamic>> startCampaign(String campaignId) async {
     final body = <String, dynamic>{'school_id': _defaultSchoolId};
     return SpeariaApi.postJsonMap(

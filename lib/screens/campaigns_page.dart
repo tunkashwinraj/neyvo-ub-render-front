@@ -22,6 +22,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   int _wizardStep = 0;
   String? _selectedCampaignId;
   int _campaignDetailRefreshKey = 0;
+  String? _editingCampaignId;
+  Map<String, dynamic>? _editCampaignData;
 
   // Wizard state
   final _nameController = TextEditingController();
@@ -144,6 +146,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No students selected')));
       return;
     }
+    if (_editingCampaignId != null) {
+      await _saveCampaignEdit(name: name, studentIds: ids);
+      return;
+    }
     try {
       await NeyvoPulseApi.createCampaign(
         name: name,
@@ -156,6 +162,62 @@ class _CampaignsPageState extends State<CampaignsPage> {
           SnackBar(content: Text('Campaign "$name" created for ${ids.length} students'), backgroundColor: SpeariaAura.success),
         );
         setState(() {
+          _showCreateWizard = false;
+          _wizardStep = 0;
+          _nameController.clear();
+          _selectedStudentIds.clear();
+          _selectAll = false;
+        });
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+      }
+    }
+  }
+
+  Future<void> _startOrRerunCampaign(Map<String, dynamic> c) async {
+    final id = c['id']?.toString();
+    if (id == null) return;
+    final isRerun = c['status'] == 'completed' || c['status'] == 'running';
+    try {
+      final res = await NeyvoPulseApi.startCampaign(id);
+      if (mounted) {
+        final initiated = res['total_initiated'] ?? 0;
+        final failed = res['total_failed'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isRerun
+                ? 'Rerun started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'
+                : 'Campaign started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
+            backgroundColor: SpeariaAura.success,
+          ),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+    }
+  }
+
+  Future<void> _saveCampaignEdit({required String name, required List<String> studentIds}) async {
+    final id = _editingCampaignId!;
+    try {
+      await NeyvoPulseApi.updateCampaign(
+        id,
+        name: name,
+        templateId: _selectedTemplateId,
+        studentIds: studentIds,
+        scheduledAt: _scheduleNow ? null : _scheduledAt,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Campaign updated'), backgroundColor: SpeariaAura.success),
+        );
+        setState(() {
+          _editingCampaignId = null;
+          _editCampaignData = null;
           _showCreateWizard = false;
           _wizardStep = 0;
           _nameController.clear();
@@ -260,26 +322,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           IconButton(
                             icon: const Icon(Icons.play_arrow),
                             tooltip: 'Start campaign',
-                            onPressed: () async {
-                              final id = c['id']?.toString();
-                              if (id == null) return;
-                              try {
-                                final res = await NeyvoPulseApi.startCampaign(id);
-                                if (mounted) {
-                                  final initiated = res['total_initiated'] ?? 0;
-                                  final failed = res['total_failed'] ?? 0;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Campaign started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
-                                      backgroundColor: SpeariaAura.success,
-                                    ),
-                                  );
-                                  _load();
-                                }
-                              } catch (e) {
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
-                              }
-                            },
+                            onPressed: () => _startOrRerunCampaign(c),
+                          ),
+                        if (c['status'] == 'completed' || c['status'] == 'running')
+                          IconButton(
+                            icon: const Icon(Icons.replay),
+                            tooltip: 'Rerun campaign',
+                            onPressed: () => _startOrRerunCampaign(c),
                           ),
                       ],
                     ),
@@ -315,6 +364,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final calls = (data['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         final status = c['status']?.toString() ?? 'draft';
         final canStart = status == 'draft' || status == 'scheduled';
+        final canRerun = status == 'completed' || status == 'running';
+        final canEdit = status == 'draft' || status == 'scheduled';
         final templateId = c['template_id']?.toString();
         final templateList = templateId != null ? _templates.where((t) => t['id']?.toString() == templateId).toList() : <Map<String, dynamic>>[];
         final templateName = templateList.isNotEmpty ? (templateList.first['name']?.toString() ?? templateId) : (templateId ?? '—');
@@ -333,6 +384,33 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ),
             title: const Text('Campaign details'),
             actions: [
+              if (canEdit)
+                TextButton.icon(
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  label: const Text('Edit'),
+                  onPressed: () {
+                    _nameController.text = c['name']?.toString() ?? '';
+                    _selectedTemplateId = c['template_id']?.toString();
+                    _selectedStudentIds = {};
+                    final ids = c['student_ids'];
+                    if (ids is List) {
+                      _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                    }
+                    _scheduleNow = c['scheduled_at'] == null;
+                    _scheduledAt = null;
+                    if (c['scheduled_at'] != null) {
+                      _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                    }
+                    _filterType = 'all';
+                    setState(() {
+                      _editingCampaignId = campaignId;
+                      _editCampaignData = Map<String, dynamic>.from(c);
+                      _showCreateWizard = true;
+                      _selectedCampaignId = null;
+                      _wizardStep = 0;
+                    });
+                  },
+                ),
               if (canStart)
                 TextButton.icon(
                   icon: const Icon(Icons.play_arrow, size: 20),
@@ -346,6 +424,29 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('$initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
+                            backgroundColor: SpeariaAura.success,
+                          ),
+                        );
+                        setState(() => _campaignDetailRefreshKey++);
+                      }
+                    } catch (e) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+                    }
+                  },
+                ),
+              if (canRerun)
+                TextButton.icon(
+                  icon: const Icon(Icons.replay, size: 20),
+                  label: const Text('Rerun campaign'),
+                  onPressed: () async {
+                    try {
+                      final res = await NeyvoPulseApi.startCampaign(campaignId);
+                      if (mounted) {
+                        final initiated = res['total_initiated'] ?? 0;
+                        final failed = res['total_failed'] ?? 0;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Rerun started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
                             backgroundColor: SpeariaAura.success,
                           ),
                         );
@@ -452,9 +553,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onPressed: () => setState(() {
                   _showCreateWizard = false;
                   _wizardStep = 0;
+                  _editingCampaignId = null;
+                  _editCampaignData = null;
                 }),
               ),
-              Text('Create campaign', style: SpeariaType.headlineMedium),
+              Text(_editingCampaignId != null ? 'Edit campaign' : 'Create campaign', style: SpeariaType.headlineMedium),
             ],
           ),
           const SizedBox(height: SpeariaSpacing.lg),
@@ -504,7 +607,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     _launchCampaign();
                   }
                 },
-                child: Text(_wizardStep == steps.length - 1 ? 'Launch campaign' : 'Next'),
+                child: Text(_wizardStep == steps.length - 1
+                    ? (_editingCampaignId != null ? 'Save changes' : 'Launch campaign')
+                    : 'Next'),
               ),
             ],
           ),
