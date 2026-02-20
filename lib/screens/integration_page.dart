@@ -198,7 +198,7 @@ class _IntegrationPageState extends State<IntegrationPage> {
         children: [
           Text(
             'Connect your school database',
-            style: SpeariaType.headlineSmall,
+            style: SpeariaType.headlineMedium,
           ),
           const SizedBox(height: SpeariaSpacing.xs),
           Text(

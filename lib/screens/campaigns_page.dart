@@ -284,7 +284,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   _wizardStep = 0;
                 }),
               ),
-              Text('Create campaign', style: SpeariaType.headlineSmall),
+              Text('Create campaign', style: SpeariaType.headlineMedium),
             ],
           ),
           const SizedBox(height: SpeariaSpacing.lg),

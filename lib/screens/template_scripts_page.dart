@@ -144,7 +144,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Scripts the assistant uses during calls. Use placeholders: {{student_name}}, {{balance}}, {{due_date}}, {{school_name}}.',
+                'Scripts the assistant uses during calls. Prebuilt templates are provided by default; you can edit them or create your own. Use placeholders: {{student_name}}, {{balance}}, {{due_date}}, {{school_name}}, {{late_fee}}.',
                 style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
               ),
               FilledButton.icon(
@@ -162,7 +162,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                 child: Center(
                   child: Column(
                     children: [
-                      Icon(Icons.script_outlined, size: 48, color: SpeariaAura.textMuted),
+                      Icon(Icons.description_outlined, size: 48, color: SpeariaAura.textMuted),
                       const SizedBox(height: SpeariaSpacing.md),
                       Text('No templates yet', style: SpeariaType.bodyLarge.copyWith(color: SpeariaAura.textSecondary)),
                       const SizedBox(height: SpeariaSpacing.sm),
@@ -180,8 +180,22 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
             ..._templates.map((t) => Card(
                   margin: const EdgeInsets.only(bottom: SpeariaSpacing.md),
                   child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.script_outlined)),
-                    title: Text(t['name']?.toString() ?? 'Unnamed'),
+                    leading: const CircleAvatar(child: Icon(Icons.description_outlined)),
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(t['name']?.toString() ?? 'Unnamed')),
+                        if (t['is_default'] == true)
+                          Padding(
+                            padding: const EdgeInsets.only(left: SpeariaSpacing.sm),
+                            child: Chip(
+                              label: Text('Prebuilt', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.primary)),
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                      ],
+                    ),
                     subtitle: Text(
                       (t['body'] ?? t['script'] ?? '').toString().replaceAll('\n', ' ').length > 80
                           ? '${(t['body'] ?? t['script']).toString().substring(0, 80)}...'
@@ -213,7 +227,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
           Row(
             children: [
               IconButton(icon: const Icon(Icons.close), onPressed: _closeEditor),
-              Text(_editingId == null ? 'New template' : 'Edit template', style: SpeariaType.headlineSmall),
+              Text(_editingId == null ? 'New template' : 'Edit template', style: SpeariaType.headlineMedium),
             ],
           ),
           const SizedBox(height: SpeariaSpacing.lg),

@@ -40,7 +40,7 @@ class _PulseShellState extends State<PulseShell> {
     _NavItem('Reminders', Icons.notifications_outlined, PulseRouteNames.reminders),
     _NavItem('Reports', Icons.assessment_outlined, PulseRouteNames.reports),
     _NavItem('AI Insights', Icons.insights_outlined, PulseRouteNames.aiInsights),
-    _NavItem('Scripts', Icons.script_outlined, PulseRouteNames.templateScripts),
+    _NavItem('Scripts', Icons.description_outlined, PulseRouteNames.templateScripts),
     _NavItem('Training', Icons.menu_book_outlined, PulseRouteNames.training),
     _NavItem('Audit log', Icons.history, PulseRouteNames.auditLog),
     _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
@@ -157,7 +157,7 @@ class _PulseShellState extends State<PulseShell> {
                   ),
                   child: Text(
                     _nav[_selectedIndex].label,
-                    style: SpeariaType.headlineSmall.copyWith(fontWeight: FontWeight.w600),
+                    style: SpeariaType.headlineMedium.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 Expanded(
