@@ -177,6 +177,29 @@ class _CampaignsPageState extends State<CampaignsPage> {
     }
   }
 
+  void _showCampaignStartResult(Map<String, dynamic> res, {bool isRerun = false}) {
+    final initiated = res['total_initiated'] ?? 0;
+    final failed = res['total_failed'] ?? 0;
+    final failureReason = res['failure_reason']?.toString();
+    final failureMessage = res['failure_message']?.toString() ?? '';
+    String text = isRerun
+        ? 'Rerun: $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'
+        : '$initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}';
+    if (failureReason == 'vapi_daily_limit' && failureMessage.isNotEmpty) {
+      text = 'Calls could not be placed: VAPI limit (concurrency or plan). Check VAPI dashboard → Settings/Billing and Analytics. For scale, use your own Twilio number in VAPI (Phone Numbers → Add → Twilio) and set that number ID in backend env.';
+    } else if (failureMessage.isNotEmpty && failed > 0) {
+      text = '$text ${failureMessage.length > 80 ? '${failureMessage.substring(0, 80)}…' : failureMessage}';
+    }
+    final isError = failed > 0 && initiated == 0;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: isError ? SpeariaAura.error : SpeariaAura.success,
+        duration: isError ? const Duration(seconds: 8) : const Duration(seconds: 4),
+      ),
+    );
+  }
+
   Future<void> _startOrRerunCampaign(Map<String, dynamic> c) async {
     final id = c['id']?.toString();
     if (id == null) return;
@@ -184,16 +207,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
     try {
       final res = await NeyvoPulseApi.startCampaign(id);
       if (mounted) {
-        final initiated = res['total_initiated'] ?? 0;
-        final failed = res['total_failed'] ?? 0;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isRerun
-                ? 'Rerun started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'
-                : 'Campaign started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
-            backgroundColor: SpeariaAura.success,
-          ),
-        );
+        _showCampaignStartResult(res, isRerun: isRerun);
         _load();
       }
     } catch (e) {
@@ -419,14 +433,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     try {
                       final res = await NeyvoPulseApi.startCampaign(campaignId);
                       if (mounted) {
-                        final initiated = res['total_initiated'] ?? 0;
-                        final failed = res['total_failed'] ?? 0;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('$initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
-                            backgroundColor: SpeariaAura.success,
-                          ),
-                        );
+                        _showCampaignStartResult(res, isRerun: false);
                         setState(() => _campaignDetailRefreshKey++);
                       }
                     } catch (e) {
@@ -442,14 +449,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     try {
                       final res = await NeyvoPulseApi.startCampaign(campaignId);
                       if (mounted) {
-                        final initiated = res['total_initiated'] ?? 0;
-                        final failed = res['total_failed'] ?? 0;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Rerun started. $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'),
-                            backgroundColor: SpeariaAura.success,
-                          ),
-                        );
+                        _showCampaignStartResult(res, isRerun: true);
                         setState(() => _campaignDetailRefreshKey++);
                       }
                     } catch (e) {

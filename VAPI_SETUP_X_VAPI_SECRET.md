@@ -4,7 +4,33 @@ Use this to configure your VAPI assistant and phone so webhooks are accepted by 
 
 ---
 
-## Copy-paste prompt for Composer AI
+## Copy-paste prompt: Twilio number → server + assistant
+
+Use this to point your **Twilio-imported number +1 (229) 600 6675** at your server and assistant:
+
+```
+I have a Twilio-imported phone number in VAPI: +1 (229) 600 6675 (E.164: +12296006675).
+
+I need to:
+
+1. **Point this phone number to my server**
+   - **Server URL (webhook):** https://neyvo-pulse.onrender.com/webhooks/vapi/events
+   - **Custom header:** X-Vapi-Secret = j5cMzCB>=D=1pPVnE_RA (exactly, including special characters)
+   So all inbound and outbound call events for this number are sent to that URL with that header.
+
+2. **Use my assistant for this number**
+   - **Assistant ID:** 93f2fcf8-a0e8-422c-be36-2d7c20fb4904
+   This number should use this assistant for inbound calls and for outbound campaigns (so the AI and webhooks are the same).
+
+Please give me:
+- Exact VAPI dashboard steps to find the phone number +1 229 600 6675, set its Server URL and X-Vapi-Secret header, and assign/link the assistant above.
+- If using the VAPI API instead: the PATCH request(s) to update this phone number with serverUrl, custom headers, and assistantId (or equivalent).
+- The **VAPI Phone Number ID** for +1 229 600 6675 so I can set VAPI_PULSE_PHONE_NUMBER_ID in my backend for outbound campaigns.
+```
+
+---
+
+## Copy-paste prompt for Composer AI (generic)
 
 ```
 I need to configure VAPI so that webhooks are sent to my server with the X-Vapi-Secret header.
@@ -57,6 +83,37 @@ If you prefer to do it yourself:
 - **Value:** `j5cMzCB>=D=1pPVnE_RA`
 
 (No quotes in the value in Render.)
+
+---
+
+## Test webhook with curl (ping your server)
+
+To check that the webhook endpoint accepts the `X-Vapi-Secret` header without placing a real call:
+
+**Valid JSON:** The body must be a single JSON object (starts with `{`). On Windows, add `--ssl-no-revoke` to avoid `CRYPT_E_NO_REVOCATION_CHECK`.
+
+**Git Bash / MINGW64 (Windows):**
+
+```bash
+curl -X POST "https://neyvo-pulse.onrender.com/webhooks/vapi/events" \
+  -H "Content-Type: application/json" \
+  -H "X-Vapi-Secret: j5cMzCB>=D=1pPVnE_RA" \
+  --ssl-no-revoke \
+  -d '{"type":"status-update","status":"test","call":{"id":"test_call_123"}}'
+```
+
+**PowerShell:**
+
+```powershell
+$headers = @{
+  "Content-Type"   = "application/json"
+  "X-Vapi-Secret"  = "j5cMzCB>=D=1pPVnE_RA"
+}
+$body = '{"type":"status-update","status":"test","call":{"id":"test_call_123"}}'
+Invoke-RestMethod -Method Post -Uri "https://neyvo-pulse.onrender.com/webhooks/vapi/events" -Headers $headers -Body $body
+```
+
+You should get a 200 response. In Render logs you should see the webhook received (e.g. `[VAPI WEBHOOK] Auth OK` and the event type).
 
 ---
 
@@ -117,3 +174,25 @@ After saving in VAPI and triggering a test call:
 
 - Server logs show: `[VAPI WEBHOOK] Auth OK (X-Vapi-Secret valid, ...)`  
 - No more: `Rejected: Missing X-Vapi-Secret` or `Invalid X-Vapi-Secret`
+
+---
+
+## Campaign outbound: VAPI limits (concurrency & plan)
+
+**Recommendation:** Use **your own Twilio number** (imported in VAPI) for outbound campaigns instead of a VAPI-bought number. You avoid VAPI number limits and scale via Twilio; VAPI still provides the AI/assistant.
+
+If starting a campaign shows a message like **"Couldn't Start Call. Numbers Bought On Vapi Have A Daily Outbound Call Limit"** (or similar), limits depend on:
+
+- **Concurrency** – e.g. how many simultaneous calls your plan allows (e.g. 10). Check **VAPI dashboard → Settings → Subscription**.
+- **Usage / billing** – trial plans, spending caps, or carrier (Twilio/VAPI number) rate limits.
+- **VAPI-bought numbers** – may have softer limits; **Twilio-imported numbers** use your Twilio account limits.
+
+**Check your limits:** VAPI dashboard → **Settings → Subscription / Billing** and **Analytics → Usage**.
+
+**To scale outbound (e.g. 100+ concurrent):**
+
+1. In **VAPI dashboard** → **Phone Numbers** → **Add** → choose **Twilio** (import your own).
+2. Connect Twilio, select or buy a number, save. Copy the **VAPI Phone Number ID**.
+3. In your **backend** (e.g. Render env), set **`VAPI_PULSE_PHONE_NUMBER_ID`** to that number’s ID and redeploy.
+
+Your effective daily volume is roughly: **(concurrency × 24h) / average call duration** (e.g. 10 concurrent × 24h with ~2 min calls → 7,200+ calls/day possible).
