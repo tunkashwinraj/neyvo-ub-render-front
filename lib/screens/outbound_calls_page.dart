@@ -2,6 +2,7 @@
 // Enhanced outbound calls page with student selector, templates, and pre-filled data
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../../api/spearia_api.dart';
@@ -31,11 +32,13 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
   bool _loadingStudents = false;
   String? _message;
   bool _success = false;
+  Map<String, dynamic>? _capacity;
 
   @override
   void initState() {
     super.initState();
     _loadStudents();
+    _loadCapacity();
     if (widget.prefillStudent != null) {
       _selectedStudent = widget.prefillStudent;
       _fillFromStudent();
@@ -84,6 +87,32 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
       _studentSearchController.text = student['name']?.toString() ?? '';
     });
     _fillFromStudent();
+  }
+
+  Future<void> _loadCapacity() async {
+    try {
+      final res = await NeyvoPulseApi.getOutboundCapacity();
+      if (mounted) setState(() => _capacity = res);
+    } catch (_) {}
+  }
+
+  Widget _capacityChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: SpeariaAura.bgDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: SpeariaAura.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: SpeariaType.titleMedium.copyWith(fontWeight: FontWeight.w600)),
+          Text(label, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+        ],
+      ),
+    );
   }
 
   List<Map<String, dynamic>> _getFilteredStudents(String query) {
@@ -192,6 +221,58 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
           ),
           const SizedBox(height: SpeariaSpacing.xl),
+          
+          // Part 2: Outbound capacity (one number vs multiple, primary vs campaign)
+          if (_capacity != null) ...[
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+              child: Padding(
+                padding: const EdgeInsets.all(SpeariaSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.phone_callback, color: SpeariaAura.primary),
+                        const SizedBox(width: 8),
+                        Text('Outbound capacity', style: SpeariaType.titleMedium),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Safe limit: ${_capacity!['safe_daily_per_number'] ?? 150} calls/day per number. Add campaign numbers for faster campaigns.',
+                      style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        _capacityChip('Numbers', '${_capacity!['numbers_count'] ?? 0}'),
+                        _capacityChip('Remaining today', '${_capacity!['remaining_today'] ?? 0}'),
+                        _capacityChip('Days to 1k calls', '${_capacity!['days_to_1000_calls'] ?? 0}'),
+                      ],
+                    ),
+                    if (_capacity!['caller_registry_url'] != null) ...[
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final url = _capacity!['caller_registry_url'] as String?;
+                          if (url != null) try { await launchUrl(Uri.parse(url)); } catch (_) {}
+                        },
+                        child: Text(
+                          'Register your number at freecallerregistry.com to reduce spam flags (free).',
+                          style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.primary, decoration: TextDecoration.underline),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: SpeariaSpacing.lg),
+          ],
           
           // Student Selector
           Text('Student', style: SpeariaType.titleMedium),

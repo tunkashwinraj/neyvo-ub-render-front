@@ -18,4 +18,9 @@ abstract class PulseRouteNames {
   static const String integration = '/pulse/integration';
   static const String campaigns = '/pulse/campaigns';
   static const String templateScripts = '/pulse/template-scripts';
+  static const String wallet = '/pulse/wallet';
+  static const String usage = '/pulse/usage';
+  static const String voiceTier = '/pulse/voice-tier';
+  static const String developerConsole = '/pulse/developer-console';
+  static const String phoneNumbers = '/pulse/phone-numbers';
 }

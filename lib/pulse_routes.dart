@@ -28,6 +28,14 @@ class PulseRouter {
       case PulseRouteNames.campaigns:
       case PulseRouteNames.templateScripts:
         return MaterialPageRoute(builder: (_) => const PulseShell());
+      case PulseRouteNames.wallet:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.wallet));
+      case PulseRouteNames.usage:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.usage));
+      case PulseRouteNames.voiceTier:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceTier));
+      case PulseRouteNames.developerConsole:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.developerConsole));
       case PulseRouteNames.outbound:
         return MaterialPageRoute(builder: (_) => const OutboundCallsPage());
       case PulseRouteNames.students:

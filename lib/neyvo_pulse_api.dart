@@ -206,6 +206,7 @@ class NeyvoPulseApi {
     required String studentName,
     String? studentId,
     String? phoneNumberId,
+    String? numberId,
     String? balance,
     String? dueDate,
     String? lateFee,
@@ -219,6 +220,7 @@ class NeyvoPulseApi {
     };
     if (studentId != null) body['student_id'] = studentId;
     if (phoneNumberId != null) body['phone_number_id'] = phoneNumberId;
+    if (numberId != null) body['number_id'] = numberId;
     if (balance != null) body['balance'] = balance;
     if (dueDate != null) body['due_date'] = dueDate;
     if (lateFee != null) body['late_fee'] = lateFee;
@@ -397,4 +399,163 @@ class NeyvoPulseApi {
       timeout: const Duration(seconds: 120),
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Billing (wallet, tier, usage)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getBillingWallet() async =>
+      _get('/api/billing/wallet');
+
+  static Future<Map<String, dynamic>> purchaseCredits(String pack) async =>
+      SpeariaApi.postJsonMap('/api/billing/wallet/purchase', body: {
+        'school_id': _defaultSchoolId,
+        'pack': pack,
+      });
+
+  static Future<Map<String, dynamic>> getBillingTransactions({
+    int limit = 50,
+    int offset = 0,
+    String type = 'all',
+  }) async =>
+      _get('/api/billing/transactions', params: {
+        'limit': limit,
+        'offset': offset,
+        'type': type,
+      });
+
+  static Future<Map<String, dynamic>> getBillingUsage({
+    String? from,
+    String? to,
+  }) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/billing/usage', params: params.isEmpty ? null : params);
+  }
+
+  static Future<Map<String, dynamic>> getBillingTier() async =>
+      _get('/api/billing/tier');
+
+  static Future<Map<String, dynamic>> setBillingTier(String tier) async {
+    final v = await SpeariaApi.putJson('/api/billing/tier', body: {
+      'school_id': _defaultSchoolId,
+      'tier': tier,
+    });
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  // -------------------------------------------------------------------------
+  // Outbound capacity (Part 2: phone numbers, primary vs campaign)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getOutboundPhoneNumbers({String? date}) async =>
+      _get('/api/pulse/outbound/phone-numbers', params: date != null ? {'date': date} : null);
+
+  static Future<Map<String, dynamic>> getOutboundCapacity() async =>
+      _get('/api/pulse/outbound/capacity');
+
+  static Future<Map<String, dynamic>> setOutboundPrimary(String phoneNumberId) async {
+    final v = await SpeariaApi.putJson('/api/pulse/outbound/primary', body: {
+      'school_id': _defaultSchoolId,
+      'phone_number_id': phoneNumberId,
+    });
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  static Future<Map<String, dynamic>> addOutboundCampaignNumber(String phoneNumberId, {String? label}) async =>
+      _post('/api/pulse/outbound/phone-numbers', {
+        'phone_number_id': phoneNumberId,
+        if (label != null) 'label': label,
+      });
+
+  static Future<void> removeOutboundCampaignNumber(String phoneNumberId) async =>
+      SpeariaApi.deleteJson(
+        '/api/pulse/outbound/phone-numbers/$phoneNumberId',
+        params: {'school_id': _defaultSchoolId},
+      );
+
+  // -------------------------------------------------------------------------
+  // Outbound number management (Twilio: buy, roles, warm-up, daily limits)
+  // -------------------------------------------------------------------------
+
+  /// GET /api/numbers – list owned numbers with daily capacity
+  static Future<Map<String, dynamic>> listNumbers() async =>
+      _get('/api/numbers');
+
+  /// GET /api/numbers/search?area_code=585&country=US
+  static Future<Map<String, dynamic>> searchNumbers({
+    required String areaCode,
+    String country = 'US',
+  }) async =>
+      SpeariaApi.getJsonMap(
+        '/api/numbers/search',
+        params: {'area_code': areaCode, 'country': country, 'school_id': _defaultSchoolId},
+      );
+
+  /// POST /api/numbers/purchase – buy number (phone_number, friendly_name, role)
+  static Future<Map<String, dynamic>> purchaseNumber({
+    required String phoneNumber,
+    required String friendlyName,
+    String role = 'campaign',
+  }) async =>
+      _post('/api/numbers/purchase', {
+        'phone_number': phoneNumber,
+        'friendly_name': friendlyName,
+        'role': role,
+      });
+
+  /// PUT /api/numbers/<number_id> – update friendly_name, role, registered_freecaller
+  static Future<Map<String, dynamic>> updateNumber(
+    String numberId, {
+    String? friendlyName,
+    String? role,
+    bool? registeredFreecaller,
+  }) async {
+    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    if (friendlyName != null) body['friendly_name'] = friendlyName;
+    if (role != null) body['role'] = role;
+    if (registeredFreecaller != null) body['registered_freecaller'] = registeredFreecaller;
+    final v = await SpeariaApi.putJson('/api/numbers/$numberId', body: body);
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  /// DELETE /api/numbers/<number_id>
+  static Future<void> releaseNumber(String numberId) async =>
+      SpeariaApi.deleteJson(
+        '/api/numbers/$numberId',
+        params: {'school_id': _defaultSchoolId},
+      );
+
+  /// POST /api/numbers/<number_id>/register-freecaller
+  static Future<Map<String, dynamic>> registerFreecaller(String numberId) async =>
+      SpeariaApi.postJsonMap(
+        '/api/numbers/$numberId/register-freecaller',
+        body: {'school_id': _defaultSchoolId},
+      );
+
+  /// GET /api/numbers/<number_id>/warm-up/status
+  static Future<Map<String, dynamic>> getWarmUpStatus(String numberId) async =>
+      _get('/api/numbers/$numberId/warm-up/status');
+
+  /// POST /api/numbers/<number_id>/warm-up/advance (manual from dev console)
+  static Future<Map<String, dynamic>> advanceWarmUp(String numberId) async =>
+      SpeariaApi.postJsonMap(
+        '/api/numbers/$numberId/warm-up/advance',
+        body: {'school_id': _defaultSchoolId},
+      );
+
+  /// POST /api/pulse/campaigns/estimate – estimate days for contacts + number ids
+  static Future<Map<String, dynamic>> campaignEstimate({
+    required int totalContacts,
+    required List<String> assignedNumberIds,
+  }) async =>
+      _post('/api/pulse/campaigns/estimate', {
+        'total_contacts': totalContacts,
+        'assigned_number_ids': assignedNumberIds,
+      });
+
+  /// GET /api/pulse/campaigns/estimate/quick?contacts=1000
+  static Future<Map<String, dynamic>> campaignEstimateQuick({required int contacts}) async =>
+      _get('/api/pulse/campaigns/estimate/quick', params: {'contacts': contacts});
 }

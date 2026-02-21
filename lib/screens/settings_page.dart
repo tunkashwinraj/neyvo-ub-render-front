@@ -5,7 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
-import '../../theme/spearia_theme.dart';
+import 'voice_tier_page.dart';
+import '../theme/spearia_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
   const PulseSettingsPage({super.key});
@@ -27,6 +28,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   String? _error;
   bool _showAdvanced = false;
   String? _myRole;
+  String? _voiceTierDisplay;
   List<Map<String, dynamic>> _members = [];
   final _memberUserIdController = TextEditingController();
   String _newMemberRole = 'staff';
@@ -64,6 +66,10 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
       }
       final roleRes = await NeyvoPulseApi.getMyRole();
       final membersRes = await NeyvoPulseApi.listMembers();
+      try {
+        final tierRes = await NeyvoPulseApi.getBillingTier();
+        if (mounted) _voiceTierDisplay = tierRes['tier_display']?.toString();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _myRole = roleRes['role']?.toString();
@@ -164,6 +170,22 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: SpeariaSpacing.xl),
+        
+        // Voice Tier
+        Text('Voice tier', style: SpeariaType.titleLarge),
+        const SizedBox(height: SpeariaSpacing.md),
+        Card(
+          child: ListTile(
+            title: Text(_voiceTierDisplay ?? 'Natural Human', style: SpeariaType.titleMedium),
+            subtitle: const Text('Billed per minute. Change tier anytime.'),
+            trailing: FilledButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VoiceTierPage())),
+              child: const Text('Change'),
             ),
           ),
         ),
