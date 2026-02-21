@@ -14,12 +14,12 @@ class RealtimeService {
   static Stream<QuerySnapshot>? _callsStream;
   static Stream<QuerySnapshot>? _remindersStream;
 
-  /// Listen to students collection changes
-  static Stream<QuerySnapshot>? watchStudents({String? schoolId}) {
+  /// Listen to students collection changes (businessId = client/business id).
+  static Stream<QuerySnapshot>? watchStudents({String? businessId}) {
     try {
       Query query = _firestore.collection('students');
-      if (schoolId != null) {
-        query = query.where('school_id', isEqualTo: schoolId);
+      if (businessId != null) {
+        query = query.where('school_id', isEqualTo: businessId);
       }
       _studentsStream = query.snapshots();
       return _studentsStream;
@@ -31,12 +31,12 @@ class RealtimeService {
     }
   }
 
-  /// Listen to payments collection changes
-  static Stream<QuerySnapshot>? watchPayments({String? schoolId, String? studentId}) {
+  /// Listen to payments collection changes (businessId = client/business id).
+  static Stream<QuerySnapshot>? watchPayments({String? businessId, String? studentId}) {
     try {
       Query query = _firestore.collection('payments');
-      if (schoolId != null) {
-        query = query.where('school_id', isEqualTo: schoolId);
+      if (businessId != null) {
+        query = query.where('school_id', isEqualTo: businessId);
       }
       if (studentId != null) {
         query = query.where('student_id', isEqualTo: studentId);
@@ -51,12 +51,12 @@ class RealtimeService {
     }
   }
 
-  /// Listen to calls collection changes
-  static Stream<QuerySnapshot>? watchCalls({String? schoolId, String? studentId}) {
+  /// Listen to calls collection changes (businessId = client/business id).
+  static Stream<QuerySnapshot>? watchCalls({String? businessId, String? studentId}) {
     try {
       Query query = _firestore.collection('calls');
-      if (schoolId != null) {
-        query = query.where('school_id', isEqualTo: schoolId);
+      if (businessId != null) {
+        query = query.where('school_id', isEqualTo: businessId);
       }
       if (studentId != null) {
         query = query.where('student_id', isEqualTo: studentId);
@@ -72,12 +72,12 @@ class RealtimeService {
     }
   }
 
-  /// Listen to reminders collection changes
-  static Stream<QuerySnapshot>? watchReminders({String? schoolId, String? studentId}) {
+  /// Listen to reminders collection changes (businessId = client/business id).
+  static Stream<QuerySnapshot>? watchReminders({String? businessId, String? studentId}) {
     try {
       Query query = _firestore.collection('reminders');
-      if (schoolId != null) {
-        query = query.where('school_id', isEqualTo: schoolId);
+      if (businessId != null) {
+        query = query.where('school_id', isEqualTo: businessId);
       }
       if (studentId != null) {
         query = query.where('student_id', isEqualTo: studentId);

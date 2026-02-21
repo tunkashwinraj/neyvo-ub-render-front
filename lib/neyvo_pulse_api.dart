@@ -1,26 +1,26 @@
 // lib/neyvo_pulse/neyvo_pulse_api.dart
-// Neyvo Pulse – API client.
+// Neyvo Pulse – API client. All data is keyed by business_id (clients are businesses).
 
 import '../api/spearia_api.dart';
 
-const String _defaultSchoolId = 'default-school';
+const String _defaultBusinessId = 'default-school';
 
 class NeyvoPulseApi {
-  static String get defaultSchoolId => _defaultSchoolId;
+  static String get defaultBusinessId => _defaultBusinessId;
 
   static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
     final p = Map<String, dynamic>.from(params ?? {});
-    p['school_id'] = p['school_id'] ?? _defaultSchoolId;
+    p['business_id'] = p['business_id'] ?? _defaultBusinessId;
     return SpeariaApi.getJsonMap(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
-    body['school_id'] = body['school_id'] ?? _defaultSchoolId;
+    body['business_id'] = body['business_id'] ?? _defaultBusinessId;
     return SpeariaApi.postJsonMap(path, body: body);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
-    body['school_id'] = body['school_id'] ?? _defaultSchoolId;
+    body['business_id'] = body['business_id'] ?? _defaultBusinessId;
     final v = await SpeariaApi.patchJson(path, body: body);
     return Map<String, dynamic>.from(v as Map);
   }
@@ -78,7 +78,7 @@ class NeyvoPulseApi {
   static Future<void> deleteStudent(String studentId) async {
     await SpeariaApi.deleteJson(
       '/api/pulse/students/$studentId',
-      params: <String, dynamic>{'school_id': _defaultSchoolId},
+      params: <String, dynamic>{'business_id': _defaultBusinessId},
     );
   }
 
@@ -172,7 +172,7 @@ class NeyvoPulseApi {
   static Future<void> deleteKnowledgeFaq(String faqId) async {
     await SpeariaApi.deleteJson(
       '/api/pulse/knowledge/faq/$faqId',
-      params: <String, dynamic>{'school_id': _defaultSchoolId},
+      params: <String, dynamic>{'business_id': _defaultBusinessId},
     );
   }
 
@@ -213,7 +213,7 @@ class NeyvoPulseApi {
     String? schoolName,
   }) async {
     final body = <String, dynamic>{
-      'business_id': _defaultSchoolId,
+      'business_id': _defaultBusinessId,
       'student_phone': studentPhone,
       'student_name': studentName,
       'message_type': 'balance_reminder',
@@ -331,7 +331,7 @@ class NeyvoPulseApi {
 
   /// Delete a call template.
   static Future<void> deleteCallTemplate(String id) async =>
-      SpeariaApi.deleteJson('/api/pulse/call_templates/$id', params: {'school_id': _defaultSchoolId});
+      SpeariaApi.deleteJson('/api/pulse/call_templates/$id', params: {'business_id': _defaultBusinessId});
 
   // -------------------------------------------------------------------------
   // Campaigns (bulk outbound calls by filters)
@@ -381,7 +381,7 @@ class NeyvoPulseApi {
     Map<String, dynamic>? filters,
     DateTime? scheduledAt,
   }) async {
-    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    final body = <String, dynamic>{'business_id': _defaultBusinessId};
     if (name != null) body['name'] = name;
     if (templateId != null) body['template_id'] = templateId;
     if (studentIds != null) body['student_ids'] = studentIds;
@@ -392,7 +392,7 @@ class NeyvoPulseApi {
 
   /// Start a campaign (places outbound calls sequentially; may take a while). Can rerun completed campaigns.
   static Future<Map<String, dynamic>> startCampaign(String campaignId) async {
-    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    final body = <String, dynamic>{'business_id': _defaultBusinessId};
     return SpeariaApi.postJsonMap(
       '/api/pulse/campaigns/$campaignId/start',
       body: body,
@@ -409,7 +409,7 @@ class NeyvoPulseApi {
 
   static Future<Map<String, dynamic>> purchaseCredits(String pack) async =>
       SpeariaApi.postJsonMap('/api/billing/wallet/purchase', body: {
-        'school_id': _defaultSchoolId,
+        'business_id': _defaultBusinessId,
         'pack': pack,
       });
 
@@ -439,7 +439,7 @@ class NeyvoPulseApi {
 
   static Future<Map<String, dynamic>> setBillingTier(String tier) async {
     final v = await SpeariaApi.putJson('/api/billing/tier', body: {
-      'school_id': _defaultSchoolId,
+      'business_id': _defaultBusinessId,
       'tier': tier,
     });
     return Map<String, dynamic>.from(v as Map);
@@ -457,7 +457,7 @@ class NeyvoPulseApi {
 
   static Future<Map<String, dynamic>> setOutboundPrimary(String phoneNumberId) async {
     final v = await SpeariaApi.putJson('/api/pulse/outbound/primary', body: {
-      'school_id': _defaultSchoolId,
+      'business_id': _defaultBusinessId,
       'phone_number_id': phoneNumberId,
     });
     return Map<String, dynamic>.from(v as Map);
@@ -472,7 +472,7 @@ class NeyvoPulseApi {
   static Future<void> removeOutboundCampaignNumber(String phoneNumberId) async =>
       SpeariaApi.deleteJson(
         '/api/pulse/outbound/phone-numbers/$phoneNumberId',
-        params: {'school_id': _defaultSchoolId},
+        params: {'business_id': _defaultBusinessId},
       );
 
   // -------------------------------------------------------------------------
@@ -490,7 +490,7 @@ class NeyvoPulseApi {
   }) async =>
       SpeariaApi.getJsonMap(
         '/api/numbers/search',
-        params: {'area_code': areaCode, 'country': country, 'school_id': _defaultSchoolId},
+        params: {'area_code': areaCode, 'country': country, 'business_id': _defaultBusinessId},
       );
 
   /// POST /api/numbers/purchase – buy number (phone_number, friendly_name, role)
@@ -512,7 +512,7 @@ class NeyvoPulseApi {
     String? role,
     bool? registeredFreecaller,
   }) async {
-    final body = <String, dynamic>{'school_id': _defaultSchoolId};
+    final body = <String, dynamic>{'business_id': _defaultBusinessId};
     if (friendlyName != null) body['friendly_name'] = friendlyName;
     if (role != null) body['role'] = role;
     if (registeredFreecaller != null) body['registered_freecaller'] = registeredFreecaller;
@@ -524,14 +524,14 @@ class NeyvoPulseApi {
   static Future<void> releaseNumber(String numberId) async =>
       SpeariaApi.deleteJson(
         '/api/numbers/$numberId',
-        params: {'school_id': _defaultSchoolId},
+        params: {'business_id': _defaultBusinessId},
       );
 
   /// POST /api/numbers/<number_id>/register-freecaller
   static Future<Map<String, dynamic>> registerFreecaller(String numberId) async =>
       SpeariaApi.postJsonMap(
         '/api/numbers/$numberId/register-freecaller',
-        body: {'school_id': _defaultSchoolId},
+        body: {'business_id': _defaultBusinessId},
       );
 
   /// GET /api/numbers/<number_id>/warm-up/status
@@ -542,7 +542,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> advanceWarmUp(String numberId) async =>
       SpeariaApi.postJsonMap(
         '/api/numbers/$numberId/warm-up/advance',
-        body: {'school_id': _defaultSchoolId},
+        body: {'business_id': _defaultBusinessId},
       );
 
   /// POST /api/pulse/campaigns/estimate – estimate days for contacts + number ids
