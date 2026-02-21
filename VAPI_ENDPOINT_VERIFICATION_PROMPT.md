@@ -1,10 +1,41 @@
 # Prompt for Vapi Composer AI: Verify Every Neyvo Pulse Endpoint
 
-Copy the block below into Vapi Composer (or another AI assistant) to have it verify that each Neyvo Pulse API endpoint responds correctly. Replace `BASE_URL` and optional auth with your real values before running.
+**Important:** Vapi Composer **cannot make external HTTP requests** (no outbound network). It cannot call your backend directly. Use the **local verification script** below instead; then paste the script output back into Composer for analysis (it can interpret results and suggest fixes).
 
 ---
 
-## Copy-paste prompt for Vapi Composer
+## Option 1: Run the verification script locally (recommended)
+
+From the **Neyvo Pulse Backend** folder:
+
+```bash
+node verify-neyvo-pulse.js
+```
+
+Optional env vars:
+
+- `BASE_URL` – default `https://neyvo-pulse.onrender.com`
+- `BUSINESS_ID` – default `default-school`
+
+Example:
+
+```bash
+BASE_URL=https://neyvo-pulse.onrender.com BUSINESS_ID=default-school node verify-neyvo-pulse.js
+```
+
+Then **paste the full output** into Vapi Composer. It can:
+
+- Interpret which endpoints failed and why
+- Suggest fixes (auth, CORS, missing fields)
+- Detect schema or config issues
+
+The script lives at: **`Neyvo Pulse Backend/verify-neyvo-pulse.js`**.
+
+---
+
+## Option 2: Copy-paste prompt for Vapi Composer (manual checklist)
+
+If you prefer to have Composer reason about the API without running the script, use the prompt below. Composer will **not** call your backend; it can only give you a checklist or a Postman/script to run yourself.
 
 ```
 You are verifying the Neyvo Pulse backend API. Base URL: BASE_URL (e.g. https://neyvo-pulse.onrender.com).
