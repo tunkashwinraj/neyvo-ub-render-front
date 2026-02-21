@@ -4,6 +4,8 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/spearia_theme.dart';
 
 class VoiceTierPage extends StatefulWidget {
@@ -99,12 +101,40 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
     }
 
     final currentTier = (_wallet?['tier'] as String?) ?? 'natural';
+    final subTier = (_wallet?['subscription_tier'] as String?)?.toLowerCase() ?? 'free';
+    final isFree = subTier == 'free';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (isFree)
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: SpeariaAura.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: SpeariaAura.primary.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: SpeariaAura.primary, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Natural Human and Ultra Real Human require Pro or Business. Upgrade to unlock all voice tiers.',
+                      style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textPrimary),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
+                    child: const Text('Upgrade — \$29/mo'),
+                  ),
+                ],
+              ),
+            ),
           Text(
             'Choose your voice quality',
             style: SpeariaType.headlineMedium.copyWith(fontWeight: FontWeight.w700),

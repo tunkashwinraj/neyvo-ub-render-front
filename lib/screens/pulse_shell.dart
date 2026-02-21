@@ -1,6 +1,9 @@
 // lib/screens/pulse_shell.dart
 // Neyvo Pulse – main shell with persistent sidebar (always visible).
+// Listens to Firestore org doc for real-time wallet_credits updates.
 
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -24,6 +27,8 @@ import 'wallet_page.dart';
 import 'usage_page.dart';
 import 'voice_tier_page.dart';
 import 'developer_console_page.dart';
+import 'plan_selector_page.dart';
+import 'addons_page.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/spearia_theme.dart';
 
@@ -42,6 +47,13 @@ class _PulseShellState extends State<PulseShell> {
   int? _numbersCount;
   int? _callsTodayCapacity;
   int? _callsTodayUsed;
+  double? _usageSpend;
+  int _addonsCount = 0;
+  String? _subscriptionStatus;
+  String? _orgStatus;
+  StreamSubscription<DocumentSnapshot>? _walletSubscription;
+  static const String _orgId = 'default-school';
+  static const String _orgCollection = 'schools';
 
   // Single source of truth: nav items and pages in same order (index i = page i)
   static List<_NavItem> get _nav => [
@@ -54,6 +66,8 @@ class _PulseShellState extends State<PulseShell> {
     const _NavItem('Reports', Icons.assessment_outlined, PulseRouteNames.reports),
     const _NavItem('Wallet', Icons.account_balance_wallet_outlined, PulseRouteNames.wallet),
     const _NavItem('Usage', Icons.bar_chart_outlined, PulseRouteNames.usage),
+    const _NavItem('Add-ons', Icons.extension_outlined, PulseRouteNames.addons),
+    const _NavItem('Subscription', Icons.card_membership_outlined, PulseRouteNames.subscriptionPlan),
     const _NavItem('Voice tier', Icons.record_voice_over_outlined, PulseRouteNames.voiceTier),
     const _NavItem('AI Insights', Icons.insights_outlined, PulseRouteNames.aiInsights),
     const _NavItem('Scripts', Icons.description_outlined, PulseRouteNames.templateScripts),
@@ -75,6 +89,8 @@ class _PulseShellState extends State<PulseShell> {
     const ReportsPage(),
     const WalletPage(),
     const UsagePage(),
+    const AddonsPage(),
+    const PlanSelectorPage(),
     const VoiceTierPage(),
     const AiInsightsPage(),
     const TemplateScriptsPage(),
@@ -92,6 +108,23 @@ class _PulseShellState extends State<PulseShell> {
     if (kIsWeb) debugPrint('PulseShell initialized');
     _loadWalletCredits();
     _loadNumbersSummary();
+    _loadUsageSummary();
+    _walletSubscription = FirebaseFirestore.instance
+        .collection(_orgCollection)
+        .doc(_orgId)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted || !snap.exists) return;
+      final data = snap.data();
+      final credits = (data?['wallet_credits'] as num?)?.toInt();
+      final status = (data?['status'] as String?)?.toLowerCase();
+      final subStatus = (data?['subscription_status'] as String?)?.toLowerCase();
+      setState(() {
+        if (credits != null) _walletCredits = credits;
+        if (status != null) _orgStatus = status;
+        if (subStatus != null) _subscriptionStatus = subStatus;
+      });
+    });
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
       final idx = _nav.indexWhere((n) => n.route == name);
@@ -99,10 +132,36 @@ class _PulseShellState extends State<PulseShell> {
     }
   }
 
+  @override
+  void dispose() {
+    _walletSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadWalletCredits() async {
     try {
       final w = await NeyvoPulseApi.getBillingWallet();
-      if (mounted) setState(() => _walletCredits = (w['credits'] as num?)?.toInt());
+      if (mounted) {
+        final credits = (w['credits'] as num?)?.toInt();
+        final shield = w['addon_shield_numbers'] as List? ?? [];
+        final hipaa = w['addon_hipaa'] == true;
+        setState(() {
+          _walletCredits = credits;
+          _addonsCount = shield.length + (hipaa ? 1 : 0);
+          _subscriptionStatus = (w['subscription_status'] as String?)?.toLowerCase();
+          _orgStatus = (w['status'] as String?)?.toLowerCase();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadUsageSummary() async {
+    try {
+      final now = DateTime.now();
+      final from = '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+      final to = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final u = await NeyvoPulseApi.getBillingUsage(from: from, to: to);
+      if (mounted) setState(() => _usageSpend = (u['total_dollars_spent'] as num?)?.toDouble());
     } catch (_) {}
   }
 
@@ -169,24 +228,40 @@ class _PulseShellState extends State<PulseShell> {
                       final selected = _selectedIndex == i;
                       String? subtitle;
                       if (item.label == 'Wallet' && _walletCredits != null) {
-                        subtitle = '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits';
+                        final dollars = (_walletCredits! / 100).toStringAsFixed(2);
+                        subtitle = '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits · \$$dollars';
+                      } else if (item.label == 'Usage' && _usageSpend != null) {
+                        subtitle = '\$${_usageSpend!.toStringAsFixed(2)} this month';
                       } else if (item.label == 'Phone Numbers' && _numbersCount != null) {
                         subtitle = '$_numbersCount number${_numbersCount == 1 ? '' : 's'}';
                       }
+                      final badge = item.label == 'Add-ons' && _addonsCount > 0 ? _addonsCount : null;
                       return ListTile(
                         leading: Icon(
                           item.icon,
                           size: 22,
                           color: selected ? SpeariaAura.primary : SpeariaAura.iconMuted,
                         ),
-                        title: Text(
-                          item.label,
-                          style: SpeariaType.bodyMedium.copyWith(
-                            color: selected ? SpeariaAura.primary : SpeariaAura.textPrimary,
-                            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                          ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.label,
+                                style: SpeariaType.bodyMedium.copyWith(
+                                  color: selected ? SpeariaAura.primary : SpeariaAura.textPrimary,
+                                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            if (badge != null)
+                              CircleAvatar(
+                                radius: 10,
+                                backgroundColor: SpeariaAura.primary,
+                                child: Text('$badge', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.textOnPrimary)),
+                              ),
+                          ],
                         ),
-                        subtitle: subtitle != null ? Text(subtitle, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)) : null,
+                        subtitle: subtitle != null ? Text(subtitle, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
                         selected: selected,
                         selectedTileColor: SpeariaAura.primary.withOpacity(0.08),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -214,14 +289,43 @@ class _PulseShellState extends State<PulseShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_walletCredits != null && _walletCredits! < 500 && _walletCredits! >= 0)
+                if (_orgStatus == 'suspended')
+                  Material(
+                    color: SpeariaAura.error.withOpacity(0.15),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.block, color: SpeariaAura.error, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text('Account suspended. Contact support.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.error))),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_subscriptionStatus == 'past_due')
                   Material(
                     color: SpeariaAura.warning.withOpacity(0.15),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: SpeariaAura.warning, size: 22),
+                          Icon(Icons.payment, color: SpeariaAura.warning, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text('Subscription past due. Update payment to avoid service interruption.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textPrimary))),
+                          TextButton(onPressed: () => setState(() => _selectedIndex = _nav.indexWhere((n) => n.label == 'Subscription')), child: const Text('Update payment')),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_walletCredits != null && _walletCredits! < 500 && _walletCredits! >= 0)
+                  Material(
+                    color: (_walletCredits! < 200 ? SpeariaAura.error : SpeariaAura.warning).withOpacity(0.15),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: _walletCredits! < 200 ? SpeariaAura.error : SpeariaAura.warning, size: 22),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(

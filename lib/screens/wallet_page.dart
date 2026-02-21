@@ -1,8 +1,11 @@
 // lib/screens/wallet_page.dart
-// Wallet & Credits: balance, purchase packs, usage summary, transaction history.
+// Wallet & Credits: balance (tier badge, bonus), purchase packs with bonused credits,
+// transaction history by type (icons/colors), low-balance banner.
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/spearia_theme.dart';
 
 class WalletPage extends StatefulWidget {
@@ -19,6 +22,9 @@ class _WalletPageState extends State<WalletPage> {
   bool _loading = true;
   String? _error;
   bool _purchaseInProgress = false;
+  int _txnOffset = 0;
+  static const int _txnPageSize = 30;
+  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -38,13 +44,14 @@ class _WalletPageState extends State<WalletPage> {
       final results = await Future.wait([
         NeyvoPulseApi.getBillingWallet(),
         NeyvoPulseApi.getBillingUsage(from: from, to: to),
-        NeyvoPulseApi.getBillingTransactions(limit: 30),
+        NeyvoPulseApi.getBillingTransactions(limit: _txnPageSize, offset: 0),
       ]);
       if (mounted) {
         setState(() {
           _wallet = results[0] as Map<String, dynamic>?;
           _usage = results[1] as Map<String, dynamic>?;
           _transactions = results[2] as Map<String, dynamic>?;
+          _txnOffset = 0;
           _loading = false;
         });
       }
@@ -94,13 +101,13 @@ class _WalletPageState extends State<WalletPage> {
             children: [
               Text('Add credits', style: SpeariaType.headlineMedium),
               const SizedBox(height: 8),
-              Text('Payment processing coming soon. Contact support to add credits.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+              Text('Credits are applied with your plan bonus. Payment processing coming soon.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
               const SizedBox(height: 24),
-              _packCard('Starter', 49, 5000, null, 'starter'),
+              _packCard('Starter', 49, 5000, 'starter'),
               const SizedBox(height: 12),
-              _packCard('Growth', 149, 16500, '+10% bonus', 'growth'),
+              _packCard('Growth', 149, 16500, 'growth'),
               const SizedBox(height: 12),
-              _packCard('Scale', 399, 50000, '+25% bonus', 'scale'),
+              _packCard('Scale', 399, 50000, 'scale'),
             ],
           ),
         ),
@@ -108,9 +115,20 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
-  Widget _packCard(String name, int price, int credits, String? badge, String packKey) {
-    final cpm = (_wallet?['credits_per_minute'] ?? 35) as int? ?? 35;
-    final approxCalls = (credits / cpm).round();
+  int _bonusedCredits(int baseCredits) {
+    final pct = (_wallet?['credit_bonus_pct'] as num?)?.toDouble() ?? 0.0;
+    return (baseCredits * (1 + pct)).floor();
+  }
+
+  Widget _packCard(String name, int price, int baseCredits, String packKey) {
+    final bonusPct = (_wallet?['credit_bonus_pct'] as num?)?.toDouble() ?? 0.0;
+    final totalCredits = _bonusedCredits(baseCredits);
+    final bonusCredits = totalCredits - baseCredits;
+    final cpm = (_wallet?['credits_per_minute'] as num?)?.toInt() ?? 35;
+    final approxMin = totalCredits ~/ cpm;
+    final bonusLabel = bonusPct > 0
+        ? '${totalCredits.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits — includes +${(bonusPct * 100).toInt()}% ${(_wallet?['subscription_tier'] ?? 'plan').toString().toUpperCase()} bonus'
+        : null;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
@@ -122,22 +140,16 @@ class _WalletPageState extends State<WalletPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(name, style: SpeariaType.titleMedium),
-                      if (badge != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: SpeariaAura.primary.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-                          child: Text(badge, style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.primary)),
-                        ),
-                      ],
-                    ],
-                  ),
+                  Text(name, style: SpeariaType.titleMedium),
                   const SizedBox(height: 4),
-                  Text('\$$price → $credits credits', style: SpeariaType.bodyMedium),
-                  Text('≈ $approxCalls min at current tier', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+                  Text('\$$price → ${totalCredits.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits', style: SpeariaType.bodyMedium),
+                  if (bonusLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(bonusLabel, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.primary)),
+                    ),
+                  const SizedBox(height: 4),
+                  Text('~$approxMin min of Natural Human calls', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                 ],
               ),
             ),
@@ -150,6 +162,39 @@ class _WalletPageState extends State<WalletPage> {
         ),
       ),
     );
+  }
+
+  void _loadMoreTransactions() async {
+    if (_loadingMore) return;
+    setState(() => _loadingMore = true);
+    final newOffset = _txnOffset + _txnPageSize;
+    try {
+      final res = await NeyvoPulseApi.getBillingTransactions(limit: _txnPageSize, offset: newOffset);
+      final list = res['transactions'] as List? ?? [];
+      if (mounted && _transactions != null) {
+        final existing = _transactions!['transactions'] as List? ?? [];
+        setState(() {
+          _transactions = Map<String, dynamic>.from(_transactions!);
+          _transactions!['transactions'] = [...existing, ...list];
+          _txnOffset = newOffset;
+          _loadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  static (Color, IconData) _txnStyle(String type) {
+    switch (type) {
+      case 'purchase': return (SpeariaAura.success, Icons.account_balance_wallet_outlined);
+      case 'debit': return (SpeariaAura.error, Icons.phone_outlined);
+      case 'bonus': return (Color(0xFF7C3AED), Icons.star_outline);
+      case 'addon_deduction': return (SpeariaAura.warning, Icons.toggle_on_outlined);
+      case 'manual_adjustment': return (SpeariaAura.textMuted, Icons.admin_panel_settings_outlined);
+      case 'refund': return (SpeariaAura.info, Icons.replay_outlined);
+      default: return (SpeariaAura.textSecondary, Icons.receipt_long_outlined);
+    }
   }
 
   @override
@@ -182,12 +227,42 @@ class _WalletPageState extends State<WalletPage> {
     final credits = (_wallet?['credits'] as num?)?.toInt() ?? 0;
     final dollars = (_wallet?['dollars'] as num?)?.toDouble() ?? 0.0;
     final tierDisplay = _wallet?['tier_display'] as String? ?? 'Natural Human';
+    final subTier = (_wallet?['subscription_tier'] as String?)?.toLowerCase() ?? 'free';
+    final bonusPct = (_wallet?['credit_bonus_pct'] as num?)?.toDouble() ?? 0.0;
+    Color planColor = SpeariaAura.textMuted;
+    if (subTier == 'pro') planColor = const Color(0xFF7C3AED);
+    if (subTier == 'business') planColor = const Color(0xFFD97706);
+    final lowBalance = credits < 500;
+    final criticalBalance = credits < 200;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (lowBalance)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: criticalBalance ? SpeariaAura.error.withOpacity(0.12) : SpeariaAura.warning.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: criticalBalance ? SpeariaAura.error : SpeariaAura.warning, width: 1),
+              ),
+              child: Row(
+                children: [
+                  Icon(criticalBalance ? Icons.warning_amber_rounded : Icons.info_outline, color: criticalBalance ? SpeariaAura.error : SpeariaAura.warning, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Low credits — $credits remaining (~${(credits / 35).round()} min). Top up now to keep calls running.',
+                      style: SpeariaType.bodyMedium.copyWith(color: criticalBalance ? SpeariaAura.error : SpeariaAura.warning),
+                    ),
+                  ),
+                  TextButton(onPressed: _showPurchaseModal, child: const Text('Top up')),
+                ],
+              ),
+            ),
           // Balance card
           Card(
             elevation: 0,
@@ -202,7 +277,19 @@ class _WalletPageState extends State<WalletPage> {
                   Text('${credits.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits', style: SpeariaType.headlineMedium.copyWith(fontWeight: FontWeight.w700)),
                   Text('\$${dollars.toStringAsFixed(2)} available', style: SpeariaType.bodyLarge.copyWith(color: SpeariaAura.textSecondary)),
                   const SizedBox(height: 8),
-                  Chip(label: Text(tierDisplay), backgroundColor: SpeariaAura.primary.withOpacity(0.1)),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(
+                        label: Text(subTier == 'business' ? 'Business' : subTier == 'pro' ? 'Pro' : 'Free'),
+                        backgroundColor: planColor.withOpacity(0.15),
+                        labelStyle: SpeariaType.labelMedium.copyWith(color: planColor),
+                      ),
+                      if (bonusPct > 0)
+                        Text('You get +${(bonusPct * 100).toInt()}% bonus on every top-up', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: _showPurchaseModal,
@@ -214,6 +301,25 @@ class _WalletPageState extends State<WalletPage> {
               ),
             ),
           ),
+          if (bonusPct == 0)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: SpeariaAura.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: SpeariaAura.primary.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(child: Text('Get 10% more credits on every top-up with Pro.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary))),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
+                    child: const Text('Upgrade'),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 24),
           // Usage this month
           Text('This month', style: SpeariaType.titleMedium),
@@ -260,11 +366,12 @@ class _WalletPageState extends State<WalletPage> {
                     final t = list[i] as Map<String, dynamic>;
                     final type = t['type'] as String? ?? '';
                     final creditsVal = (t['credits'] as num?)?.toInt() ?? 0;
-                    final isDebit = type == 'debit' || creditsVal < 0;
+                    final (color, icon) = _txnStyle(type);
                     final date = t['created_at']?.toString() ?? '';
                     final desc = t['description']?.toString() ?? type;
                     final balanceAfter = (t['balance_after'] as num?)?.toInt();
                     return ListTile(
+                      leading: Icon(icon, color: color, size: 22),
                       title: Text(desc, style: SpeariaType.bodyMedium),
                       subtitle: Text(date, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                       trailing: Column(
@@ -273,13 +380,32 @@ class _WalletPageState extends State<WalletPage> {
                         children: [
                           Text(
                             '${creditsVal >= 0 ? '+' : ''}$creditsVal',
-                            style: SpeariaType.bodyMedium.copyWith(color: isDebit ? SpeariaAura.error : SpeariaAura.success),
+                            style: SpeariaType.bodyMedium.copyWith(color: color),
                           ),
                           if (balanceAfter != null) Text('Balance: $balanceAfter', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                         ],
                       ),
                     );
                   },
+                ),
+              );
+            },
+          ),
+          Builder(
+            builder: (ctx) {
+              final list = _transactions?['transactions'] as List? ?? [];
+              final hasMore = list.length >= _txnPageSize;
+              if (!hasMore || list.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Center(
+                  child: _loadingMore
+                      ? const SizedBox(height: 32, width: 32, child: CircularProgressIndicator(strokeWidth: 2))
+                      : TextButton.icon(
+                          onPressed: _loadMoreTransactions,
+                          icon: const Icon(Icons.expand_more),
+                          label: const Text('Load more'),
+                        ),
                 ),
               );
             },

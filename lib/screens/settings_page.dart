@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import 'voice_tier_page.dart';
 import '../theme/spearia_theme.dart';
 
@@ -29,6 +30,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   bool _showAdvanced = false;
   String? _myRole;
   String? _voiceTierDisplay;
+  String? _subscriptionTier;
   List<Map<String, dynamic>> _members = [];
   final _memberUserIdController = TextEditingController();
   String _newMemberRole = 'staff';
@@ -70,10 +72,16 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         final tierRes = await NeyvoPulseApi.getBillingTier();
         if (mounted) _voiceTierDisplay = tierRes['tier_display']?.toString();
       } catch (_) {}
+      String? subTier;
+      try {
+        final subRes = await NeyvoPulseApi.getSubscription();
+        subTier = (subRes['tier'] as String?)?.toLowerCase();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _myRole = roleRes['role']?.toString();
           _members = List<Map<String, dynamic>>.from(membersRes['members'] as List? ?? []);
+          _subscriptionTier = subTier;
           _loading = false;
         });
       }
@@ -170,6 +178,22 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: SpeariaSpacing.xl),
+        
+        // Subscription Plan
+        Text('Subscription Plan', style: SpeariaType.titleLarge),
+        const SizedBox(height: SpeariaSpacing.md),
+        Card(
+          child: ListTile(
+            title: Text(_subscriptionTier == 'business' ? 'Business' : _subscriptionTier == 'pro' ? 'Pro' : 'Free', style: SpeariaType.titleMedium),
+            subtitle: const Text('Unlock voice tiers and credit bonus. Only wallet top-ups and subscription charge your card.'),
+            trailing: FilledButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
+              child: const Text('Change Plan'),
             ),
           ),
         ),

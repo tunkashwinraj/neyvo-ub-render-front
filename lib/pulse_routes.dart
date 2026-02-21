@@ -18,6 +18,7 @@ import 'screens/audit_log_page.dart';
 import 'screens/integration_page.dart';
 import 'screens/campaigns_page.dart';
 import 'screens/template_scripts_page.dart';
+import 'screens/plan_selector_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -36,6 +37,10 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceTier));
       case PulseRouteNames.developerConsole:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.developerConsole));
+      case PulseRouteNames.subscriptionPlan:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan));
+      case PulseRouteNames.addons:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.addons));
       case PulseRouteNames.outbound:
         return MaterialPageRoute(builder: (_) => const OutboundCallsPage());
       case PulseRouteNames.students:

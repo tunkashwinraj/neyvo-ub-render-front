@@ -446,6 +446,36 @@ class NeyvoPulseApi {
   }
 
   // -------------------------------------------------------------------------
+  // Subscription (plan selector: subscribe, cancel, upgrade)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getSubscription() async =>
+      _get('/api/billing/subscription');
+
+  static Future<Map<String, dynamic>> subscribe(String plan) async =>
+      _post('/api/billing/subscribe', {'plan': plan});
+
+  static Future<Map<String, dynamic>> cancelSubscription() async {
+    final v = await SpeariaApi.deleteJson('/api/billing/subscribe', params: {'business_id': _defaultBusinessId});
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  static Future<Map<String, dynamic>> upgradeSubscription(String plan) async {
+    final v = await SpeariaApi.putJson('/api/billing/subscription/upgrade', body: {'business_id': _defaultBusinessId, 'plan': plan});
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  // -------------------------------------------------------------------------
+  // Add-ons (Shield, HIPAA)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> setAddonShield({required String numberId, required bool enabled}) async =>
+      _patch('/api/billing/addons/shield', {'number_id': numberId, 'enabled': enabled});
+
+  static Future<Map<String, dynamic>> setAddonHipaa({required bool enabled}) async =>
+      _patch('/api/billing/addons/hipaa', {'enabled': enabled});
+
+  // -------------------------------------------------------------------------
   // Outbound capacity (Part 2: phone numbers, primary vs campaign)
   // -------------------------------------------------------------------------
 

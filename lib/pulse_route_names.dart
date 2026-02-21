@@ -23,4 +23,6 @@ abstract class PulseRouteNames {
   static const String voiceTier = '/pulse/voice-tier';
   static const String developerConsole = '/pulse/developer-console';
   static const String phoneNumbers = '/pulse/phone-numbers';
+  static const String subscriptionPlan = '/pulse/subscription-plan';
+  static const String addons = '/pulse/addons';
 }

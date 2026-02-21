@@ -18,6 +18,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
   Map<String, dynamic>? _numbersStats;
   List<dynamic>? _warmUpNumbers;
   Map<String, dynamic>? _dailyResetLog;
+  Map<String, dynamic>? _systemHealth;
   bool _loading = true;
   String? _error;
 
@@ -39,6 +40,10 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         warmUpNumbers = warmRes['numbers'] as List? ?? [];
         dailyResetLog = await SpeariaApi.getJsonMap('/api/admin/numbers/daily-reset', adminAuth: true);
       } catch (_) {}
+      Map<String, dynamic>? systemHealth;
+      try {
+        systemHealth = await SpeariaApi.getJsonMap('/api/admin/system-health', adminAuth: true);
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _overview = overview;
@@ -46,6 +51,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
           _numbersStats = numbersStats;
           _warmUpNumbers = warmUpNumbers;
           _dailyResetLog = dailyResetLog;
+          _systemHealth = systemHealth;
           _loading = false;
         });
       }
@@ -92,9 +98,10 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
 
     final orgs = (_overview?['total_organizations'] as num?)?.toInt() ?? 0;
     final callsToday = (_overview?['total_calls_today'] as num?)?.toInt() ?? 0;
-    final revenue = (_overview?['total_revenue'] as num?)?.toDouble() ?? 0.0;
-    final cost = (_overview?['total_cost_to_neyvo'] as num?)?.toDouble() ?? 0.0;
-    final margin = (_overview?['total_margin'] as num?)?.toDouble() ?? 0.0;
+    final revenueToday = (_overview?['total_revenue_today'] as num?)?.toDouble() ?? 0.0;
+    final revenueMtd = (_overview?['total_revenue_mtd'] as num?)?.toDouble() ?? 0.0;
+    final costToday = (_overview?['total_cost_today'] as num?)?.toDouble() ?? 0.0;
+    final marginPct = (_overview?['platform_margin_pct'] as num?)?.toDouble() ?? 0.0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -107,6 +114,8 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
             color: SpeariaAura.warning,
           ),
           const SizedBox(height: 16),
+          Text('Revenue Control Center', style: SpeariaType.headlineMedium),
+          const SizedBox(height: 8),
           Text('Platform overview', style: SpeariaType.titleLarge),
           const SizedBox(height: 12),
           Card(
@@ -120,13 +129,56 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
                 children: [
                   _stat('Organizations', '$orgs'),
                   _stat('Calls today', '$callsToday'),
-                  _stat('Revenue', '\$${revenue.toStringAsFixed(2)}'),
-                  _stat('Cost (internal)', '\$${cost.toStringAsFixed(2)}'),
-                  _stat('Margin %', '${margin.toStringAsFixed(1)}%'),
+                  _stat('Revenue today', '\$${revenueToday.toStringAsFixed(2)}'),
+                  _stat('Revenue MTD', '\$${revenueMtd.toStringAsFixed(2)}'),
+                  _stat('Cost today', '\$${costToday.toStringAsFixed(2)}'),
+                  _stat('Platform margin %', '${marginPct.toStringAsFixed(1)}%'),
                 ],
               ),
             ),
           ),
+          if (_systemHealth != null) ...[
+            const SizedBox(height: 24),
+            Text('System health', style: SpeariaType.titleLarge),
+            const SizedBox(height: 8),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        _stat('Orgs below 500 credits', '${_systemHealth!['orgs_below_500_credits'] ?? 0}'),
+                        _stat('Billing errors today', '${_systemHealth!['billing_errors_today'] ?? 0}'),
+                        _stat('Calls missing billing', '${_systemHealth!['calls_missing_billing_record'] ?? 0}'),
+                        if (_systemHealth!['avg_assistant_request_ms_last_20'] != null)
+                          _stat('Avg assistant-request ms', '${_systemHealth!['avg_assistant_request_ms_last_20']}'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Environment (set/not set only)', style: SpeariaType.labelMedium.copyWith(color: SpeariaAura.textMuted)),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: (_systemHealth!['env_vars'] as Map<String, dynamic>? ?? {}).entries.map((e) {
+                        final set = (e.value as String?) == 'set';
+                        return Chip(
+                          label: Text('${e.key}: ${set ? "✓ Set" : "✗ Not set"}', style: SpeariaType.labelSmall),
+                          backgroundColor: set ? SpeariaAura.success.withOpacity(0.15) : SpeariaAura.error.withOpacity(0.15),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Numbers (platform)', style: SpeariaType.titleLarge),
           const SizedBox(height: 8),

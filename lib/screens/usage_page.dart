@@ -3,6 +3,8 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/spearia_theme.dart';
 
 class UsagePage extends StatefulWidget {
@@ -52,11 +54,7 @@ class _UsagePageState extends State<UsagePage> {
     final (from, to) = _dateRange();
     try {
       final usage = await NeyvoPulseApi.getBillingUsage(from: from, to: to);
-      List<dynamic> calls = [];
-      try {
-        final res = await NeyvoPulseApi.listCalls();
-        calls = res['calls'] as List? ?? [];
-      } catch (_) {}
+      final calls = usage['call_log'] as List? ?? [];
       if (mounted) {
         setState(() {
           _usage = usage;
@@ -103,6 +101,7 @@ class _UsagePageState extends State<UsagePage> {
     final totalMinutes = (_usage?['total_minutes'] as num?)?.toDouble() ?? 0.0;
     final totalCredits = (_usage?['total_credits_used'] as num?)?.toInt() ?? 0;
     final totalDollars = (_usage?['total_dollars_spent'] as num?)?.toDouble() ?? 0.0;
+    final showUpgradeNudge = totalDollars > 50;
     final daily = _usage?['daily_breakdown'] as List? ?? [];
     final byTier = _usage?['by_tier'] as Map<String, dynamic>? ?? {};
 
@@ -126,6 +125,25 @@ class _UsagePageState extends State<UsagePage> {
               });
             },
           ),
+          if (showUpgradeNudge)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: SpeariaAura.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: SpeariaAura.primary.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(child: Text('At this usage level, Pro saves you money with 10% bonus credits on every top-up.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary))),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
+                    child: const Text('See plan options'),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 24),
           // Summary cards
           Row(
@@ -184,6 +202,50 @@ class _UsagePageState extends State<UsagePage> {
                           Text('$calls calls', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                         ],
                       ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
+          // Per-call log table
+          Text('Per-call log', style: SpeariaType.titleMedium),
+          const SizedBox(height: 8),
+          if (_callLog == null || _callLog!.isEmpty)
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+              child: const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No calls in this range'))),
+            )
+          else
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Date / Time')),
+                    DataColumn(label: Text('Duration')),
+                    DataColumn(label: Text('Tier')),
+                    DataColumn(label: Text('Credits')),
+                    DataColumn(label: Text('Status')),
+                  ],
+                  rows: _callLog!.map<DataRow>((c) {
+                    final date = c['date'] as String? ?? '';
+                    final time = c['time'] as String? ?? '';
+                    final dur = c['duration_minutes'];
+                    final tier = c['tier'] as String? ?? '';
+                    final credits = (c['credits_charged'] as num?)?.toInt() ?? 0;
+                    final status = c['status'] as String? ?? 'completed';
+                    return DataRow(
+                      cells: [
+                        DataCell(Text('$date $time', style: SpeariaType.bodySmall)),
+                        DataCell(Text(dur != null ? '${dur} min' : '—', style: SpeariaType.bodySmall)),
+                        DataCell(Text(tier, style: SpeariaType.bodySmall)),
+                        DataCell(Text('$credits', style: SpeariaType.bodySmall)),
+                        DataCell(Text(status, style: SpeariaType.bodySmall)),
+                      ],
                     );
                   }).toList(),
                 ),
