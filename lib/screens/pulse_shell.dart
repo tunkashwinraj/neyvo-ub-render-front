@@ -52,7 +52,7 @@ class _PulseShellState extends State<PulseShell> {
   String? _subscriptionStatus;
   String? _orgStatus;
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
-  static const String _orgId = 'default-school';
+  static const String _accountId = 'default-school';
   static const String _orgCollection = 'schools';
 
   // Single source of truth: nav items and pages in same order (index i = page i)
@@ -111,7 +111,7 @@ class _PulseShellState extends State<PulseShell> {
     _loadUsageSummary();
     _walletSubscription = FirebaseFirestore.instance
         .collection(_orgCollection)
-        .doc(_orgId)
+        .doc(_accountId)
         .snapshots()
         .listen((snap) {
       if (!mounted || !snap.exists) return;

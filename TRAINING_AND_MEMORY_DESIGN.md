@@ -83,7 +83,7 @@ It also covers **RAG** (retrieval-augmented generation) and **semantic analysis*
 
 - **When**: On VAPI `end-of-call-report` webhook.
 - **How**:  
-  - When creating an outbound call, backend must pass **metadata** to VAPI: `school_id`, `student_id` (and optionally `business_id`). VAPI includes this in the end-of-call payload.  
+  - When creating an outbound call, backend must pass **metadata** to VAPI: `account_id`, `student_id`. VAPI includes this in the end-of-call payload.  
   - Backend has a **Pulse-specific** handler (or branch in the existing webhook) that:  
     - Reads `metadata.school_id`, `metadata.student_id`.  
     - Gets transcript and analysis from the event.  

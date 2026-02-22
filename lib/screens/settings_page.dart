@@ -3,6 +3,7 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
@@ -31,6 +32,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   String? _myRole;
   String? _voiceTierDisplay;
   String? _subscriptionTier;
+  String? _accountId;
   List<Map<String, dynamic>> _members = [];
   final _memberUserIdController = TextEditingController();
   String _newMemberRole = 'staff';
@@ -65,7 +67,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   Future<void> _seedDemo() async {
     setState(() => _error = null);
     try {
-      final res = await NeyvoPulseApi.seedDemo();
+      final res = await NeyvoPulseApi.seedFull();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(res['message']?.toString() ?? 'Demo data loaded')),
@@ -91,6 +93,11 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         _vapiPhoneNumberId.text = s['vapi_phone_number_id']?.toString() ?? '';
         _vapiAssistantId.text = s['vapi_assistant_id']?.toString() ?? '';
         _callScript.text = s['call_script']?.toString() ?? '';
+        _accountId = (s['account_id']?.toString() ?? '').trim().isEmpty ? null : s['account_id']?.toString().trim();
+        if (_accountId == null || _accountId!.isEmpty) {
+          // Fallback so user sees something; backend may use different Firestore collection
+          _accountId = NeyvoPulseApi.defaultAccountId;
+        }
       }
       final roleRes = await NeyvoPulseApi.getMyRole();
       final membersRes = await NeyvoPulseApi.listMembers();
@@ -171,7 +178,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         ),
         const SizedBox(height: SpeariaSpacing.xl),
 
-        // Account (logged-in user email / phone)
+        // Account (Account ID, logged-in user email / phone)
         Text('Account', style: SpeariaType.titleLarge),
         const SizedBox(height: SpeariaSpacing.md),
         Card(
@@ -180,6 +187,47 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Account ID'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_accountId ?? '—'),
+                      if (_accountId == NeyvoPulseApi.defaultAccountId)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            'Run "Load demo data" below to create full demo data and generate a 6-digit Account ID in Firebase.',
+                            style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: _accountId != null
+                      ? IconButton(
+                          icon: const Icon(Icons.copy),
+                          tooltip: 'Copy',
+                          onPressed: () {
+                            if (_accountId != null) {
+                              Clipboard.setData(ClipboardData(text: _accountId!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Account ID copied')),
+                              );
+                            }
+                          },
+                        )
+                      : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: SpeariaSpacing.lg, right: SpeariaSpacing.lg, bottom: SpeariaSpacing.sm),
+                  child: Text(
+                    'Your unique account identifier. Use it when linking integrations or contacting support.',
+                    style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+                  ),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Email'),

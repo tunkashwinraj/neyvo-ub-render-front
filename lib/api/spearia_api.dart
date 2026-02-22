@@ -30,14 +30,14 @@ typedef ApiErrorHook = void Function(ApiException e);
 ///   SpeariaApi.setBaseUrl("http://127.0.0.1:8000");
 ///   SpeariaApi.setSessionToken("...");                 // <- user session (Bearer)
 ///   SpeariaApi.setAdminToken("...");                   // optional admin header
-///   SpeariaApi.setDefaultBusinessId("demo-biz-001");   // optional convenience
+///   SpeariaApi.setDefaultAccountId("demo-biz-001");   // optional convenience
 ///   SpeariaApi.setGlobalErrorHook((e) { ... });        // optional
 class SpeariaApi {
   static String _baseUrl = "";
   static String? _sessionToken; // <— NEW: user session (Bearer)
   static String? _adminToken; // optional X-Admin-Token for admin routes
   static String? _userId; // optional X-User-Id for Pulse RBAC
-  static String? _defaultBusinessId; // auto-injected if a call forgets it
+  static String? _defaultAccountId; // auto-injected if a call forgets it
   static Duration _defaultTimeout = const Duration(seconds: 20);
   static bool _sendNgrokSkipHeader = true;
   static bool _autoAdminForAdminPaths = true; // add X-Admin-Token for /admin/*
@@ -75,10 +75,10 @@ class SpeariaApi {
     _userId = (uid == null || uid.trim().isEmpty) ? null : uid.trim();
   }
 
-  /// Optional: default business id (will be injected if missing in params/body)
-  static void setDefaultBusinessId(String? bizId) {
-    _defaultBusinessId =
-        (bizId == null || bizId.trim().isEmpty) ? null : bizId.trim();
+  /// Optional: default account id (will be injected if missing in params/body)
+  static void setDefaultAccountId(String? id) {
+    _defaultAccountId =
+        (id == null || id.trim().isEmpty) ? null : id.trim();
   }
 
   /// Optional: adjust default request timeout
@@ -206,8 +206,8 @@ class SpeariaApi {
     Duration? timeout,
     bool adminAuth = false,
   }) async {
-    final p = _withBizId(params);
-    final b = _withBizId(body);
+    final p = _withAccountId(params);
+    final b = _withAccountId(body);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
@@ -263,11 +263,11 @@ class SpeariaApi {
     }
   }
 
-  /// Injects default business_id if not provided.
-  static Map<String, dynamic>? _withBizId(Map<String, dynamic>? paramsOrBody) {
-    if (_defaultBusinessId == null) return paramsOrBody;
+  /// Injects default account_id if not provided.
+  static Map<String, dynamic>? _withAccountId(Map<String, dynamic>? paramsOrBody) {
+    if (_defaultAccountId == null) return paramsOrBody;
     final map = Map<String, dynamic>.from(paramsOrBody ?? {});
-    map.putIfAbsent('business_id', () => _defaultBusinessId);
+    map.putIfAbsent('account_id', () => _defaultAccountId);
     return map;
   }
 
@@ -332,10 +332,10 @@ class SpeariaApi {
   }
 
   // ---------- Authorized Numbers (admin) ----------
-  static Future<List<Map<String, dynamic>>> adminListAuthorizedNumbers(String businessId) async {
+  static Future<List<Map<String, dynamic>>> adminListAuthorizedNumbers(String accountId) async {
     final res = await getJsonMap(
       '/admin/authorized-numbers',
-      params: {'business_id': businessId},
+      params: {'account_id': accountId},
       adminAuth: true,
     );
     final items = (res['items'] as List).cast<Map<String, dynamic>>();
@@ -343,7 +343,7 @@ class SpeariaApi {
   }
 
   static Future<void> adminAddAuthorizedNumber({
-    required String businessId,
+    required String accountId,
     required String e164,
     String? label,
     String type = 'allow',
@@ -352,7 +352,7 @@ class SpeariaApi {
       '/admin/authorized-numbers',
       adminAuth: true,
       body: {
-        'business_id': businessId,
+        'account_id': accountId,
         'e164': e164,
         if (label != null) 'label': label,
         'type': type,
@@ -361,41 +361,41 @@ class SpeariaApi {
   }
 
   static Future<void> adminUpdateAuthorizedNumber({
-    required String businessId,
+    required String accountId,
     required String docId,
     String? label,
     String? type, // 'allow' | 'block'
   }) async {
-    final body = <String, dynamic>{'business_id': businessId};
+    final body = <String, dynamic>{'account_id': accountId};
     if (label != null) body['label'] = label;
     if (type != null) body['type'] = type;
     await patchJson('/admin/authorized-numbers/$docId', adminAuth: true, body: body);
   }
 
   static Future<void> adminRemoveAuthorizedNumber({
-    required String businessId,
+    required String accountId,
     required String e164,
   }) async {
     await deleteJson(
       '/admin/authorized-numbers',
       adminAuth: true,
-      params: {'business_id': businessId, 'e164': e164},
+      params: {'account_id': accountId, 'e164': e164},
     );
   }
 
   // ---------- Training Admin ----------
-  static Future<Map<String, dynamic>> adminTrainingInfo(String businessId) async {
+  static Future<Map<String, dynamic>> adminTrainingInfo(String accountId) async {
     return await getJsonMap(
       '/admin/training/info',
-      params: {'business_id': businessId},
+      params: {'account_id': accountId},
       adminAuth: false,
     );
   }
 
-  static Future<String> adminRotateTrainingPin(String businessId) async {
+  static Future<String> adminRotateTrainingPin(String accountId) async {
     final res = await postJson(
       '/admin/training/rotate-pin',
-      body: {'business_id': businessId},
+      body: {'account_id': accountId},
       adminAuth: true,
     );
     if (res is Map && res['pin'] is String) return res['pin'];
@@ -411,7 +411,7 @@ class SpeariaApi {
         Duration? timeout,
         bool adminAuth = false,
       }) async {
-    final p = _withBizId(params);
+    final p = _withAccountId(params);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
@@ -432,8 +432,8 @@ class SpeariaApi {
         Duration? timeout,
         bool adminAuth = false,
       }) async {
-    final p = _withBizId(params);
-    final b = _withBizId(body);
+    final p = _withAccountId(params);
+    final b = _withAccountId(body);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
@@ -463,8 +463,8 @@ class SpeariaApi {
         Duration? timeout,
         bool adminAuth = false,
       }) async {
-    final p = _withBizId(params);
-    final b = _withBizId(body);
+    final p = _withAccountId(params);
+    final b = _withAccountId(body);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
@@ -493,7 +493,7 @@ class SpeariaApi {
         Duration? timeout,
         bool adminAuth = false,
       }) async {
-    final p = _withBizId(params);
+    final p = _withAccountId(params);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
@@ -513,7 +513,7 @@ class SpeariaApi {
         Duration? timeout,
         bool adminAuth = false,
       }) async {
-    final p = _withBizId(params);
+    final p = _withAccountId(params);
     final uri = _uri(path, params: p);
     try {
       final resp = await http
