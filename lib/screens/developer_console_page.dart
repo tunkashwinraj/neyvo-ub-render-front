@@ -631,7 +631,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
           ),
           const SizedBox(height: 24),
-          Text('Account ID', style: SpeariaType.titleSmall),
+          Text('Account ID', style: SpeariaType.titleMedium),
           const SizedBox(height: 4),
           TextField(
             controller: _assignAccountIdController,
@@ -642,7 +642,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          Text('Phone number (E.164)', style: SpeariaType.titleSmall),
+          Text('Phone number (E.164)', style: SpeariaType.titleMedium),
           const SizedBox(height: 4),
           TextField(
             controller: _assignPhoneE164Controller,
@@ -653,7 +653,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          Text('Phone number ID (VAPI / Twilio)', style: SpeariaType.titleSmall),
+          Text('Phone number ID (VAPI / Twilio)', style: SpeariaType.titleMedium),
           const SizedBox(height: 4),
           TextField(
             controller: _assignPhoneNumberIdController,
@@ -664,7 +664,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
-          Text('Friendly name (optional)', style: SpeariaType.titleSmall),
+          Text('Friendly name (optional)', style: SpeariaType.titleMedium),
           const SizedBox(height: 4),
           TextField(
             controller: _assignFriendlyNameController,
@@ -693,7 +693,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 16),
-          Text('Debug: Numbers for account', style: SpeariaType.headlineSmall),
+          Text('Debug: Numbers for account', style: SpeariaType.headlineMedium),
           const SizedBox(height: 8),
           Text(
             'See where each number comes from (org_primary, phone_numbers, numbers_subcollection). '
@@ -733,7 +733,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
                   children: [
                     Text('Resolved: ${_debugNumbersForAccount!['resolved_account_id']} · Org collection: ${_debugNumbersForAccount!['org_collection']}', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                     const SizedBox(height: 8),
-                    Text('Numbers (${(_debugNumbersForAccount!['numbers'] as List).length}):', style: SpeariaType.titleSmall),
+                    Text('Numbers (${(_debugNumbersForAccount!['numbers'] as List).length}):', style: SpeariaType.titleMedium),
                     const SizedBox(height: 4),
                     ...((_debugNumbersForAccount!['numbers'] as List).cast<Map<String, dynamic>>().map((n) {
                       final id = n['number_id'] ?? '';
