@@ -1,11 +1,10 @@
 // lib/screens/backend_test_page.dart
-// Backend connection test page for Neyvo Pulse
+// Backend connection test page for Neyvo Pulse – health, Pulse API, Billing, Stripe, Admin.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../api/spearia_api.dart';
-import '../../neyvo_pulse_api.dart';
-import '../../theme/spearia_theme.dart';
+import '../api/spearia_api.dart';
+import '../theme/spearia_theme.dart';
 
 class BackendTestPage extends StatefulWidget {
   const BackendTestPage({super.key});
@@ -39,17 +38,36 @@ class _BackendTestPageState extends State<BackendTestPage> {
     });
 
     final tests = [
-      _Test('Health Check', '/api/pulse/health', 'GET', null),
-      _Test('List Students', '/api/pulse/students', 'GET', null),
-      _Test('List Payments', '/api/pulse/payments', 'GET', null),
-      _Test('List Calls', '/api/pulse/calls', 'GET', null),
-      _Test('Get Settings', '/api/pulse/settings', 'GET', null),
-      _Test('Reports Summary', '/api/pulse/reports/summary', 'GET', null),
+      // —— Pulse / app ——
+      _Test('Health Check', '/api/pulse/health', 'GET'),
+      _Test('List Students', '/api/pulse/students', 'GET'),
+      _Test('List Payments', '/api/pulse/payments', 'GET'),
+      _Test('List Calls', '/api/pulse/calls', 'GET'),
+      _Test('Get Settings', '/api/pulse/settings', 'GET'),
+      _Test('Reports Summary', '/api/pulse/reports/summary', 'GET'),
+      _Test('Outbound Numbers', '/api/pulse/outbound/phone-numbers', 'GET'),
+      _Test('Call Templates', '/api/pulse/call_templates', 'GET'),
+      _Test('Campaigns', '/api/pulse/campaigns', 'GET'),
+      // —— Billing / Wallet ——
+      _Test('Billing Wallet', '/api/billing/wallet', 'GET'),
+      _Test('Billing Tier', '/api/billing/tier', 'GET'),
+      _Test('Billing Subscription', '/api/billing/subscription', 'GET'),
+      _Test('Billing Transactions', '/api/billing/transactions', 'GET', params: {'limit': 5}),
+      _Test('Billing Usage', '/api/billing/usage', 'GET'),
+      // —— Stripe (create-checkout-session: success = URL returned) ——
+      _Test('Stripe Create Checkout Session', '/api/billing/wallet/create-checkout-session', 'POST', body: {'pack': 'starter'}),
+      // —— Admin (require admin token) ——
+      _Test('Admin Billing Overview', '/api/admin/billing-overview', 'GET', adminAuth: true),
+      _Test('Admin System Health', '/api/admin/system-health', 'GET', adminAuth: true),
+      _Test('Admin Tier Configs', '/api/admin/tier-configs', 'GET', adminAuth: true),
+      _Test('Admin Organizations', '/api/admin/organizations', 'GET', adminAuth: true, params: {'limit': 5}),
+      _Test('Admin Pricing Config', '/api/admin/pricing-config', 'GET', adminAuth: true),
+      _Test('Admin Numbers Stats', '/api/admin/numbers/stats', 'GET', adminAuth: true),
     ];
 
     for (final test in tests) {
       await _runTest(test);
-      await Future.delayed(const Duration(milliseconds: 300)); // Small delay between tests
+      await Future.delayed(const Duration(milliseconds: 200));
     }
 
     setState(() {
@@ -63,17 +81,20 @@ class _BackendTestPageState extends State<BackendTestPage> {
 
     try {
       dynamic response;
-      
+      final params = test.params != null ? Map<String, dynamic>.from(test.params!) : null;
+      final body = test.body != null ? Map<String, dynamic>.from(test.body!) : null;
+      final adminAuth = test.adminAuth ?? false;
+
       if (test.method == 'GET') {
-        response = await SpeariaApi.getJson(test.path);
+        response = await SpeariaApi.getJson(test.path, params: params, adminAuth: adminAuth);
       } else if (test.method == 'POST') {
-        response = await SpeariaApi.postJson(test.path, body: test.body ?? {});
+        response = await SpeariaApi.postJson(test.path, body: body ?? {}, params: params, adminAuth: adminAuth);
       } else {
         throw Exception('Unsupported method: ${test.method}');
       }
 
       stopwatch.stop();
-      
+
       result = TestResult(
         name: test.name,
         path: test.path,
@@ -86,10 +107,10 @@ class _BackendTestPageState extends State<BackendTestPage> {
       );
     } catch (e) {
       stopwatch.stop();
-      
+
       int? statusCode;
       String errorMsg = e.toString();
-      
+
       if (e is ApiException) {
         statusCode = e.statusCode;
         errorMsg = e.message;
@@ -449,6 +470,15 @@ class _Test {
   final String path;
   final String method;
   final Map<String, dynamic>? body;
+  final Map<String, dynamic>? params;
+  final bool? adminAuth;
 
-  _Test(this.name, this.path, this.method, this.body);
+  _Test(
+    this.name,
+    this.path,
+    this.method, {
+    this.body,
+    this.params,
+    this.adminAuth,
+  });
 }

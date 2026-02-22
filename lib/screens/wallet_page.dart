@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/spearia_theme.dart';
 
 class WalletPage extends StatefulWidget {
