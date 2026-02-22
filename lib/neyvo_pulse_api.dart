@@ -283,6 +283,10 @@ class NeyvoPulseApi {
     return _patch('/api/pulse/integration/config', body);
   }
 
+  /// Seed current account with demo data (school name, students, payments, VAPI placeholders).
+  static Future<Map<String, dynamic>> seedDemo() async =>
+      _post('/api/pulse/seed-demo', {});
+
   /// Ingest CSV (admin/staff). Pass CSV string in body.
   static Future<Map<String, dynamic>> ingestCsv({
     required String csv,

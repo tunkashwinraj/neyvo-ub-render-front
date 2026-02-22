@@ -53,6 +53,32 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
     super.dispose();
   }
 
+  String _userPhone(User? user) {
+    if (user == null) return '—';
+    if ((user.phoneNumber ?? '').isNotEmpty) return user.phoneNumber!;
+    for (final p in user.providerData) {
+      if ((p.phoneNumber ?? '').isNotEmpty) return p.phoneNumber!;
+    }
+    return '—';
+  }
+
+  Future<void> _seedDemo() async {
+    setState(() => _error = null);
+    try {
+      final res = await NeyvoPulseApi.seedDemo();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message']?.toString() ?? 'Demo data loaded')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
@@ -132,6 +158,8 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
       );
     }
     
+    final user = FirebaseAuth.instance.currentUser;
+
     return ListView(
       padding: const EdgeInsets.all(SpeariaSpacing.lg),
       children: [
@@ -141,6 +169,66 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
           'Configure your school and system preferences',
           style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
         ),
+        const SizedBox(height: SpeariaSpacing.xl),
+
+        // Account (logged-in user email / phone)
+        Text('Account', style: SpeariaType.titleLarge),
+        const SizedBox(height: SpeariaSpacing.md),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(SpeariaSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Email'),
+                  subtitle: Text(user?.email ?? 'Not signed in'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.phone_outlined),
+                  title: const Text('Phone'),
+                  subtitle: Text(_userPhone(user)),
+                ),
+                if (user != null && _userPhone(user) == '—')
+                  Padding(
+                    padding: const EdgeInsets.only(left: SpeariaSpacing.lg, top: 4),
+                    child: Text(
+                      'Add a phone in Firebase Auth (phone sign-in or link phone to this account) to see it here.',
+                      style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: SpeariaSpacing.xl),
+
+        // Demo data
+        Text('Demo data', style: SpeariaType.titleLarge),
+        const SizedBox(height: SpeariaSpacing.md),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(SpeariaSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Load demo data into this account (school name, sample students, payments, and VAPI placeholders). Safe to run multiple times.',
+                  style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+                ),
+                const SizedBox(height: SpeariaSpacing.md),
+                FilledButton.icon(
+                  onPressed: _seedDemo,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Load demo data'),
+                ),
+              ],
+            ),
+          ),
+        ),
+
         const SizedBox(height: SpeariaSpacing.xl),
         
         // School Information
