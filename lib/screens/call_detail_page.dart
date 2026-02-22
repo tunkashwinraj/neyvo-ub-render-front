@@ -20,7 +20,7 @@ class CallDetailPage extends StatelessWidget {
       return r > 0 ? '${m}m ${r}s' : '${m}m';
     }
     final d = c['duration']?.toString();
-    return d?.isNotEmpty == true ? d : '—';
+    return (d != null && d.isNotEmpty) ? d : '—';
   }
 
   static String formatDate(dynamic v) {
