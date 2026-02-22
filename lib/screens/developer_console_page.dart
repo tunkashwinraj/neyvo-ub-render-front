@@ -153,7 +153,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             isScrollable: true,
             tabs: const [
               Tab(text: 'Overview'),
-              Tab(text: 'Organizations'),
+              Tab(text: 'Accounts'),
               Tab(text: 'Sub Override'),
               Tab(text: 'Wallet Ops'),
               Tab(text: 'Tier Configs'),
@@ -309,31 +309,34 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
       children: [
         Banner(message: 'Top-up opens Stripe Checkout for the selected business.', location: BannerLocation.topEnd, color: SpeariaAura.warning),
         const SizedBox(height: 16),
-        Text('Organizations', style: SpeariaType.headlineMedium),
+        Text('Accounts', style: SpeariaType.headlineMedium),
+        const SizedBox(height: 8),
+        Text('All registered accounts. Account name and ID shown below.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
         const SizedBox(height: 8),
         TextButton.icon(onPressed: () { _loadOrgs(); }, icon: const Icon(Icons.refresh), label: const Text('Refresh')),
         const SizedBox(height: 12),
         if (list.isEmpty)
-          Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('No organizations. Tap Refresh.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted))))
+          Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('No accounts. Tap Refresh.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted))))
         else
           ...list.map<Widget>((o) {
-            final orgId = o['org_id'] as String? ?? '';
-            final name = o['name'] as String? ?? orgId;
-            final tier = o['tier'] as String? ?? '—';
+            final accountId = o['account_id'] as String? ?? o['org_id'] as String? ?? '';
+            final name = o['name'] as String? ?? accountId;
+            final tier = o['tier'] as String? ?? o['plan'] as String? ?? '—';
             final credits = o['wallet_credits'] as num? ?? 0;
             final status = o['status'] as String? ?? '—';
+            if (accountId.isEmpty) return const SizedBox.shrink();
             return Card(
               elevation: 0,
               margin: const EdgeInsets.only(bottom: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: SpeariaAura.border)),
               child: ListTile(
-                title: Text(name),
-                subtitle: Text('$orgId · $tier · $credits credits · $status'),
+                title: Text(name.isNotEmpty ? name : accountId),
+                subtitle: Text('Account ID: $accountId · $tier · $credits credits · $status'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextButton(onPressed: () => _openOrgDetail(orgId), child: const Text('Detail')),
-                    TextButton(onPressed: () => _adminTopUp(orgId), child: const Text('Top up')),
+                    TextButton(onPressed: () => _openOrgDetail(accountId), child: const Text('Detail')),
+                    TextButton(onPressed: () => _adminTopUp(accountId), child: const Text('Top up')),
                   ],
                 ),
               ),
@@ -344,6 +347,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
   }
 
   Future<void> _openOrgDetail(String orgId) async {
+    if (orgId.isEmpty) return;
     try {
       final data = await SpeariaApi.getJsonMap('/api/admin/organizations/$orgId', adminAuth: true);
       if (!mounted) return;
@@ -361,7 +365,9 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Organization: $orgId', style: SpeariaType.titleLarge),
+                Text('Account: ${data['name'] ?? orgId}', style: SpeariaType.titleLarge),
+                const SizedBox(height: 4),
+                Text('Account ID: $orgId', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                 const SizedBox(height: 8),
                 _jsonBlock('Data', data),
                 const SizedBox(height: 16),

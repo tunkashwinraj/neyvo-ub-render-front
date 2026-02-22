@@ -118,7 +118,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
   Future<void> _exportSelectedList() async {
     final list = _getSelectedStudents();
     if (list.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one student')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one contact')));
       return;
     }
     final sb = StringBuffer();
@@ -140,7 +140,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
   Future<void> _scheduleRemindersForSelected() async {
     final list = _getSelectedStudents();
     if (list.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one student')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one contact')));
       return;
     }
     final messageC = TextEditingController();
@@ -149,7 +149,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Schedule reminders (${list.length} students)'),
+        title: Text('Schedule reminders (${list.length} contacts)'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -262,7 +262,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectionMode ? '${_selectedIds.length} selected' : 'Students'),
+        title: Text(_selectionMode ? '${_selectedIds.length} selected' : 'Contacts'),
         actions: _selectionMode
             ? [
                 IconButton(
@@ -284,12 +284,12 @@ class _StudentsListPageState extends State<StudentsListPage> {
                 IconButton(
                   icon: const Icon(Icons.upload_file),
                   onPressed: _importCsv,
-                  tooltip: 'Import students from CSV',
+                  tooltip: 'Import contacts from CSV',
                 ),
                 IconButton(
                   icon: const Icon(Icons.checklist),
                   onPressed: () => setState(() => _selectionMode = true),
-                  tooltip: 'Select students',
+                  tooltip: 'Select contacts',
                 ),
               ],
       ),
@@ -313,7 +313,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Search students...',
+                    hintText: 'Search contacts...',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -375,7 +375,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
                           Icon(Icons.school_outlined, size: 64, color: SpeariaAura.textMuted),
                           const SizedBox(height: SpeariaSpacing.md),
                           Text(
-                            _allStudents.isEmpty ? 'No students yet' : 'No students found',
+                            _allStudents.isEmpty ? 'No contacts yet' : 'No contacts found',
                             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted),
                           ),
                           if (_allStudents.isEmpty) ...[
@@ -383,7 +383,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
                             FilledButton.icon(
                               onPressed: _openAddStudent,
                               icon: const Icon(Icons.add),
-                              label: const Text('Add First Student'),
+                              label: const Text('Add first contact'),
                             ),
                           ],
                         ],
@@ -400,7 +400,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Students (${_filteredStudents.length})',
+                                  'Contacts (${_filteredStudents.length})',
                                   style: SpeariaType.headlineMedium,
                                 ),
                                 if (_filteredStudents.length != _allStudents.length)
@@ -503,7 +503,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
                                         icon: const Icon(Icons.phone, size: 20),
                                         color: SpeariaAura.primary,
                                         onPressed: () => _quickCall(s),
-                                        tooltip: 'Call student',
+                                        tooltip: 'Reach out to contact',
                                       ),
                                     ],
                                   ),
@@ -566,7 +566,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Import students from CSV'),
+        title: const Text('Import contacts from CSV'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -611,7 +611,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
     if (mounted) {
       _load();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported $created student(s)')),
+        SnackBar(content: Text('Imported $created contact(s)')),
       );
     }
   }
@@ -628,7 +628,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Student'),
+        title: const Text('Add contact'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

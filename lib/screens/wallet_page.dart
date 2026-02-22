@@ -81,13 +81,18 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  Future<void> _purchase(String pack) async {
+  Future<void> _purchase(String pack, {double? amountDollars}) async {
     setState(() => _purchaseInProgress = true);
     try {
       final origin = Uri.base.origin;
       final successUrl = '$origin/pulse/wallet?payment=success';
       final cancelUrl = '$origin/pulse/wallet';
-      final res = await NeyvoPulseApi.createCheckoutSession(pack, successUrl: successUrl, cancelUrl: cancelUrl);
+      final res = await NeyvoPulseApi.createCheckoutSession(
+        pack,
+        successUrl: successUrl,
+        cancelUrl: cancelUrl,
+        amountDollars: amountDollars,
+      );
       final url = res['url'] as String?;
       if (url != null && url.isNotEmpty) {
         final uri = Uri.parse(url);
@@ -151,6 +156,17 @@ class _WalletPageState extends State<WalletPage> {
               _packCard('Growth', 149, 16500, 'growth'),
               const SizedBox(height: 12),
               _packCard('Scale', 399, 50000, 'scale'),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 12),
+              Text('Custom amount (\$20 – \$100,000)', style: SpeariaType.titleMedium),
+              const SizedBox(height: 8),
+              _CustomAmountRow(
+                purchaseInProgress: _purchaseInProgress,
+                onPurchase: (amount) {
+                  _purchase('starter', amountDollars: amount);
+                },
+              ),
             ],
           ),
         ),
@@ -192,7 +208,7 @@ class _WalletPageState extends State<WalletPage> {
                       child: Text(bonusLabel, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.primary)),
                     ),
                   const SizedBox(height: 4),
-                  Text('~$approxMin min of Natural Human calls', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+                  Text('~$approxMin min of Natural Human reaches', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
                 ],
               ),
             ),
@@ -298,7 +314,7 @@ class _WalletPageState extends State<WalletPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Low credits — $credits remaining (~${(credits / 35).round()} min). Top up now to keep calls running.',
+                      'Low credits — $credits remaining (~${(credits / 35).round()} min). Top up now to keep reaching.',
                       style: SpeariaType.bodyMedium.copyWith(color: criticalBalance ? SpeariaAura.error : SpeariaAura.warning),
                     ),
                   ),
@@ -375,7 +391,7 @@ class _WalletPageState extends State<WalletPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _statColumn('Calls', '${(_usage?['total_calls'] as num?)?.toInt() ?? 0}'),
+                  _statColumn('Reaches', '${(_usage?['total_calls'] as num?)?.toInt() ?? 0}'),
                   _statColumn('Minutes', '${(_usage?['total_minutes'] as num?)?.toStringAsFixed(1) ?? '0'}'),
                   _statColumn('Credits used', '${(_usage?['total_credits_used'] as num?)?.toInt() ?? 0}'),
                   _statColumn('Spent', '\$${((_usage?['total_dollars_spent'] as num?) ?? 0).toStringAsFixed(2)}'),
@@ -463,6 +479,63 @@ class _WalletPageState extends State<WalletPage> {
       children: [
         Text(value, style: SpeariaType.titleMedium.copyWith(fontWeight: FontWeight.w600)),
         Text(label, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+      ],
+    );
+  }
+}
+
+class _CustomAmountRow extends StatefulWidget {
+  final bool purchaseInProgress;
+  final void Function(double amountDollars) onPurchase;
+
+  const _CustomAmountRow({required this.purchaseInProgress, required this.onPurchase});
+
+  @override
+  State<_CustomAmountRow> createState() => _CustomAmountRowState();
+}
+
+class _CustomAmountRowState extends State<_CustomAmountRow> {
+  final _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: 'e.g. 100',
+              labelText: 'Amount (\$)',
+              errorText: _error,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() => _error = null),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton(
+          onPressed: widget.purchaseInProgress
+              ? null
+              : () {
+                  final v = double.tryParse(_controller.text.trim());
+                  if (v == null || v < 20 || v > 100000) {
+                    setState(() => _error = 'Enter \$20 – \$100,000');
+                    return;
+                  }
+                  widget.onPurchase(v);
+                },
+          child: const Text('Purchase'),
+        ),
       ],
     );
   }

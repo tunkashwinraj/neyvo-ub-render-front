@@ -194,24 +194,39 @@ class _RemindersPageState extends State<RemindersPage> {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Student: $studentId'),
+                                  Text('Contact: $studentId'),
                                   if (scheduled.isNotEmpty) Text('Scheduled: $scheduled'),
                                   if (message.isNotEmpty) Text(message, style: SpeariaType.bodySmall),
                                 ],
                               ),
-                              trailing: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  status.toUpperCase(),
-                                  style: SpeariaType.labelSmall.copyWith(
-                                    color: statusColor,
-                                    fontWeight: FontWeight.w600,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      status.toUpperCase(),
+                                      style: SpeariaType.labelSmall.copyWith(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 20),
+                                    tooltip: 'Edit reminder',
+                                    onPressed: () => _openEditReminder(r),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 20),
+                                    tooltip: 'Delete reminder',
+                                    onPressed: () => _confirmDeleteReminder(id, type),
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -229,6 +244,16 @@ class _RemindersPageState extends State<RemindersPage> {
     );
   }
 
+  static String _formatScheduled(DateTime d) {
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _toIsoScheduled(DateTime d) {
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}'
+        'T${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:00';
+  }
+
   Future<void> _openCreateReminder() async {
     List<dynamic> students = [];
     try {
@@ -237,9 +262,9 @@ class _RemindersPageState extends State<RemindersPage> {
     } catch (_) {}
     final navigator = Navigator.of(context);
     String? selectedStudentId;
-    final typeC = TextEditingController(text: 'balance_reminder');
+    String selectedType = 'balance_reminder';
+    DateTime? scheduledDateTime;
     final messageC = TextEditingController();
-    final scheduledC = TextEditingController();
 
     await showDialog(
       context: context,
@@ -254,9 +279,9 @@ class _RemindersPageState extends State<RemindersPage> {
                 children: [
                   DropdownButtonFormField<String>(
                     value: selectedStudentId,
-                    decoration: const InputDecoration(labelText: 'Student *'),
+                    decoration: const InputDecoration(labelText: 'Contact *'),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Select student')),
+                      const DropdownMenuItem(value: null, child: Text('Select contact')),
                       ...students.map((s) {
                         final id = s['id'] as String? ?? '';
                         final name = s['name'] as String? ?? id;
@@ -267,7 +292,7 @@ class _RemindersPageState extends State<RemindersPage> {
                   ),
                   const SizedBox(height: SpeariaSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: typeC.text,
+                    value: selectedType,
                     decoration: const InputDecoration(labelText: 'Reminder Type'),
                     items: const [
                       DropdownMenuItem(value: 'balance_reminder', child: Text('Balance Reminder')),
@@ -275,15 +300,33 @@ class _RemindersPageState extends State<RemindersPage> {
                       DropdownMenuItem(value: 'payment_inquiry', child: Text('Payment Inquiry')),
                       DropdownMenuItem(value: 'general', child: Text('General')),
                     ],
-                    onChanged: (v) => setDialogState(() => typeC.text = v ?? 'balance_reminder'),
+                    onChanged: (v) => setDialogState(() => selectedType = v ?? 'balance_reminder'),
                   ),
                   const SizedBox(height: SpeariaSpacing.md),
-                  TextField(
-                    controller: scheduledC,
-                    decoration: const InputDecoration(
-                      labelText: 'Scheduled At (optional)',
-                      hintText: '2026-02-25 10:00 AM',
+                  ListTile(
+                    title: const Text('Scheduled date & time'),
+                    subtitle: Text(
+                      scheduledDateTime == null ? 'Tap to pick (optional)' : _formatScheduled(scheduledDateTime!),
+                      style: SpeariaType.bodySmall,
                     ),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: scheduledDateTime ?? DateTime.now().add(const Duration(days: 1)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (date == null || !context.mounted) return;
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: scheduledDateTime != null
+                            ? TimeOfDay(hour: scheduledDateTime!.hour, minute: scheduledDateTime!.minute)
+                            : const TimeOfDay(hour: 10, minute: 0),
+                      );
+                      if (time == null || !context.mounted) return;
+                      setDialogState(() => scheduledDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+                    },
                   ),
                   const SizedBox(height: SpeariaSpacing.md),
                   TextField(
@@ -299,14 +342,14 @@ class _RemindersPageState extends State<RemindersPage> {
               FilledButton(
                 onPressed: () async {
                   if (selectedStudentId == null || selectedStudentId!.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a student')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a contact')));
                     return;
                   }
                   try {
                     await NeyvoPulseApi.createReminder(
                       studentId: selectedStudentId!,
-                      reminderType: typeC.text.trim().isEmpty ? null : typeC.text.trim(),
-                      scheduledAt: scheduledC.text.trim().isEmpty ? null : scheduledC.text.trim(),
+                      reminderType: selectedType,
+                      scheduledAt: scheduledDateTime != null ? _toIsoScheduled(scheduledDateTime!) : null,
                       message: messageC.text.trim().isEmpty ? null : messageC.text.trim(),
                     );
                     if (context.mounted) {
@@ -324,6 +367,156 @@ class _RemindersPageState extends State<RemindersPage> {
         },
       ),
     );
+  }
+
+  Future<void> _openEditReminder(Map<String, dynamic> r) async {
+    final id = r['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    List<dynamic> students = [];
+    try {
+      final res = await NeyvoPulseApi.listStudents();
+      students = res['students'] as List? ?? [];
+    } catch (_) {}
+    final navigator = Navigator.of(context);
+    String? selectedStudentId = r['student_id']?.toString();
+    String selectedType = r['reminder_type']?.toString() ?? 'balance_reminder';
+    String? scheduledStr = r['scheduled_at']?.toString();
+    DateTime? scheduledDateTime;
+    if (scheduledStr != null && scheduledStr.isNotEmpty) {
+      scheduledDateTime = DateTime.tryParse(scheduledStr);
+    }
+    final messageC = TextEditingController(text: r['message']?.toString() ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit Reminder'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedStudentId,
+                    decoration: const InputDecoration(labelText: 'Contact *'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Select contact')),
+                      ...students.map((s) {
+                        final sid = s['id'] as String? ?? '';
+                        final name = s['name'] as String? ?? sid;
+                        return DropdownMenuItem(value: sid, child: Text(name));
+                      }),
+                    ],
+                    onChanged: (v) => setDialogState(() => selectedStudentId = v),
+                  ),
+                  const SizedBox(height: SpeariaSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    decoration: const InputDecoration(labelText: 'Reminder Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'balance_reminder', child: Text('Balance Reminder')),
+                      DropdownMenuItem(value: 'due_date_reminder', child: Text('Due Date Reminder')),
+                      DropdownMenuItem(value: 'payment_inquiry', child: Text('Payment Inquiry')),
+                      DropdownMenuItem(value: 'general', child: Text('General')),
+                    ],
+                    onChanged: (v) => setDialogState(() => selectedType = v ?? 'balance_reminder'),
+                  ),
+                  const SizedBox(height: SpeariaSpacing.md),
+                  ListTile(
+                    title: const Text('Scheduled date & time'),
+                    subtitle: Text(
+                      scheduledDateTime == null ? 'Tap to pick (optional)' : _formatScheduled(scheduledDateTime!),
+                      style: SpeariaType.bodySmall,
+                    ),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: scheduledDateTime ?? DateTime.now().add(const Duration(days: 1)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (date == null || !context.mounted) return;
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: scheduledDateTime != null
+                            ? TimeOfDay(hour: scheduledDateTime!.hour, minute: scheduledDateTime!.minute)
+                            : const TimeOfDay(hour: 10, minute: 0),
+                      );
+                      if (time == null || !context.mounted) return;
+                      setDialogState(() => scheduledDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+                    },
+                  ),
+                  const SizedBox(height: SpeariaSpacing.md),
+                  TextField(
+                    controller: messageC,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: 'Message (optional)'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => navigator.pop(), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  if (selectedStudentId == null || selectedStudentId!.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a contact')));
+                    return;
+                  }
+                  try {
+                    await NeyvoPulseApi.updateReminder(
+                      id,
+                      studentId: selectedStudentId,
+                      reminderType: selectedType,
+                      scheduledAt: scheduledDateTime != null ? _toIsoScheduled(scheduledDateTime!) : null,
+                      message: messageC.text.trim().isEmpty ? null : messageC.text.trim(),
+                    );
+                    if (context.mounted) {
+                      navigator.pop();
+                      _load();
+                    }
+                  } catch (e) {
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteReminder(String id, String type) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete reminder?'),
+        content: Text('This reminder ($type) will be permanently deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: SpeariaAura.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await NeyvoPulseApi.deleteReminder(id);
+      if (mounted) {
+        _load();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reminder deleted')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 }
 

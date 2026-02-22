@@ -58,8 +58,8 @@ class _PulseShellState extends State<PulseShell> {
   // Single source of truth: nav items and pages in same order (index i = page i)
   static List<_NavItem> get _nav => [
     const _NavItem('Dashboard', Icons.dashboard_outlined, PulseRouteNames.dashboard),
-    const _NavItem('Students', Icons.school_outlined, PulseRouteNames.students),
-    const _NavItem('Calls', Icons.phone_in_talk_outlined, PulseRouteNames.outbound),
+    const _NavItem('Contacts', Icons.contacts_outlined, PulseRouteNames.students),
+    const _NavItem('Reach out', Icons.phone_in_talk_outlined, PulseRouteNames.outbound),
     const _NavItem('Phone Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
     const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
     const _NavItem('Reminders', Icons.notifications_outlined, PulseRouteNames.reminders),
@@ -329,7 +329,7 @@ class _PulseShellState extends State<PulseShell> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Low credits — $_walletCredits remaining. Top up to keep calls running.',
+                              'Low credits — $_walletCredits remaining. Top up to keep reaching.',
                               style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textPrimary),
                             ),
                           ),

@@ -266,7 +266,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Load demo data into this account (school name, sample students, payments, and VAPI placeholders). Safe to run multiple times.',
+                  'Load demo data into this account (name, sample contacts, payments, and VAPI placeholders). Safe to run multiple times.',
                   style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
                 ),
                 const SizedBox(height: SpeariaSpacing.md),
@@ -424,7 +424,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
                     ),
                     const SizedBox(height: SpeariaSpacing.sm),
                     Text(
-                      'Customize the AI prompt for outbound calls. Use placeholders like {student_name}, {balance}, {due_date}.',
+                      'Customize the AI prompt for reach-out. Use placeholders like {student_name}, {balance}, {due_date}.',
                       style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
                     ),
                     const SizedBox(height: SpeariaSpacing.md),

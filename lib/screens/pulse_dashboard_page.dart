@@ -120,7 +120,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Manage balances, reminders, and outbound calls to students.',
+            'Manage balances, reminders, and reach out to contacts.',
             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
           ),
           const SizedBox(height: SpeariaSpacing.xl),
@@ -133,7 +133,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               children: [
                 Expanded(
                   child: _StatCard(
-                    label: 'Students',
+                    label: 'Contacts',
                     value: '${_stats!['total_students']}',
                     icon: Icons.school_outlined,
                     color: SpeariaAura.primary,
@@ -155,7 +155,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               children: [
                 Expanded(
                   child: _StatCard(
-                    label: 'Calls Made',
+                    label: 'Reaches',
                     value: '${_stats!['total_calls']}',
                     icon: Icons.phone_outlined,
                     color: SpeariaAura.info,
@@ -212,7 +212,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                         Icon(Icons.phone_outlined, size: 20, color: SpeariaAura.primary),
                         const SizedBox(width: 8),
                         Text(
-                          'Calls today: ${_callsTodayUsed ?? 0} / $_callsTodayCapacity capacity',
+                          'Reaches today: ${_callsTodayUsed ?? 0} / $_callsTodayCapacity capacity',
                           style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
                         ),
                       ],
@@ -230,17 +230,17 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           ),
           const SizedBox(height: SpeariaSpacing.md),
           _DashboardCard(
-            title: 'Outbound calls',
-            subtitle: 'Call students about balances, due dates, and late fees',
+            title: 'Reach out',
+            subtitle: 'Reach out to contacts about balances, due dates, and late fees',
             icon: Icons.phone_in_talk_outlined,
             color: SpeariaAura.primary,
             onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.outbound),
           ),
           const SizedBox(height: SpeariaSpacing.md),
           _DashboardCard(
-            title: 'Students',
-            subtitle: 'View and manage student list',
-            icon: Icons.school_outlined,
+            title: 'Contacts',
+            subtitle: 'View and manage your contact list',
+            icon: Icons.contacts_outlined,
             color: SpeariaAura.accent,
             onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.students),
           ),
@@ -262,7 +262,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           ),
           const SizedBox(height: SpeariaSpacing.md),
           _DashboardCard(
-            title: 'Call Logs',
+            title: 'Reach history',
             subtitle: 'View call history, transcripts, and outcomes',
             icon: Icons.history,
             color: SpeariaAura.info,

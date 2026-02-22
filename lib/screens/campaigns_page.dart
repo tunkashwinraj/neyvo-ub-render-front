@@ -143,7 +143,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         ? _filteredStudents.map((s) => s['id'] as String? ?? '').where((e) => e.isNotEmpty).toList()
         : _selectedStudentIds.toList();
     if (ids.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No students selected')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No contacts selected')));
       return;
     }
     if (_editingCampaignId != null) {
@@ -159,7 +159,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Campaign "$name" created for ${ids.length} students'), backgroundColor: SpeariaAura.success),
+          SnackBar(content: Text('Campaign "$name" created for ${ids.length} contacts'), backgroundColor: SpeariaAura.success),
         );
         setState(() {
           _showCreateWizard = false;
@@ -183,8 +183,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
     final failureReason = res['failure_reason']?.toString();
     final failureMessage = res['failure_message']?.toString() ?? '';
     String text = isRerun
-        ? 'Rerun: $initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}'
-        : '$initiated call(s) placed.${failed > 0 ? ' $failed failed.' : ''}';
+        ? 'Rerun: $initiated reach(es) started.${failed > 0 ? ' $failed failed.' : ''}'
+        : '$initiated reach(es) started.${failed > 0 ? ' $failed failed.' : ''}';
     if (failureReason == 'vapi_daily_limit' && failureMessage.isNotEmpty) {
       text = 'Calls could not be placed: VAPI limit (concurrency or plan). Check VAPI dashboard → Settings/Billing and Analytics. For scale, use your own Twilio number in VAPI (Phone Numbers → Add → Twilio) and set that number ID in backend env.';
     } else if (failureMessage.isNotEmpty && failed > 0) {
@@ -209,6 +209,35 @@ class _CampaignsPageState extends State<CampaignsPage> {
       if (mounted) {
         _showCampaignStartResult(res, isRerun: isRerun);
         _load();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+    }
+  }
+
+  Future<void> _confirmDeleteCampaign(String campaignId, String campaignName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete campaign?'),
+        content: Text('"$campaignName" will be permanently deleted. Only draft or scheduled campaigns can be deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: SpeariaAura.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await NeyvoPulseApi.deleteCampaign(campaignId);
+      if (mounted) {
+        setState(() => _selectedCampaignId = null);
+        _load();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign deleted')));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
@@ -320,7 +349,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     leading: const CircleAvatar(child: Icon(Icons.campaign_outlined)),
                     title: Text(c['name']?.toString() ?? 'Unnamed'),
                     subtitle: Text(
-                      '${c['total_planned'] ?? c['student_count'] ?? 0} students • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
+                      '${c['total_planned'] ?? c['student_count'] ?? 0} contacts • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
                       style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
                     ),
                     onTap: () => setState(() => _selectedCampaignId = c['id']?.toString()),
@@ -398,7 +427,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ),
             title: const Text('Campaign details'),
             actions: [
-              if (canEdit)
+              if (canEdit) ...[
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  label: const Text('Delete'),
+                  onPressed: () => _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign'),
+                ),
                 TextButton.icon(
                   icon: const Icon(Icons.edit_outlined, size: 20),
                   label: const Text('Edit'),
@@ -425,6 +459,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     });
                   },
                 ),
+              ],
               if (canStart)
                 TextButton.icon(
                   icon: const Icon(Icons.play_arrow, size: 20),
@@ -491,7 +526,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                             title: const Text('Audience'),
                             subtitle: Text(
                               c['student_ids'] != null
-                                  ? '${(c['student_ids'] as List).length} students selected'
+                                  ? '${(c['student_ids'] as List).length} contacts selected'
                                   : 'Filters: ${c['filters']?.toString() ?? '—'}',
                               style: SpeariaType.bodySmall,
                             ),
@@ -652,7 +687,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               value: _filterType,
               decoration: const InputDecoration(labelText: 'Filter by'),
               items: const [
-                DropdownMenuItem(value: 'all', child: Text('All students')),
+                DropdownMenuItem(value: 'all', child: Text('All contacts')),
                 DropdownMenuItem(value: 'balance_above', child: Text('Balance above amount')),
                 DropdownMenuItem(value: 'balance_below', child: Text('Balance below amount')),
                 DropdownMenuItem(value: 'has_due_date', child: Text('Has due date')),
@@ -679,7 +714,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ],
             const SizedBox(height: SpeariaSpacing.md),
             CheckboxListTile(
-              title: const Text('Only students with due date'),
+              title: const Text('Only contacts with due date'),
               value: _filterOverdueOnly,
               onChanged: (v) => setState(() => _filterOverdueOnly = v ?? false),
             ),
@@ -687,7 +722,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('${filtered.length} students match', style: SpeariaType.bodyMedium),
+                Text('${filtered.length} contacts match', style: SpeariaType.bodyMedium),
                 TextButton.icon(
                   onPressed: _toggleSelectAll,
                   icon: Icon(_selectAll ? Icons.deselect : Icons.select_all, size: 18),
@@ -799,7 +834,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
             Text('Review', style: SpeariaType.titleMedium),
             const SizedBox(height: SpeariaSpacing.md),
             ListTile(title: const Text('Campaign name'), trailing: Text(_nameController.text.trim().isEmpty ? '—' : _nameController.text.trim())),
-            ListTile(title: const Text('Audience'), trailing: Text('$count students')),
+            ListTile(title: const Text('Audience'), trailing: Text('$count contacts')),
             ListTile(
               title: const Text('Script'),
               trailing: Text(

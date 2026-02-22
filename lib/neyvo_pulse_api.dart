@@ -116,6 +116,34 @@ class NeyvoPulseApi {
         if (message != null) 'message': message,
       });
 
+  static Future<Map<String, dynamic>> getReminder(String reminderId) async =>
+      _get('/api/pulse/reminders/$reminderId');
+
+  static Future<Map<String, dynamic>> updateReminder(
+    String reminderId, {
+    String? studentId,
+    String? reminderType,
+    String? scheduledAt,
+    String? message,
+    String? status,
+  }) async {
+    final body = <String, dynamic>{
+      if (studentId != null) 'student_id': studentId,
+      if (reminderType != null) 'reminder_type': reminderType,
+      if (scheduledAt != null) 'scheduled_at': scheduledAt,
+      if (message != null) 'message': message,
+      if (status != null) 'status': status,
+    };
+    return _patch('/api/pulse/reminders/$reminderId', body);
+  }
+
+  static Future<void> deleteReminder(String reminderId) async {
+    await SpeariaApi.deleteJson(
+      '/api/pulse/reminders/$reminderId',
+      params: <String, dynamic>{'account_id': _defaultAccountId},
+    );
+  }
+
   // Calls
   static Future<Map<String, dynamic>> listCalls({String? studentId}) async =>
       _get('/api/pulse/calls', params: studentId != null ? {'student_id': studentId} : null);
@@ -410,6 +438,14 @@ class NeyvoPulseApi {
     );
   }
 
+  /// Delete a campaign (only draft or scheduled). Returns 404 if not found or not deletable.
+  static Future<void> deleteCampaign(String campaignId) async {
+    await SpeariaApi.deleteJson(
+      '/api/pulse/campaigns/$campaignId',
+      params: <String, dynamic>{'account_id': _defaultAccountId},
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Billing (wallet, tier, usage)
   // -------------------------------------------------------------------------
@@ -417,17 +453,23 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getBillingWallet() async =>
       _get('/api/billing/wallet');
 
-  /// Create Stripe Checkout session for wallet pack. Returns { url }. Open url in browser to pay; credits applied via webhook.
+  /// Create Stripe Checkout session for wallet pack or custom amount. Returns { url }.
+  /// Use pack ('starter','growth','scale') or amountDollars (20–100000).
   static Future<Map<String, dynamic>> createCheckoutSession(
     String pack, {
     String? successUrl,
     String? cancelUrl,
     String? customerEmail,
+    double? amountDollars,
   }) async {
     final body = <String, dynamic>{
       'account_id': _defaultAccountId,
-      'pack': pack,
     };
+    if (amountDollars != null && amountDollars >= 20 && amountDollars <= 100000) {
+      body['amount_dollars'] = amountDollars;
+    } else {
+      body['pack'] = pack;
+    }
     if (successUrl != null) body['success_url'] = successUrl;
     if (cancelUrl != null) body['cancel_url'] = cancelUrl;
     if (customerEmail != null) body['customer_email'] = customerEmail;

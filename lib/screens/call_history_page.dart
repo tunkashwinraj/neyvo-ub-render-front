@@ -7,6 +7,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../utils/export_csv.dart';
 import '../theme/spearia_theme.dart';
+import 'call_detail_page.dart';
 
 /// Sort options: date desc/asc, duration desc/asc (when backend provides duration)
 enum _CallSort { dateNewest, dateOldest, durationLongest, durationShortest }
@@ -147,7 +148,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
   Future<void> _exportCsv() async {
     final sb = StringBuffer();
-    sb.writeln('Student Name,Phone,Date,Status,Duration,Recording URL,Transcript');
+    sb.writeln('Contact Name,Phone,Date,Status,Duration,Recording URL,Transcript');
     for (final c in _filteredCalls) {
       final map = c as Map<String, dynamic>;
       final name = (map['student_name']?.toString() ?? '').replaceAll(',', ';');
@@ -159,7 +160,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       final transcript = (map['transcript']?.toString() ?? '').replaceAll(RegExp(r'[\r\n]'), ' ');
       sb.writeln('"$name","$phone","$date","$status","$duration","$recording","$transcript"');
     }
-    final filename = 'call_logs_${DateTime.now().toIso8601String().split('T').first}.csv';
+    final filename = 'reach_history_${DateTime.now().toIso8601String().split('T').first}.csv';
     await downloadCsv(filename, sb.toString(), context);
   }
 
@@ -202,7 +203,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Call History')),
+        appBar: AppBar(title: const Text('Reach history')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(SpeariaSpacing.xl),
@@ -221,7 +222,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Call Logs'),
+        title: const Text('Reach history'),
         actions: [
           IconButton(
             icon: const Icon(Icons.download),
@@ -255,7 +256,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Search calls...',
+                    hintText: 'Search reaches...',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -333,7 +334,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                           Icon(Icons.phone_outlined, size: 64, color: SpeariaAura.textMuted),
                           const SizedBox(height: SpeariaSpacing.md),
                           Text(
-                            _allCalls.isEmpty ? 'No calls yet' : 'No calls found',
+                            _allCalls.isEmpty ? 'No reaches yet' : 'No reaches found',
                             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted),
                           ),
                         ],
@@ -350,7 +351,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Calls (${_filteredCalls.length})',
+                                  'Reaches (${_filteredCalls.length})',
                                   style: SpeariaType.headlineMedium,
                                 ),
                                 if (_filteredCalls.length != _allCalls.length)
@@ -383,6 +384,13 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         return Card(
                           margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
                           child: ExpansionTile(
+                            trailing: IconButton(
+                              icon: const Icon(Icons.open_in_new),
+                              tooltip: 'View full details',
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                              ),
+                            ),
                             leading: CircleAvatar(
                               backgroundColor: statusColor.withOpacity(0.1),
                               child: Icon(_getStatusIcon(status), color: statusColor),

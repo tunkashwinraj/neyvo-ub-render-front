@@ -154,6 +154,35 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     }
   }
 
+  Future<void> _confirmDeleteStudent() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete contact?'),
+        content: const Text('This contact and their payment and reach history will be removed. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: SpeariaAura.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await NeyvoPulseApi.deleteStudent(widget.studentId);
+      if (mounted) {
+        widget.onUpdated?.call();
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contact deleted')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _addPayment() async {
     final amountC = TextEditingController();
     final methodC = TextEditingController();
@@ -224,7 +253,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Student')),
+        appBar: AppBar(title: const Text('Contact')),
         body: Center(child: Text(_error!, style: TextStyle(color: SpeariaAura.error))),
       );
     }
@@ -234,14 +263,23 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(_student?['name']?.toString() ?? 'Student'),
+        title: Text(_student?['name']?.toString() ?? 'Contact'),
         actions: [
           IconButton(
             icon: _calling 
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.phone),
             onPressed: _calling ? null : _call,
-            tooltip: 'Call Student',
+            tooltip: 'Reach out to contact',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'delete') _confirmDeleteStudent();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete contact'))),
+            ],
           ),
         ],
         bottom: TabBar(
@@ -307,7 +345,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               const SizedBox(height: SpeariaSpacing.xl),
               
               // Edit Form
-              Text('Student Information', style: SpeariaType.titleMedium),
+              Text('Contact information', style: SpeariaType.titleMedium),
               const SizedBox(height: SpeariaSpacing.md),
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: SpeariaSpacing.md),

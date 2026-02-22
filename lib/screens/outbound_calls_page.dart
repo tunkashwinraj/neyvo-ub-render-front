@@ -131,7 +131,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
     
     if (phone.isEmpty || name.isEmpty) {
       setState(() {
-        _message = 'Please select a student.';
+        _message = 'Please select a contact.';
         _success = false;
       });
       return;
@@ -157,7 +157,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
       setState(() {
         _loading = false;
         _success = result['ok'] == true || result['call_id'] != null;
-        _message = result['message']?.toString() ?? (result['call_id'] != null ? 'Call started successfully' : 'Done');
+        _message = result['message']?.toString() ?? (result['call_id'] != null ? 'Reach started successfully' : 'Done');
       });
       
       // Clear form after successful call
@@ -197,14 +197,14 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
     return Scaffold(
       backgroundColor: SpeariaAura.bg,
       appBar: AppBar(
-        title: const Text('Outbound Calls'),
+        title: const Text('Reach out'),
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: () {
               Navigator.of(context).pushNamed(PulseRouteNames.callHistory);
             },
-            tooltip: 'Call History',
+            tooltip: 'Reach history',
           ),
         ],
       ),
@@ -212,7 +212,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
         padding: const EdgeInsets.all(SpeariaSpacing.lg),
         children: [
           Text(
-            'Call a Student',
+            'Reach out',
             style: SpeariaType.headlineLarge,
           ),
           const SizedBox(height: 6),
@@ -262,7 +262,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
                           if (url != null) try { await launchUrl(Uri.parse(url)); } catch (_) {}
                         },
                         child: Text(
-                          'Register your number at freecallerregistry.com to reduce spam flags (free).',
+                          'Enable Neyvo Shield in Add-ons for spam protection.',
                           style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.primary, decoration: TextDecoration.underline),
                         ),
                       ),
@@ -297,8 +297,8 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
                 controller: controller,
                 focusNode: focusNode,
                 decoration: InputDecoration(
-                  labelText: 'Search and select student',
-                  hintText: 'Type student name or phone...',
+                  labelText: 'Search and select contact',
+                  hintText: 'Type contact name or phone...',
                   prefixIcon: const Icon(Icons.person),
                   suffixIcon: _selectedStudent != null
                       ? IconButton(
@@ -379,13 +379,13 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
           const SizedBox(height: SpeariaSpacing.lg),
           
           // Call Template
-          Text('Call Type', style: SpeariaType.titleMedium),
+          Text('Reach type', style: SpeariaType.titleMedium),
           const SizedBox(height: SpeariaSpacing.sm),
           DropdownButtonFormField<String>(
             value: _callTemplate,
             decoration: const InputDecoration(
-              labelText: 'Call Template',
-              hintText: 'Select call type',
+              labelText: 'Reach template',
+              hintText: 'Select reach type',
             ),
             items: const [
               DropdownMenuItem(value: 'balance_reminder', child: Text('Balance Reminder')),
@@ -495,7 +495,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.phone),
-            label: Text(_loading ? 'Starting Call...' : 'Start Call'),
+            label: Text(_loading ? 'Reaching out...' : 'Reach out'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: SpeariaSpacing.md),
             ),

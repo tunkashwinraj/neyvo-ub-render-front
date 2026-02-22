@@ -154,17 +154,14 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Free action required: Register your number(s) at freecallerregistry.com to reduce spam labeling by up to 80%. Takes 5 minutes. Free. No LLC required. Changes take 2–3 weeks to apply.',
+              'Enable Neyvo Shield in Add-ons for spam protection on your numbers.',
               style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary),
             ),
           ),
           const SizedBox(width: 8),
           TextButton(
-            onPressed: () async {
-              final uri = Uri.parse('https://freecallerregistry.com');
-              if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            child: const Text('Open freecallerregistry.com'),
+            onPressed: () => Navigator.of(context).pushNamed('/pulse/addons'),
+            child: const Text('Open Add-ons'),
           ),
         ],
       ),
@@ -244,7 +241,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Buy your first number to start making outbound calls.',
+              'Buy your first number to start reaching out.',
               style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -287,12 +284,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Phone carriers automatically monitor call volume per number. New numbers that call too many people too fast get labeled as spam — and once flagged, contacts see "Spam Risk" before answering. They stop picking up.',
+                  'Phone carriers monitor reach volume per number. New numbers that reach too many people too fast get labeled as spam — and once flagged, contacts see "Spam Risk" before answering.',
                   style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Neyvo automatically warms up every new number over 4 weeks, gradually increasing your daily limit from 40 → 80 → 120 → 140 calls/day. This protects your number\'s reputation so your calls always get answered.',
+                  'Neyvo automatically warms up every new number over 4 weeks, gradually increasing your daily limit from 40 → 80 → 120 → 140 reaches/day. This protects your number\'s reputation so your reaches get answered.',
                   style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
                 ),
                 const SizedBox(height: 12),
