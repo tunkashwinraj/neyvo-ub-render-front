@@ -33,6 +33,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   String? _voiceTierDisplay;
   String? _subscriptionTier;
   String? _accountId;
+  bool _inboundEnabled = true;
   List<Map<String, dynamic>> _members = [];
   final _memberUserIdController = TextEditingController();
   String _newMemberRole = 'staff';
@@ -93,6 +94,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         _vapiPhoneNumberId.text = s['vapi_phone_number_id']?.toString() ?? '';
         _vapiAssistantId.text = s['vapi_assistant_id']?.toString() ?? '';
         _callScript.text = s['call_script']?.toString() ?? '';
+        _inboundEnabled = s['inbound_enabled'] != false;
         _accountId = (s['account_id']?.toString() ?? '').trim().isEmpty ? null : s['account_id']?.toString().trim();
         if (_accountId == null || _accountId!.isEmpty) {
           // Fallback so user sees something; backend may use different Firestore collection
@@ -130,6 +132,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         schoolName: _schoolName.text.trim().isEmpty ? null : _schoolName.text.trim(),
         defaultLateFee: _defaultLateFee.text.trim().isEmpty ? null : _defaultLateFee.text.trim(),
         currency: _currency.text.trim().isEmpty ? null : _currency.text.trim(),
+        inboundEnabled: _inboundEnabled,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
@@ -312,6 +315,16 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
                     hintText: 'USD',
                     prefixIcon: Icon(Icons.currency_exchange),
                   ),
+                ),
+                const SizedBox(height: SpeariaSpacing.md),
+                SwitchListTile(
+                  value: _inboundEnabled,
+                  onChanged: (bool value) => setState(() => _inboundEnabled = value),
+                  title: const Text('Allow inbound calls'),
+                  subtitle: const Text(
+                    'When off, your phone numbers are outbound-only; inbound callers hear a message and the call ends.',
+                  ),
+                  secondary: const Icon(Icons.call_received_outlined),
                 ),
               ],
             ),

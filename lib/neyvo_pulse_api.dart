@@ -236,11 +236,13 @@ class NeyvoPulseApi {
     String? schoolName,
     String? defaultLateFee,
     String? currency,
+    bool? inboundEnabled,
   }) async =>
       _patch('/api/pulse/settings', {
         if (schoolName != null) 'school_name': schoolName,
         if (defaultLateFee != null) 'default_late_fee': defaultLateFee,
         if (currency != null) 'currency': currency,
+        if (inboundEnabled != null) 'inbound_enabled': inboundEnabled,
       });
 
   // Reports
@@ -534,9 +536,9 @@ class NeyvoPulseApi {
   // Outbound number management (Twilio: buy, roles, warm-up, daily limits)
   // -------------------------------------------------------------------------
 
-  /// GET /api/numbers – list owned numbers with daily capacity
+  /// GET /api/numbers – list owned numbers (includes attached primary from org). Sends account_id so backend returns merged list.
   static Future<Map<String, dynamic>> listNumbers() async =>
-      _get('/api/numbers');
+      _get('/api/numbers', params: {'account_id': _defaultAccountId});
 
   /// GET /api/numbers/search?area_code=585&country=US
   static Future<Map<String, dynamic>> searchNumbers({

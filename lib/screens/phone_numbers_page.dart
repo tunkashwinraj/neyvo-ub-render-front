@@ -248,6 +248,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 8),
+            Text(
+              'If you attached a number via Settings or the API, pull down to refresh.',
+              style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => _openBuyNumberFlow(context),
@@ -362,8 +368,13 @@ class _NumberCardState extends State<_NumberCard> {
   Widget build(BuildContext context) {
     final n = widget.number;
     final numberId = n['number_id']?.toString() ?? '';
-    final phone = widget.formatPhone(n['phone_number']?.toString());
+    final rawPhone = n['phone_number']?.toString() ?? '';
+    final phone = widget.formatPhone(rawPhone);
     final friendlyName = n['friendly_name']?.toString() ?? '';
+    // Attached (org primary) numbers may have null/empty phone_number; show friendly_name or number_id
+    final phoneDisplay = phone.trim().isNotEmpty
+        ? phone
+        : (friendlyName.trim().isNotEmpty ? friendlyName : (numberId.length >= 8 ? '${numberId.substring(0, 8)}…' : numberId));
     final role = (n['role']?.toString() ?? 'campaign').toLowerCase();
     final status = (n['status']?.toString() ?? 'active').toLowerCase();
     final warmUpWeek = (n['warm_up_week'] as num?)?.toInt() ?? 1;
@@ -388,7 +399,7 @@ class _NumberCardState extends State<_NumberCard> {
               children: [
                 Icon(Icons.phone_outlined, color: SpeariaAura.primary, size: 22),
                 const SizedBox(width: 8),
-                Text(phone, style: SpeariaType.titleMedium.copyWith(fontWeight: FontWeight.w600)),
+                Text(phoneDisplay, style: SpeariaType.titleMedium.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -519,7 +530,7 @@ class _NumberCardState extends State<_NumberCard> {
                     child: const Text('Set as Primary'),
                   ),
                 OutlinedButton(
-                  onPressed: () => _confirmRelease(context, numberId, phone),
+                  onPressed: () => _confirmRelease(context, numberId, phoneDisplay),
                   child: const Text('Release'),
                 ),
               ],
