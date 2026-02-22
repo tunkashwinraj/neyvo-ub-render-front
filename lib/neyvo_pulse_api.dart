@@ -585,6 +585,18 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> listNumbers() async =>
       _get('/api/numbers', params: {'account_id': _defaultAccountId});
 
+  /// POST /api/numbers/attach – link an existing number to this account (no admin token). Number will appear on Phone Numbers page.
+  static Future<Map<String, dynamic>> attachNumber({
+    required String phoneNumberId,
+    required String phoneNumberE164,
+    String? friendlyName,
+  }) async =>
+      _post('/api/numbers/attach', {
+        'phone_number_id': phoneNumberId,
+        'phone_number_e164': phoneNumberE164,
+        if (friendlyName != null && friendlyName.isNotEmpty) 'friendly_name': friendlyName,
+      });
+
   /// GET /api/numbers/search?area_code=585&country=US
   static Future<Map<String, dynamic>> searchNumbers({
     required String areaCode,

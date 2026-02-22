@@ -19,6 +19,11 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   bool _loading = true;
   String? _error;
   bool _warmUpExpanded = false;
+  final _linkE164Controller = TextEditingController();
+  final _linkNumberIdController = TextEditingController();
+  final _linkFriendlyNameController = TextEditingController();
+  bool _linkLoading = false;
+  bool _linkExpanded = false;
 
   Future<void> _load() async {
     setState(() {
@@ -52,6 +57,14 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _linkE164Controller.dispose();
+    _linkNumberIdController.dispose();
+    _linkFriendlyNameController.dispose();
+    super.dispose();
   }
 
   static String _formatPhone(String? p) {
@@ -222,45 +235,134 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   }
 
   Widget _buildEmptyState() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: SpeariaAura.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(SpeariaSpacing.xl * 2),
-        child: Column(
-          children: [
-            Icon(Icons.phone_in_talk_outlined, size: 48, color: SpeariaAura.textMuted),
-            const SizedBox(height: 16),
-            Text(
-              "You don't have any phone numbers yet.",
-              style: SpeariaType.titleMedium.copyWith(color: SpeariaAura.textPrimary),
-              textAlign: TextAlign.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: SpeariaAura.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(SpeariaSpacing.xl * 2),
+            child: Column(
+              children: [
+                Icon(Icons.phone_in_talk_outlined, size: 48, color: SpeariaAura.textMuted),
+                const SizedBox(height: 16),
+                Text(
+                  "You don't have any phone numbers yet.",
+                  style: SpeariaType.titleMedium.copyWith(color: SpeariaAura.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Buy a new number or link an existing one (e.g. from VAPI or a campaign).',
+                  style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pull down to refresh after linking.',
+                  style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => _openBuyNumberFlow(context),
+                  icon: const Icon(Icons.add, size: 20),
+                  label: const Text('Buy New Number'),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Buy your first number to start reaching out.',
-              style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'If you attached a number via Settings or the API, pull down to refresh.',
-              style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => _openBuyNumberFlow(context),
-              icon: const Icon(Icons.add, size: 20),
-              label: const Text('Buy New Number'),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: SpeariaAura.border),
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: _linkExpanded,
+            onExpansionChanged: (v) => setState(() => _linkExpanded = v),
+            title: Text('Link existing number', style: SpeariaType.titleMedium),
+            subtitle: Text('Have a number in VAPI or a campaign? Link it so it appears here.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Phone number (E.164)', style: SpeariaType.labelLarge),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _linkE164Controller,
+                      decoration: const InputDecoration(hintText: 'e.g. +12296006675', border: OutlineInputBorder()),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Phone number ID (VAPI / Twilio)', style: SpeariaType.labelLarge),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _linkNumberIdController,
+                      decoration: const InputDecoration(hintText: 'e.g. f59a5394-59dd-489b-999a-5c1ebec6f9dd', border: OutlineInputBorder()),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Friendly name (optional)', style: SpeariaType.labelLarge),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _linkFriendlyNameController,
+                      decoration: const InputDecoration(hintText: 'e.g. Primary', border: OutlineInputBorder()),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _linkLoading ? null : _submitLinkNumber,
+                      icon: _linkLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link, size: 18),
+                      label: Text(_linkLoading ? 'Linking…' : 'Link number'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
+  }
+
+  Future<void> _submitLinkNumber() async {
+    final e164 = _linkE164Controller.text.trim();
+    final numberId = _linkNumberIdController.text.trim();
+    if (e164.isEmpty || numberId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter phone number (E.164) and Phone number ID')));
+      return;
+    }
+    setState(() => _linkLoading = true);
+    try {
+      final res = await NeyvoPulseApi.attachNumber(
+        phoneNumberE164: e164,
+        phoneNumberId: numberId,
+        friendlyName: _linkFriendlyNameController.text.trim().isEmpty ? null : _linkFriendlyNameController.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _linkLoading = false);
+        if (res['ok'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']?.toString() ?? 'Number linked. Refreshing.')));
+          _load();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error']?.toString() ?? 'Failed')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _linkLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   Widget _buildWarmUpPanel() {
