@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api/spearia_api.dart';
+import '../neyvo_pulse_api.dart';
 import '../theme/spearia_theme.dart';
 
 class DeveloperConsolePage extends StatefulWidget {
@@ -35,14 +36,14 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
   static const int _tabHealth = 6;
   static const int _tabAssignNumber = 7;
 
-  final _assignAccountIdController = TextEditingController(text: 'default-school');
+  final _assignAccountIdController = TextEditingController();
   final _assignPhoneE164Controller = TextEditingController();
   final _assignPhoneNumberIdController = TextEditingController();
   final _assignFriendlyNameController = TextEditingController();
   bool _assignSetPrimary = true;
   bool _assignLoading = false;
   Map<String, dynamic>? _debugNumbersForAccount;
-  final _debugAccountIdController = TextEditingController(text: 'default-school');
+  final _debugAccountIdController = TextEditingController();
   bool _debugNumbersLoading = false;
 
   Future<void> _load() async {
@@ -180,6 +181,13 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
             onTap: (i) {
               if (i == _tabOrgs && _organizations == null) _loadOrgs();
               if (i == _tabPricing && _pricingConfig == null) _loadPricing();
+              if (i == _tabAssignNumber) {
+                final current = NeyvoPulseApi.defaultAccountId;
+                if (current.isNotEmpty) {
+                  _assignAccountIdController.text = current;
+                  _debugAccountIdController.text = current;
+                }
+              }
             },
           ),
         ),
@@ -636,7 +644,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
           TextField(
             controller: _assignAccountIdController,
             decoration: const InputDecoration(
-              hintText: 'default-school (resolved to DEFAULT_ACCOUNT_ID on server)',
+              hintText: 'Account ID (or leave empty to use current account from API)',
               border: OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),
@@ -773,7 +781,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
     setState(() => _assignLoading = true);
     try {
       final body = <String, dynamic>{
-        'account_id': accountId.isEmpty ? 'default-school' : accountId,
+        'account_id': accountId.isEmpty ? NeyvoPulseApi.defaultAccountId : accountId,
         'phone_number_e164': e164,
         'phone_number_id': numberId,
         'set_as_primary': _assignSetPrimary,
@@ -785,7 +793,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
         setState(() => _assignLoading = false);
         if (res['ok'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? 'Number assigned. Check Phone Numbers page.')));
-          _debugAccountIdController.text = accountId.isEmpty ? 'default-school' : accountId;
+          _debugAccountIdController.text = accountId.isEmpty ? NeyvoPulseApi.defaultAccountId : accountId;
           _loadDebugNumbersForAccount();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error'] ?? 'Failed')));
@@ -803,7 +811,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
     final accountId = _debugAccountIdController.text.trim();
     setState(() => _debugNumbersLoading = true);
     try {
-      final res = await SpeariaApi.getJsonMap('/api/admin/numbers/for-account', params: {'account_id': accountId.isEmpty ? 'default-school' : accountId}, adminAuth: true);
+      final res = await SpeariaApi.getJsonMap('/api/admin/numbers/for-account', params: {'account_id': accountId.isEmpty ? NeyvoPulseApi.defaultAccountId : accountId}, adminAuth: true);
       if (mounted) {
         setState(() {
           _debugNumbersLoading = false;

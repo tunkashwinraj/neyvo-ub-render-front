@@ -1,26 +1,32 @@
 // lib/neyvo_pulse/neyvo_pulse_api.dart
 // Neyvo Pulse – API client. All data is keyed by account_id.
+// Account id is set dynamically from GET /api/pulse/account (no hardcoded values).
 
 import '../api/spearia_api.dart';
 
-const String _defaultAccountId = 'default-school';
-
 class NeyvoPulseApi {
+  static String _defaultAccountId = '';
+
   static String get defaultAccountId => _defaultAccountId;
+
+  /// Set the account id from API (e.g. getAccountInfo). When empty, requests omit account_id and backend uses its default.
+  static void setDefaultAccountId(String? id) {
+    _defaultAccountId = (id == null || id.trim().isEmpty) ? '' : id.trim();
+  }
 
   static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
     final p = Map<String, dynamic>.from(params ?? {});
-    p['account_id'] = p['account_id'] ?? _defaultAccountId;
+    if (_defaultAccountId.isNotEmpty) p['account_id'] = p['account_id'] ?? _defaultAccountId;
     return SpeariaApi.getJsonMap(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
-    body['account_id'] = body['account_id'] ?? _defaultAccountId;
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = body['account_id'] ?? _defaultAccountId;
     return SpeariaApi.postJsonMap(path, body: body);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
-    body['account_id'] = body['account_id'] ?? _defaultAccountId;
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = body['account_id'] ?? _defaultAccountId;
     final v = await SpeariaApi.patchJson(path, body: body);
     return Map<String, dynamic>.from(v as Map);
   }

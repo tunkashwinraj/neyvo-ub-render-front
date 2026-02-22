@@ -53,9 +53,8 @@ class _PulseShellState extends State<PulseShell> {
   String? _orgStatus;
   String? _accountName;
   String? _accountIdDisplay;
+  String _orgCollection = '';
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
-  static const String _accountId = 'default-school';
-  static const String _orgCollection = 'schools';
 
   // Single source of truth: nav items and pages in same order (index i = page i)
   static List<_NavItem> get _nav => [
@@ -108,32 +107,40 @@ class _PulseShellState extends State<PulseShell> {
   void initState() {
     super.initState();
     if (kIsWeb) debugPrint('PulseShell initialized');
-    _loadWalletCredits();
-    _loadNumbersSummary();
-    _loadUsageSummary();
-    _loadAccountInfo();
-    _walletSubscription = FirebaseFirestore.instance
-        .collection(_orgCollection)
-        .doc(_accountId)
-        .snapshots()
-        .listen((snap) {
-      if (!mounted || !snap.exists) return;
-      final data = snap.data();
-      final credits = (data?['wallet_credits'] as num?)?.toInt();
-      final status = (data?['status'] as String?)?.toLowerCase();
-      final subStatus = (data?['subscription_status'] as String?)?.toLowerCase();
-      setState(() {
-        if (credits != null) _walletCredits = credits;
-        if (status != null) _orgStatus = status;
-        if (subStatus != null) _subscriptionStatus = subStatus;
-      });
-    });
+    _resolveAccountThenLoad();
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
       final idx = _nav.indexWhere((n) => n.route == name);
       if (idx >= 0) _selectedIndex = idx;
     }
   }
+
+  /// Resolve logged-in account from API first, then load all data so every request uses the resolved account id.
+  Future<void> _resolveAccountThenLoad() async {
+    await _loadAccountInfo();
+    if (!mounted) return;
+    _loadWalletCredits();
+    _loadNumbersSummary();
+    _loadUsageSummary();
+    final resolvedId = NeyvoPulseApi.defaultAccountId;
+    if (resolvedId.isNotEmpty && _orgCollection.isNotEmpty) {
+      _walletSubscription = FirebaseFirestore.instance
+          .collection(_orgCollection)
+          .doc(resolvedId)
+          .snapshots()
+          .listen((snap) {
+        if (!mounted || !snap.exists) return;
+        final data = snap.data();
+        final credits = (data?['wallet_credits'] as num?)?.toInt();
+        final status = (data?['status'] as String?)?.toLowerCase();
+        final subStatus = (data?['subscription_status'] as String?)?.toLowerCase();
+        setState(() {
+          if (credits != null) _walletCredits = credits;
+          if (status != null) _orgStatus = status;
+          if (subStatus != null) _subscriptionStatus = subStatus;
+        });
+      });
+    }
 
   @override
   void dispose() {
@@ -161,6 +168,12 @@ class _PulseShellState extends State<PulseShell> {
   Future<void> _loadAccountInfo() async {
     try {
       final res = await NeyvoPulseApi.getAccountInfo();
+      if (res['ok'] == true && res['account_id'] != null) {
+        final accountId = res['account_id']?.toString() ?? '';
+        NeyvoPulseApi.setDefaultAccountId(accountId);
+      }
+      final col = res['org_collection'] as String?;
+      if (col != null && col.trim().isNotEmpty) _orgCollection = col.trim();
       if (mounted && res['ok'] == true) {
         setState(() {
           _accountIdDisplay = res['account_id']?.toString();

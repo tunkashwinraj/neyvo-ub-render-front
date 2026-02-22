@@ -19,6 +19,8 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   bool _loading = true;
   String? _error;
   bool _warmUpExpanded = false;
+  String? _accountIdDisplay;
+  String? _accountName;
   final _linkE164Controller = TextEditingController();
   final _linkNumberIdController = TextEditingController();
   final _linkFriendlyNameController = TextEditingController();
@@ -38,6 +40,17 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           _loading = false;
         });
       }
+      // Load account label so user can confirm which account they're viewing
+      try {
+        final accountRes = await NeyvoPulseApi.getAccountInfo();
+        if (mounted && accountRes['ok'] == true) {
+          setState(() {
+            _accountIdDisplay = accountRes['account_id']?.toString();
+            _accountName = (accountRes['account_name'] as String?)?.trim();
+            if (_accountName != null && _accountName!.isEmpty) _accountName = null;
+          });
+        }
+      } catch (_) {}
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -124,6 +137,16 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             'Manage Twilio numbers for outbound campaigns. Daily limits protect your number reputation.',
             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
           ),
+          if (_accountIdDisplay != null || _accountName != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              [
+                if (_accountName != null && _accountName!.isNotEmpty) _accountName,
+                if (_accountIdDisplay != null && _accountIdDisplay!.isNotEmpty) 'ID: $_accountIdDisplay',
+              ].join(' · '),
+              style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+            ),
+          ],
           const SizedBox(height: SpeariaSpacing.xl),
           // Overview bar
           _buildOverviewBar(
