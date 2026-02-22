@@ -33,6 +33,17 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
   static const int _tabTierConfigs = 4;
   static const int _tabPricing = 5;
   static const int _tabHealth = 6;
+  static const int _tabAssignNumber = 7;
+
+  final _assignAccountIdController = TextEditingController(text: 'default-school');
+  final _assignPhoneE164Controller = TextEditingController();
+  final _assignPhoneNumberIdController = TextEditingController();
+  final _assignFriendlyNameController = TextEditingController();
+  bool _assignSetPrimary = true;
+  bool _assignLoading = false;
+  Map<String, dynamic>? _debugNumbersForAccount;
+  final _debugAccountIdController = TextEditingController(text: 'default-school');
+  bool _debugNumbersLoading = false;
 
   Future<void> _load() async {
     setState(() {
@@ -80,7 +91,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _tabController.addListener(() { if (_tabController.indexIsChanging) return; setState(() {}); });
     _load();
   }
@@ -88,6 +99,11 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
   @override
   void dispose() {
     _tabController.dispose();
+    _assignAccountIdController.dispose();
+    _assignPhoneE164Controller.dispose();
+    _assignPhoneNumberIdController.dispose();
+    _assignFriendlyNameController.dispose();
+    _debugAccountIdController.dispose();
     super.dispose();
   }
 
@@ -159,6 +175,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
               Tab(text: 'Tier Configs'),
               Tab(text: 'Pricing'),
               Tab(text: 'Health'),
+              Tab(text: 'Assign number'),
             ],
             onTap: (i) {
               if (i == _tabOrgs && _organizations == null) _loadOrgs();
@@ -176,6 +193,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
                 : _tabController.index == _tabTierConfigs ? _buildTierConfigsTab()
                 : _tabController.index == _tabPricing ? _buildPricingTab()
                 : _tabController.index == _tabHealth ? _buildHealthTab()
+                : _tabController.index == _tabAssignNumber ? _buildAssignNumberTab()
                 : _buildOverviewContent(orgs, callsToday, revenueToday, revenueMtd, costToday, marginPct),
           ),
         ),
@@ -590,6 +608,213 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> with Single
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Widget _buildAssignNumberTab() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Banner(
+            message: 'Assign a number so it appears on the Phone Numbers page. Requires X-Admin-Token.',
+            location: BannerLocation.topEnd,
+            color: SpeariaAura.primary.withOpacity(0.15),
+          ),
+          const SizedBox(height: 16),
+          Text('Assign number to account', style: SpeariaType.headlineMedium),
+          const SizedBox(height: 8),
+          Text(
+            'If your number does not show on the Phone Numbers page, it may not be linked to your account. '
+            'Backend reads from: (1) org doc primary fields, (2) org numbers subcollection, (3) top-level phone_numbers. '
+            'This tool writes to all three so the number appears.',
+            style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+          ),
+          const SizedBox(height: 24),
+          Text('Account ID', style: SpeariaType.titleSmall),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _assignAccountIdController,
+            decoration: const InputDecoration(
+              hintText: 'default-school (resolved to DEFAULT_ACCOUNT_ID on server)',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Text('Phone number (E.164)', style: SpeariaType.titleSmall),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _assignPhoneE164Controller,
+            decoration: const InputDecoration(
+              hintText: 'e.g. +12296006675',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Text('Phone number ID (VAPI / Twilio)', style: SpeariaType.titleSmall),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _assignPhoneNumberIdController,
+            decoration: const InputDecoration(
+              hintText: 'e.g. 159d6394-59dd-489b-999a-5c1ebec6f9dd',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Text('Friendly name (optional)', style: SpeariaType.titleSmall),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _assignFriendlyNameController,
+            decoration: const InputDecoration(
+              hintText: 'e.g. Primary outbound',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Checkbox(
+                value: _assignSetPrimary,
+                onChanged: (v) => setState(() => _assignSetPrimary = v ?? true),
+              ),
+              const Expanded(child: Text('Set as primary (org doc primary_phone_number_id + primary_phone_e164)')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _assignLoading ? null : _submitAssignNumber,
+            icon: _assignLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.phone),
+            label: Text(_assignLoading ? 'Assigning…' : 'Assign number'),
+          ),
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text('Debug: Numbers for account', style: SpeariaType.headlineSmall),
+          const SizedBox(height: 8),
+          Text(
+            'See where each number comes from (org_primary, phone_numbers, numbers_subcollection). '
+            'Use this to see why a number is missing.',
+            style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _debugAccountIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Account ID',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.tonal(
+                onPressed: _debugNumbersLoading ? null : _loadDebugNumbersForAccount,
+                child: Text(_debugNumbersLoading ? 'Loading…' : 'Load'),
+              ),
+            ],
+          ),
+          if (_debugNumbersForAccount != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: SpeariaAura.border)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Resolved: ${_debugNumbersForAccount!['resolved_account_id']} · Org collection: ${_debugNumbersForAccount!['org_collection']}', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+                    const SizedBox(height: 8),
+                    Text('Numbers (${(_debugNumbersForAccount!['numbers'] as List).length}):', style: SpeariaType.titleSmall),
+                    const SizedBox(height: 4),
+                    ...((_debugNumbersForAccount!['numbers'] as List).cast<Map<String, dynamic>>().map((n) {
+                      final id = n['number_id'] ?? '';
+                      final phone = n['phone_number'] ?? n['phone_number_e164'] ?? '—';
+                      final source = n['_source'] ?? '—';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text('$phone', style: SpeariaType.bodySmall, overflow: TextOverflow.ellipsis)),
+                            const SizedBox(width: 8),
+                            Chip(label: Text('$source', style: SpeariaType.labelSmall), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                            const SizedBox(width: 4),
+                            SizedBox(width: 120, child: Text(id, style: SpeariaType.labelSmall.copyWith(fontFamily: 'monospace'), overflow: TextOverflow.ellipsis)),
+                          ],
+                        ),
+                      );
+                    })),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitAssignNumber() async {
+    final accountId = _assignAccountIdController.text.trim();
+    final e164 = _assignPhoneE164Controller.text.trim();
+    final numberId = _assignPhoneNumberIdController.text.trim();
+    if (e164.isEmpty || numberId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone number (E.164) and Phone number ID are required')));
+      return;
+    }
+    setState(() => _assignLoading = true);
+    try {
+      final body = <String, dynamic>{
+        'account_id': accountId.isEmpty ? 'default-school' : accountId,
+        'phone_number_e164': e164,
+        'phone_number_id': numberId,
+        'set_as_primary': _assignSetPrimary,
+      };
+      final friendly = _assignFriendlyNameController.text.trim();
+      if (friendly.isNotEmpty) body['friendly_name'] = friendly;
+      final res = await SpeariaApi.postJsonMap('/api/admin/numbers/assign', body: body, adminAuth: true);
+      if (mounted) {
+        setState(() => _assignLoading = false);
+        if (res['ok'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? 'Number assigned. Check Phone Numbers page.')));
+          _debugAccountIdController.text = accountId.isEmpty ? 'default-school' : accountId;
+          _loadDebugNumbersForAccount();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error'] ?? 'Failed')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _assignLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _loadDebugNumbersForAccount() async {
+    final accountId = _debugAccountIdController.text.trim();
+    setState(() => _debugNumbersLoading = true);
+    try {
+      final res = await SpeariaApi.getJsonMap('/api/admin/numbers/for-account', params: {'account_id': accountId.isEmpty ? 'default-school' : accountId}, adminAuth: true);
+      if (mounted) {
+        setState(() {
+          _debugNumbersLoading = false;
+          _debugNumbersForAccount = res;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _debugNumbersLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
