@@ -3,9 +3,8 @@
 // transaction history by type (icons/colors), low-balance banner.
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
-import '../pulse_route_names.dart';
-import 'pulse_shell.dart';
 import '../theme/spearia_theme.dart';
 
 class WalletPage extends StatefulWidget {
@@ -30,6 +29,23 @@ class _WalletPageState extends State<WalletPage> {
   void initState() {
     super.initState();
     _load();
+    _checkPaymentSuccess();
+  }
+
+  void _checkPaymentSuccess() {
+    try {
+      final q = Uri.base.queryParameters;
+      if (q['payment'] == 'success') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payment successful. Credits have been added to your wallet.')),
+            );
+            _load();
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -66,16 +82,41 @@ class _WalletPageState extends State<WalletPage> {
   Future<void> _purchase(String pack) async {
     setState(() => _purchaseInProgress = true);
     try {
-      await NeyvoPulseApi.purchaseCredits(pack);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Credits added. Payment processing coming soon — contact support to add credits.')),
-        );
-        _load();
+      final origin = Uri.base.origin;
+      final successUrl = '$origin/pulse/wallet?payment=success';
+      final cancelUrl = '$origin/pulse/wallet';
+      final res = await NeyvoPulseApi.createCheckoutSession(pack, successUrl: successUrl, cancelUrl: cancelUrl);
+      final url = res['url'] as String?;
+      if (url != null && url.isNotEmpty) {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Opening Stripe Checkout. Complete payment there; credits will appear when you return.')),
+            );
+          }
+        } else {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open payment link: $url')));
+        }
+      } else {
+        try {
+          await NeyvoPulseApi.purchaseCredits(pack);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credits added.')));
+            _load();
+          }
+        } catch (e2) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Purchase failed: $e2')));
+        }
       }
     } catch (e) {
+      final err = e.toString();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Purchase failed: $e')));
+        if (err.contains('Stripe') || err.contains('STRIPE'))
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Stripe is not configured. Contact support to add credits.')));
+        else
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Purchase failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _purchaseInProgress = false);
@@ -101,7 +142,7 @@ class _WalletPageState extends State<WalletPage> {
             children: [
               Text('Add credits', style: SpeariaType.headlineMedium),
               const SizedBox(height: 8),
-              Text('Credits are applied with your plan bonus. Payment processing coming soon.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+              Text('You\'ll be redirected to Stripe to pay securely. Credits are applied with your plan bonus after payment.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
               const SizedBox(height: 24),
               _packCard('Starter', 49, 5000, 'starter'),
               const SizedBox(height: 12),
@@ -314,7 +355,7 @@ class _WalletPageState extends State<WalletPage> {
                 children: [
                   Expanded(child: Text('Get 10% more credits on every top-up with Pro.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary))),
                   TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan))),
                     child: const Text('Upgrade'),
                   ),
                 ],

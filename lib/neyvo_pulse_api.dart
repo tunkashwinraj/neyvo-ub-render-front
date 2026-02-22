@@ -407,6 +407,23 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getBillingWallet() async =>
       _get('/api/billing/wallet');
 
+  /// Create Stripe Checkout session for wallet pack. Returns { url }. Open url in browser to pay; credits applied via webhook.
+  static Future<Map<String, dynamic>> createCheckoutSession(
+    String pack, {
+    String? successUrl,
+    String? cancelUrl,
+    String? customerEmail,
+  }) async {
+    final body = <String, dynamic>{
+      'business_id': _defaultBusinessId,
+      'pack': pack,
+    };
+    if (successUrl != null) body['success_url'] = successUrl;
+    if (cancelUrl != null) body['cancel_url'] = cancelUrl;
+    if (customerEmail != null) body['customer_email'] = customerEmail;
+    return SpeariaApi.postJsonMap('/api/billing/wallet/create-checkout-session', body: body);
+  }
+
   static Future<Map<String, dynamic>> purchaseCredits(String pack) async =>
       SpeariaApi.postJsonMap('/api/billing/wallet/purchase', body: {
         'business_id': _defaultBusinessId,
