@@ -141,6 +141,7 @@ class _PulseShellState extends State<PulseShell> {
         });
       });
     }
+  }
 
   @override
   void dispose() {
