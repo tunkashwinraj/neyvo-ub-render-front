@@ -51,6 +51,8 @@ class _PulseShellState extends State<PulseShell> {
   int _addonsCount = 0;
   String? _subscriptionStatus;
   String? _orgStatus;
+  String? _accountName;
+  String? _accountIdDisplay;
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
   static const String _accountId = 'default-school';
   static const String _orgCollection = 'schools';
@@ -109,6 +111,7 @@ class _PulseShellState extends State<PulseShell> {
     _loadWalletCredits();
     _loadNumbersSummary();
     _loadUsageSummary();
+    _loadAccountInfo();
     _walletSubscription = FirebaseFirestore.instance
         .collection(_orgCollection)
         .doc(_accountId)
@@ -150,6 +153,19 @@ class _PulseShellState extends State<PulseShell> {
           _addonsCount = shield.length + (hipaa ? 1 : 0);
           _subscriptionStatus = (w['subscription_status'] as String?)?.toLowerCase();
           _orgStatus = (w['status'] as String?)?.toLowerCase();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadAccountInfo() async {
+    try {
+      final res = await NeyvoPulseApi.getAccountInfo();
+      if (mounted && res['ok'] == true) {
+        setState(() {
+          _accountIdDisplay = res['account_id']?.toString();
+          _accountName = (res['account_name'] as String?)?.trim();
+          if (_accountName != null && _accountName!.isEmpty) _accountName = null;
         });
       }
     } catch (_) {}
@@ -275,6 +291,19 @@ class _PulseShellState extends State<PulseShell> {
                   ),
                 ),
                 const Divider(height: 1),
+                if (_accountIdDisplay != null || _accountName != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      [
+                        if (_accountName != null && _accountName!.isNotEmpty) _accountName,
+                        if (_accountIdDisplay != null && _accountIdDisplay!.isNotEmpty) 'ID: $_accountIdDisplay',
+                      ].join(' · '),
+                      style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.textMuted, fontSize: 11),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ListTile(
                   leading: Icon(Icons.logout, size: 22, color: SpeariaAura.textMuted),
                   title: Text('Sign out', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary)),

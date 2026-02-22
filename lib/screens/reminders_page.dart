@@ -249,6 +249,14 @@ class _RemindersPageState extends State<RemindersPage> {
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
+  /// Maps backend reminder_type (e.g. "balance") to a valid dropdown value.
+  static String _normalizeReminderType(String? v) {
+    final s = (v ?? '').trim().toLowerCase();
+    if (s == 'balance_reminder' || s == 'due_date_reminder' || s == 'payment_inquiry' || s == 'general') return s;
+    if (s == 'balance') return 'balance_reminder';
+    return 'balance_reminder';
+  }
+
   static String _toIsoScheduled(DateTime d) {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}'
         'T${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:00';
@@ -379,7 +387,7 @@ class _RemindersPageState extends State<RemindersPage> {
     } catch (_) {}
     final navigator = Navigator.of(context);
     String? selectedStudentId = r['student_id']?.toString();
-    String selectedType = r['reminder_type']?.toString() ?? 'balance_reminder';
+    String selectedType = _normalizeReminderType(r['reminder_type']?.toString());
     String? scheduledStr = r['scheduled_at']?.toString();
     DateTime? scheduledDateTime;
     if (scheduledStr != null && scheduledStr.isNotEmpty) {

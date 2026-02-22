@@ -361,12 +361,38 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           tooltip: 'View & manage',
                           onPressed: () => setState(() => _selectedCampaignId = c['id']?.toString()),
                         ),
-                        if (c['status'] == 'draft' || c['status'] == 'scheduled')
+                        if (c['status'] == 'draft' || c['status'] == 'scheduled') ...[
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Edit campaign',
+                            onPressed: () {
+                              _nameController.text = c['name']?.toString() ?? '';
+                              _selectedTemplateId = c['template_id']?.toString();
+                              _selectedStudentIds = {};
+                              final ids = c['student_ids'];
+                              if (ids is List) _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                              _scheduleNow = c['scheduled_at'] == null;
+                              _scheduledAt = null;
+                              if (c['scheduled_at'] != null) _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                              setState(() {
+                                _editingCampaignId = c['id']?.toString();
+                                _editCampaignData = Map<String, dynamic>.from(c);
+                                _showCreateWizard = true;
+                                _wizardStep = 0;
+                              });
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Delete campaign',
+                            onPressed: () => _confirmDeleteCampaign(c['id']?.toString() ?? '', c['name']?.toString() ?? 'Campaign'),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.play_arrow),
                             tooltip: 'Start campaign',
                             onPressed: () => _startOrRerunCampaign(c),
                           ),
+                        ],
                         if (c['status'] == 'completed' || c['status'] == 'running')
                           IconButton(
                             icon: const Icon(Icons.replay),

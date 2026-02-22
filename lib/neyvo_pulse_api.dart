@@ -28,6 +28,9 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> health() async =>
       SpeariaApi.getJsonMap('/api/pulse/health');
 
+  /// GET /api/pulse/account – account_id and account_name for drawer/header.
+  static Future<Map<String, dynamic>> getAccountInfo() async => _get('/api/pulse/account');
+
   // Students
   static Future<Map<String, dynamic>> listStudents() async =>
       _get('/api/pulse/students');
