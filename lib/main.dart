@@ -6,6 +6,7 @@
 
   import 'api/spearia_api.dart';
   import 'firebase_options.dart';
+  import 'neyvo_pulse_api.dart';
   import 'pulse_routes.dart';
   import 'screens/pulse_auth_page.dart';
   import 'screens/pulse_shell.dart';
@@ -18,11 +19,13 @@
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Phase D RBAC: send current user id to backend for role checks
+    // Phase D RBAC: send current user id to backend for role checks; clear account when logging out so new user gets their own
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       SpeariaApi.setUserId(user?.uid);
+      if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
     });
     SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
+    if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
     SpeariaApi.setBaseUrl('https://neyvo-pulse.onrender.com');
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
