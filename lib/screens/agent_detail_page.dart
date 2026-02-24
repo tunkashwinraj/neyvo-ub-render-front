@@ -527,6 +527,14 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   ),
                   style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
                 ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonal(
+                    onPressed: _saving ? null : _enhanceSystemPrompt,
+                    child: const Text('Enhance script with AI'),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _openingMessageController,
@@ -683,6 +691,109 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _enhanceSystemPrompt() async {
+    final raw = _systemPromptController.text.trim();
+    if (raw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a script or prompt first.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final variables = <String, dynamic>{
+        'studentName': '{{studentName}}',
+        'schoolName': '{{schoolName}}',
+        'balance': '{{balance}}',
+        'dueDate': '{{dueDate}}',
+        'lateFee': '{{lateFee}}',
+        'callbackTime': '{{callbackTime}}',
+        'callbackNumber': '{{callbackNumber}}',
+      };
+      final res = await NeyvoPulseApi.enhanceScript(
+        script: raw,
+        context: _agent?['use_case']?.toString() ?? '',
+        agentType: 'outbound_campaign',
+        tone: 'professional',
+        complianceMode: 'recording_disclosure',
+        variables: variables,
+      );
+      if (!mounted) return;
+      if (res['ok'] != true || res['result'] == null) {
+        final err = (res['error'] ?? 'Failed to enhance script').toString();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+        return;
+      }
+      final result = Map<String, dynamic>.from(res['result'] as Map);
+      final enhanced = (result['enhancedSystemPrompt'] ?? '').toString();
+      final score = (result['humanNessScore'] as num?)?.toInt();
+      final summary = (result['changeSummary'] ?? '').toString();
+      if (enhanced.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enhancer returned empty prompt.')),
+        );
+        return;
+      }
+      // Show a simple confirmation dialog with summary and score.
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('Enhanced script ready'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (score != null)
+                    Text('Human-ness score: $score/100', style: NeyvoType.bodyMedium),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(summary, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                  ],
+                  const SizedBox(height: 12),
+                  Text('Preview:', style: NeyvoType.bodyMedium),
+                  const SizedBox(height: 4),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: NeyvoTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: NeyvoTheme.borderSubtle),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Text(enhanced, style: NeyvoType.bodySmall),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  _systemPromptController.text = enhanced;
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Widget _detailRow(String label, String value) {

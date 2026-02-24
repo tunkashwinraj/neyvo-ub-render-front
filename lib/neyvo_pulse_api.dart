@@ -610,6 +610,37 @@ class NeyvoPulseApi {
       SpeariaApi.deleteJson('/api/pulse/call_templates/$id', params: {'account_id': _defaultAccountId});
 
   // -------------------------------------------------------------------------
+  // AI Script Enhancer
+  // -------------------------------------------------------------------------
+
+  /// Enhance a raw script into a production-grade Vapi system prompt.
+  static Future<Map<String, dynamic>> enhanceScript({
+    required String script,
+    String? context,
+    String agentType = 'outbound_campaign',
+    String tone = 'professional',
+    String complianceMode = 'recording_disclosure',
+    List<String>? requiredPhrases,
+    List<String>? bannedPhrases,
+    Map<String, dynamic>? variables,
+    String language = 'en-US',
+  }) async {
+    final body = <String, dynamic>{
+      'script': script,
+      if (context != null && context.trim().isNotEmpty) 'context': context.trim(),
+      'agentType': agentType,
+      'tone': tone,
+      'complianceMode': complianceMode,
+      'requiredPhrases': requiredPhrases ?? const <String>[],
+      'bannedPhrases': bannedPhrases ?? const <String>[],
+      'variables': variables ?? const <String, dynamic>{},
+      'language': language,
+    };
+    final res = await _post('/api/pulse/script/enhance', body);
+    return Map<String, dynamic>.from(res as Map);
+  }
+
+  // -------------------------------------------------------------------------
   // Campaigns (bulk outbound calls by filters)
   // -------------------------------------------------------------------------
 
@@ -967,17 +998,18 @@ class NeyvoPulseApi {
     return _get('/api/numbers/search', params: params);
   }
 
-  /// POST /api/numbers/purchase – buy number (phone_number, friendly_name, role). Sends account_id for Pulse.
+  /// POST /api/numbers/purchase – buy number (phone_number, friendly_name). Sends account_id for Pulse.
+  /// Role is now determined server-side:
+  /// - First number for an account becomes primary automatically.
+  /// - Subsequent numbers are campaign numbers, but can be promoted to primary later.
   static Future<Map<String, dynamic>> purchaseNumber({
     required String phoneNumber,
     required String friendlyName,
-    String role = 'campaign',
   }) async =>
       _post('/api/numbers/purchase', {
         'account_id': _defaultAccountId,
         'phone_number': phoneNumber,
         'friendly_name': friendlyName,
-        'role': role,
       });
 
   /// PUT /api/numbers/<number_id> – update friendly_name, role, registered_freecaller

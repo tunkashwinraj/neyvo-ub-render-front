@@ -61,7 +61,6 @@ class _PulseShellState extends State<PulseShell> {
     const _NavItem('Contacts', Icons.people_outline, PulseRouteNames.students),
     const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.callHistory),
     const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
-    const _NavItem('Templates', Icons.description_outlined, PulseRouteNames.templateScripts),
     const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
     const _NavItem('Callbacks', Icons.schedule_outlined, PulseRouteNames.callbacks),
     const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
@@ -88,7 +87,6 @@ class _PulseShellState extends State<PulseShell> {
     const StudentsListPage(),      // Contacts
     const CallHistoryPage(),       // Calls
     const CampaignsPage(),         // Campaigns
-    const TemplateScriptsPage(),   // Templates (scripts)
     const AnalyticsPage(),         // Analytics
     const CallbacksPage(),         // Callbacks / Scheduler
     const PhoneNumbersPage(),      // Numbers

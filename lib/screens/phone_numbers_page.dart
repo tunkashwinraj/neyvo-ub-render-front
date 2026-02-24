@@ -1239,22 +1239,6 @@ class _BuyNumberFlowState extends State<_BuyNumberFlow> {
           ),
           controller: _friendlyNameController,
         ),
-        const SizedBox(height: 16),
-        Text('Role', style: NeyvoType.titleMedium),
-        const SizedBox(height: 8),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'primary', label: Text('Primary'), icon: Icon(Icons.star_outline, size: 18)),
-            ButtonSegment(value: 'campaign', label: Text('Campaign'), icon: Icon(Icons.campaign_outlined, size: 18)),
-          ],
-          selected: {_role},
-          onSelectionChanged: (s) => setState(() => _role = s.first),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Primary = your recognized school number. Campaign = extra capacity for faster outreach.',
-          style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
-        ),
       ],
     );
   }
@@ -1274,7 +1258,6 @@ class _BuyNumberFlowState extends State<_BuyNumberFlow> {
         ],
         _row('Number', _formatPhone(_selectedPhone)),
         _row('Friendly name', name),
-        _row('Role', _role),
         _row('Cost', '115 credits/month (\$1.15/month) — deducted from wallet'),
         _row('Starting daily limit', '40 calls/day (reaches 140/day after 4 weeks warm-up)'),
       ],
@@ -1305,7 +1288,6 @@ class _BuyNumberFlowState extends State<_BuyNumberFlow> {
       await NeyvoPulseApi.purchaseNumber(
         phoneNumber: _selectedPhone!,
         friendlyName: name,
-        role: _role,
       );
       if (mounted) {
         widget.onDone();
