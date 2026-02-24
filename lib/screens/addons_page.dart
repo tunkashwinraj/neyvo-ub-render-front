@@ -5,8 +5,7 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
-import 'pulse_shell.dart';
-import '../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 
 class AddonsPage extends StatefulWidget {
   const AddonsPage({super.key});
@@ -116,7 +115,7 @@ class _AddonsPageState extends State<AddonsPage> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text('Loading add-ons…', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted)),
+            Text('Loading add-ons…', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted)),
           ],
         ),
       );
@@ -126,7 +125,7 @@ class _AddonsPageState extends State<AddonsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.error), textAlign: TextAlign.center),
+            Text(_error!, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.error), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton(onPressed: _load, child: const Text('Retry')),
           ],
@@ -134,30 +133,31 @@ class _AddonsPageState extends State<AddonsPage> {
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Add-ons & Features', style: SpeariaType.headlineLarge),
-          const SizedBox(height: 8),
-          Text(
-            'Everything here is charged from your wallet — no extra subscriptions.',
-            style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
-          ),
-          const SizedBox(height: 32),
-          // A — Phone Numbers
-          Text('Phone Numbers', style: SpeariaType.titleLarge),
+    return Scaffold(
+      backgroundColor: NeyvoTheme.bgPrimary,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Add-ons & Features', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: NeyvoSpacing.sm),
+            Text(
+              'Everything here is charged from your wallet — no extra subscriptions.',
+              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: NeyvoSpacing.xl),
+            Text('Phone Numbers', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
           const SizedBox(height: 8),
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.border)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Included: $_includedNumbers number${_includedNumbers == 1 ? '' : 's'} on your plan.', style: SpeariaType.bodyMedium),
+                  Text('Included: $_includedNumbers number${_includedNumbers == 1 ? '' : 's'} on your plan.', style: NeyvoType.bodyMedium),
                   if (_numberList.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     ..._numberList.map<Widget>((n) {
@@ -165,15 +165,15 @@ class _AddonsPageState extends State<AddonsPage> {
                       final phone = n['phone_number'] as String? ?? n['friendly_name']?.toString() ?? id;
                       final isExtra = _numberList.indexOf(n) >= _includedNumbers;
                       return ListTile(
-                        title: Text(phone, style: SpeariaType.bodyMedium),
-                        subtitle: isExtra ? const Text('115 credits/month (\$1.15) auto-deducted', style: TextStyle(fontSize: 12, color: SpeariaAura.textMuted)) : null,
+                        title: Text(phone, style: NeyvoType.bodyMedium),
+                        subtitle: isExtra ? const Text('115 credits/month (\$1.15) auto-deducted', style: TextStyle(fontSize: 12, color: NeyvoTheme.textMuted)) : null,
                         dense: true,
                       );
                     }),
                   ],
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.phoneNumbers))),
+                    onPressed: () => Navigator.pushNamed(context, PulseRouteNames.phoneNumbers),
                     icon: const Icon(Icons.add),
                     label: const Text('Add another number'),
                   ),
@@ -183,26 +183,26 @@ class _AddonsPageState extends State<AddonsPage> {
           ),
           const SizedBox(height: 24),
           // B — Neyvo Shield
-          Text('Neyvo Shield (Spam Protection)', style: SpeariaType.titleLarge),
+          Text('Neyvo Shield (Spam Protection)', style: NeyvoType.titleLarge),
           const SizedBox(height: 8),
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.border)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('50 credits/month (\$0.50) per number. Automatic spam flag monitoring and caller registry.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                  Text('50 credits/month (\$0.50) per number. Automatic spam flag monitoring and caller registry.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                   if (_numberList.isEmpty)
-                    Padding(padding: const EdgeInsets.only(top: 12), child: Text('Add a phone number first.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)))
+                    Padding(padding: const EdgeInsets.only(top: 12), child: Text('Add a phone number first.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)))
                   else
                     ..._numberList.map<Widget>((n) {
                       final id = n['id'] as String? ?? n['number_id']?.toString() ?? '';
                       final phone = n['phone_number'] as String? ?? n['friendly_name']?.toString() ?? id;
                       final enabled = _shieldNumberIds.contains(id);
                       return SwitchListTile(
-                        title: Text(phone, style: SpeariaType.bodyMedium),
+                        title: Text(phone, style: NeyvoType.bodyMedium),
                         subtitle: const Text('50 credits/month per number'),
                         value: enabled,
                         onChanged: _updating != null ? null : (v) => _toggleShield(id, v),
@@ -214,27 +214,27 @@ class _AddonsPageState extends State<AddonsPage> {
           ),
           const SizedBox(height: 24),
           // C — HIPAA
-          Text('HIPAA Compliance Mode', style: SpeariaType.titleLarge),
+          Text('HIPAA Compliance Mode', style: NeyvoType.titleLarge),
           const SizedBox(height: 8),
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.border)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Required for healthcare, student financial data, and legal clients.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                  Text('Required for healthcare, student financial data, and legal clients.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                   const SizedBox(height: 12),
                   if (_subTier == 'free')
                     ListTile(
                       title: const Text('Upgrade to Pro or Business to enable HIPAA'),
-                      leading: Icon(Icons.lock_outline, color: SpeariaAura.textMuted),
+                      leading: Icon(Icons.lock_outline, color: NeyvoTheme.textMuted),
                     )
                   else if (_subTier == 'business')
                     const ListTile(
                       title: Text('Included in your Business plan — no extra charge'),
-                      leading: Icon(Icons.check_circle_outline, color: SpeariaAura.success),
+                      leading: Icon(Icons.check_circle_outline, color: NeyvoTheme.success),
                     )
                   else
                     SwitchListTile(
@@ -249,25 +249,26 @@ class _AddonsPageState extends State<AddonsPage> {
           ),
           const SizedBox(height: 24),
           // D — Monthly cost preview
-          Text('Monthly cost preview', style: SpeariaType.titleLarge),
+          Text('Monthly cost preview', style: NeyvoType.titleLarge),
           const SizedBox(height: 8),
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.border)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Your estimated add-on cost this month: $_monthlyCreditsTotal credits (\$${(_monthlyCreditsTotal / 100).toStringAsFixed(2)})', style: SpeariaType.titleMedium),
+                  Text('Your estimated add-on cost this month: $_monthlyCreditsTotal credits (\$${(_monthlyCreditsTotal / 100).toStringAsFixed(2)})', style: NeyvoType.titleMedium),
                   const SizedBox(height: 8),
-                  Text('$_monthlyCreditsExtraNumbers credits for extra numbers + $_monthlyCreditsShield credits for Shield + $_monthlyCreditsHipaa credits for HIPAA', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted)),
+                  Text('$_monthlyCreditsExtraNumbers credits for extra numbers + $_monthlyCreditsShield credits for Shield + $_monthlyCreditsHipaa credits for HIPAA', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
                 ],
               ),
             ),
           ),
         ],
       ),
+    ),
     );
   }
 }

@@ -1,12 +1,12 @@
 // lib/screens/pulse_dashboard_page.dart
-// Neyvo Pulse – School-focused dashboard (new structure, same theme).
+// Neyvo – enterprise home: stats, AI status bar, recent calls, agents.
 
 import 'package:flutter/material.dart';
 
 import '../pulse_route_names.dart';
 import '../neyvo_pulse_api.dart';
-import '../../theme/spearia_theme.dart';
-import 'phone_numbers_page.dart';
+import '../theme/neyvo_theme.dart';
+import 'wallet_page.dart';
 
 class PulseDashboardPage extends StatefulWidget {
   const PulseDashboardPage({super.key});
@@ -15,364 +15,297 @@ class PulseDashboardPage extends StatefulWidget {
   State<PulseDashboardPage> createState() => _PulseDashboardPageState();
 }
 
-class _PulseDashboardPageState extends State<PulseDashboardPage> {
-  Map<String, dynamic>? _stats;
+class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTickerProviderStateMixin {
+  int? _activeAgents;
+  int? _callsThisMonth;
+  int? _creditsUsed;
+  double? _resolutionRatePct;
+  List<Map<String, dynamic>> _recentCalls = [];
+  List<Map<String, dynamic>> _recentAgents = [];
   bool _loading = true;
-  int? _callsTodayUsed;
-  int? _callsTodayCapacity;
-  final _campaignContactsController = TextEditingController(text: '1000');
-  int _campaignContacts = 1000;
-  List<Map<String, dynamic>>? _campaignScenarios;
-  bool _campaignLoading = false;
-  Map<String, dynamic>? _numbersSummary;
+  bool _onboardingBillingShown = false;
+  int _completedCallsTotal = 0;
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
-    _campaignContactsController.addListener(() {
-      final v = int.tryParse(_campaignContactsController.text.replaceAll(RegExp(r'\D'), ''));
-      if (v != null && v != _campaignContacts) setState(() => _campaignContacts = v);
-    });
-    _loadCampaignScenarios();
-    _loadNumbersSummary();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _load();
   }
 
   @override
   void dispose() {
-    _campaignContactsController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCampaignScenarios() async {
-    if (_campaignContacts < 1) return;
-    setState(() => _campaignLoading = true);
+  Future<void> _load() async {
+    setState(() => _loading = true);
     try {
-      final res = await NeyvoPulseApi.campaignEstimateQuick(contacts: _campaignContacts);
-      final list = (res['scenarios'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      if (mounted) setState(() {
-        _campaignScenarios = list;
-        _campaignLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _campaignLoading = false);
-    }
-  }
+      final agentsRes = await NeyvoPulseApi.listAgents();
+      final overviewRes = await NeyvoPulseApi.getAnalyticsOverview();
+      final callsRes = await NeyvoPulseApi.listCalls();
+      final accountRes = await NeyvoPulseApi.getAccountInfo();
 
-  Future<void> _loadNumbersSummary() async {
-    try {
-      final res = await NeyvoPulseApi.listNumbers();
-      if (mounted) setState(() => _numbersSummary = res);
-    } catch (_) {}
-  }
+      final agents = (agentsRes['agents'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final overview = overviewRes;
 
-  Future<void> _loadStats() async {
-    try {
-      final reports = await NeyvoPulseApi.reportsSummary();
-      final students = await NeyvoPulseApi.listStudents();
-      final calls = await NeyvoPulseApi.listCalls();
-      Map<String, dynamic>? successSummary;
-      try {
-        final res = await NeyvoPulseApi.getCallsSuccessSummary();
-        successSummary = res['success_summary'] as Map<String, dynamic>?;
-      } catch (_) {}
-      int callsUsed = 0;
-      int capacity = 0;
-      try {
-        final numbersRes = await NeyvoPulseApi.listNumbers();
-        final numbers = numbersRes['numbers'] as List? ?? [];
-        capacity = (numbersRes['total_daily_capacity'] as num?)?.toInt() ?? 0;
-        for (final n in numbers) {
-          callsUsed += (n['calls_today'] as num?)?.toInt() ?? 0;
-        }
-      } catch (_) {}
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month, 1);
+      final callsThisMonth = calls.where((c) {
+        final t = c['ended_at'] ?? c['created_at'];
+        if (t == null) return false;
+        final dt = t is DateTime ? t : DateTime.tryParse(t.toString());
+        return dt != null && !dt.isBefore(monthStart);
+      }).length;
+
+      final creditsUsed = (overview['credits_consumed'] as num?)?.toInt() ??
+          (overview['credits_used'] as num?)?.toInt();
+      final resolutionRate = (overview['resolution_rate'] as num?)?.toDouble() ??
+          (overview['resolution_rate_pct'] as num?)?.toDouble();
+
+      final recentCalls = calls.take(10).toList();
+      final activeAgentsList = agents.where((a) => (a['status'] as String?)?.toLowerCase() == 'active').toList();
+      final recentAgents = agents.take(3).toList();
+      final completedCallsTotal = calls.where((c) {
+        final st = (c['status'] as String?)?.toLowerCase();
+        if (st == 'completed') return true;
+        final endedAt = c['ended_at'];
+        return endedAt != null && st != 'failed';
+      }).length;
+      final onboardingBillingShown = accountRes['onboarding_billing_shown'] == true;
+
       if (mounted) {
         setState(() {
-          _stats = {
-            'total_students': (students['students'] as List?)?.length ?? 0,
-            'total_balance': reports['summary']?['total_balance'] ?? 0.0,
-            'total_calls': (calls['calls'] as List?)?.length ?? 0,
-            'overdue_count': reports['summary']?['overdue_count'] ?? 0,
-            'resolution_rate_pct': successSummary?['resolution_rate_pct'] ?? 0.0,
-            'calls_with_payment_received': successSummary?['calls_with_payment_received'] ?? 0,
-            'attributed_amount_total': successSummary?['attributed_amount_total'] ?? 0.0,
-          };
-          _callsTodayUsed = callsUsed;
-          _callsTodayCapacity = capacity;
+          _activeAgents = activeAgentsList.isEmpty ? agents.length : activeAgentsList.length;
+          _callsThisMonth = callsThisMonth;
+          _creditsUsed = creditsUsed ?? 0;
+          _resolutionRatePct = resolutionRate ?? 0.0;
+          _recentCalls = recentCalls;
+          _recentAgents = recentAgents;
+          _completedCallsTotal = completedCallsTotal;
+          _onboardingBillingShown = onboardingBillingShown;
           _loading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _dismissBillingHowItWorks() async {
+    setState(() => _onboardingBillingShown = true);
+    try {
+      await NeyvoPulseApi.updateAccountInfo({'onboarding_billing_shown': true});
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: _loadStats,
+      onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(SpeariaSpacing.lg),
+        padding: const EdgeInsets.all(24),
         children: [
-          Text(
-            'Dashboard',
-            style: SpeariaType.headlineLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Manage balances, reminders, and reach out to contacts.',
-            style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
-          ),
-          const SizedBox(height: SpeariaSpacing.xl),
-          
-          // Stats Cards
-          if (_loading)
-            const Center(child: Padding(padding: EdgeInsets.all(SpeariaSpacing.xl), child: CircularProgressIndicator()))
-          else if (_stats != null) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Contacts',
-                    value: '${_stats!['total_students']}',
-                    icon: Icons.school_outlined,
-                    color: SpeariaAura.primary,
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Home', style: NeyvoTextStyles.title),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Overview of your AI voice agents and call activity.',
+                    style: NeyvoTextStyles.body,
                   ),
-                ),
-                const SizedBox(width: SpeariaSpacing.md),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Total Balance',
-                    value: '\$${(_stats!['total_balance'] as num).toStringAsFixed(0)}',
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: SpeariaAura.accent,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: SpeariaSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Reaches',
-                    value: '${_stats!['total_calls']}',
-                    icon: Icons.phone_outlined,
-                    color: SpeariaAura.info,
-                  ),
-                ),
-                const SizedBox(width: SpeariaSpacing.md),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Overdue',
-                    value: '${_stats!['overdue_count']}',
-                    icon: Icons.warning_amber_outlined,
-                    color: SpeariaAura.warning,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: SpeariaSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Resolution rate',
-                    value: '${(_stats!['resolution_rate_pct'] as num).toStringAsFixed(1)}%',
-                    icon: Icons.check_circle_outline,
-                    color: SpeariaAura.success,
-                  ),
-                ),
-                const SizedBox(width: SpeariaSpacing.md),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Revenue from calls',
-                    value: '\$${(_stats!['attributed_amount_total'] as num).toStringAsFixed(0)}',
-                    icon: Icons.payments_outlined,
-                    color: SpeariaAura.accent,
-                  ),
-                ),
-              ],
-            ),
-            if (_callsTodayCapacity != null && _callsTodayCapacity! > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: SpeariaSpacing.md),
-                child: InkWell(
-                  onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.phoneNumbers),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: SpeariaAura.bgDark,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: SpeariaAura.border),
+                  const SizedBox(height: 24),
+
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.all(48),
+                      child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+                    )
+                  else ...[
+                    // Section 1: Stats row (4 cards)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final w = constraints.maxWidth;
+                        int cols = 4;
+                        if (w < 980) cols = 2;
+                        if (w < 520) cols = 1;
+                        final spacing = 24.0;
+                        final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
+
+                        final cards = <Widget>[
+                          _DashboardStatCard(
+                            label: 'Active Agents',
+                            value: '${_activeAgents ?? 0}',
+                            icon: Icons.smart_toy_outlined,
+                            color: NeyvoColors.teal,
+                          ),
+                          _DashboardStatCard(
+                            label: 'Calls This Month',
+                            value: '${_callsThisMonth ?? 0}',
+                            icon: Icons.call_outlined,
+                            color: NeyvoColors.info,
+                          ),
+                          InkWell(
+                            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                            borderRadius: BorderRadius.circular(NeyvoRadius.lg),
+                            child: _DashboardStatCard(
+                              label: 'Credits Used',
+                              value: '${_creditsUsed ?? 0}',
+                              icon: Icons.bolt_outlined,
+                              color: NeyvoColors.coral,
+                            ),
+                          ),
+                          _DashboardStatCard(
+                            label: 'Resolution Rate',
+                            value: '${(_resolutionRatePct ?? 0).toStringAsFixed(1)}%',
+                            icon: Icons.check_circle_outline,
+                            color: NeyvoColors.success,
+                          ),
+                        ];
+
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
+                        );
+                      },
                     ),
-                    child: Row(
+                    const SizedBox(height: 24),
+
+                    // How Neyvo billing works (show when no completed calls yet)
+                    if (!_onboardingBillingShown && _completedCallsTotal == 0) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'How Neyvo billing works',
+                              style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _dismissBillingHowItWorks,
+                            child: const Text('Dismiss'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Pay only for what you use. No monthly voice fees.',
+                        style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          int cols = 3;
+                          if (w < 980) cols = 1;
+                          final spacing = 16.0;
+                          final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
+
+                          final cards = <Widget>[
+                            NeyvoCard(
+                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.workspace_premium_outlined, color: NeyvoColors.teal, size: 28),
+                                  const SizedBox(height: 12),
+                                  Text('Plan', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+                                  const SizedBox(height: 4),
+                                  Text('Free, Pro, or Business. Unlock voice tiers and credit bonus.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  TextButton(
+                                    onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
+                                    child: const Text('Billing → Plan'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            NeyvoCard(
+                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.account_balance_wallet_outlined, color: NeyvoColors.teal, size: 28),
+                                  const SizedBox(height: 12),
+                                  Text('Wallet', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+                                  const SizedBox(height: 4),
+                                  Text('Buy credits in packs. Used per minute of call time.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                                    child: const Text('Add Credits'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            NeyvoCard(
+                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.record_voice_over_outlined, color: NeyvoColors.teal, size: 28),
+                                  const SizedBox(height: 12),
+                                  Text('Voice Quality', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+                                  const SizedBox(height: 4),
+                                  Text('Neutral, Natural, or Ultra. Set default in Billing.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
+                                  const SizedBox(height: 12),
+                                  TextButton(
+                                    onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
+                                    child: const Text('Billing → Voice Tier'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ];
+
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Section 2: Glowing AI status bar
+                    _AiStatusBar(pulseAnimation: _pulseAnimation),
+                    const SizedBox(height: 24),
+
+                    // Section 3: Two-column (60/40)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.phone_outlined, size: 20, color: SpeariaAura.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Reaches today: ${_callsTodayUsed ?? 0} / $_callsTodayCapacity capacity',
-                          style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+                        Expanded(
+                          flex: 60,
+                          child: _RecentCallsSection(calls: _recentCalls),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 40,
+                          child: _YourAgentsSection(
+                            agents: _recentAgents,
+                            onCreateAgent: () => Navigator.of(context).pushNamed(PulseRouteNames.agents),
+                            onAddCredits: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: SpeariaSpacing.xl),
-          ],
-          
-          // Quick Actions
-          Text(
-            'Quick Actions',
-            style: SpeariaType.titleLarge,
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Reach out',
-            subtitle: 'Reach out to contacts about balances, due dates, and late fees',
-            icon: Icons.phone_in_talk_outlined,
-            color: SpeariaAura.primary,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.outbound),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Contacts',
-            subtitle: 'View and manage your contact list',
-            icon: Icons.contacts_outlined,
-            color: SpeariaAura.accent,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.students),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Reminders',
-            subtitle: 'Schedule payment reminders',
-            icon: Icons.notifications_outlined,
-            color: SpeariaAura.info,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.reminders),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Reports',
-            subtitle: 'View financial reports and analytics',
-            icon: Icons.assessment_outlined,
-            color: SpeariaAura.success,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.reports),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Reach history',
-            subtitle: 'View call history, transcripts, and outcomes',
-            icon: Icons.history,
-            color: SpeariaAura.info,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.callHistory),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'AI Insights',
-            subtitle: 'Common questions, payment barriers, recommendations',
-            icon: Icons.insights_outlined,
-            color: SpeariaAura.primary,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.aiInsights),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          _DashboardCard(
-            title: 'Assistant Training',
-            subtitle: 'FAQ and policy so the assistant knows your school',
-            icon: Icons.menu_book_outlined,
-            color: SpeariaAura.accent,
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.training),
-          ),
-          const SizedBox(height: SpeariaSpacing.xl),
-          // Campaign Planner
-          Text('Campaign Planner', style: SpeariaType.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            'See how many days to complete a campaign and how adding numbers speeds it up.',
-            style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
-          ),
-          const SizedBox(height: SpeariaSpacing.md),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: SpeariaAura.border),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(SpeariaSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('How many contacts do you need to call?', style: SpeariaType.titleMedium),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 120,
-                        child: TextField(
-                          controller: _campaignContactsController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadCampaignScenarios(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: _campaignLoading ? null : () => _loadCampaignScenarios(),
-                        child: _campaignLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Update'),
-                      ),
-                    ],
-                  ),
-                  if (_numbersSummary != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Overall today: ${_callsTodayUsed ?? 0} / ${_callsTodayCapacity ?? 0} calls used across ${(_numbersSummary!['total_numbers'] as num?)?.toInt() ?? 0} numbers',
-                      style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
-                    ),
-                  ],
-                  if (_campaignScenarios != null && _campaignScenarios!.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Setup')),
-                          DataColumn(label: Text('Daily capacity')),
-                          DataColumn(label: Text('Days to complete')),
-                          DataColumn(label: Text('Monthly cost')),
-                          DataColumn(label: Text('Action')),
-                        ],
-                        rows: _campaignScenarios!.map((s) {
-                          final numbers = (s['numbers'] as num?)?.toInt() ?? 0;
-                          final capacity = (s['daily_capacity'] as num?)?.toInt() ?? 0;
-                          final days = (s['days'] as num?)?.toInt() ?? 0;
-                          final cost = s['monthly_cost']?.toString() ?? '\$0';
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(numbers == 1 ? 'Your current 1 number' : '+ ${numbers - 1} more number${numbers > 2 ? 's' : ''}')),
-                              DataCell(Text('$capacity/day')),
-                              DataCell(Text('$days days')),
-                              DataCell(Text(cost)),
-                              DataCell(
-                                TextButton(
-                                  onPressed: () {
-                                    showBuyNumberModal(context, onDone: () {
-                                      _loadStats();
-                                      _loadNumbersSummary();
-                                      _loadCampaignScenarios();
-                                    });
-                                  },
-                                  child: const Text('Add number'),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
                     ),
                   ],
                 ],
@@ -385,13 +318,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   }
 }
 
-class _StatCard extends StatelessWidget {
+class _DashboardStatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
   final Color color;
 
-  const _StatCard({
+  const _DashboardStatCard({
     required this.label,
     required this.value,
     required this.icon,
@@ -400,132 +333,375 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(SpeariaSpacing.lg),
-          decoration: SpeariaFX.statCard(accentColor: color),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return NeyvoCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(icon, color: color, size: 24),
-                  Text(
-                    value,
-                    style: SpeariaType.headlineMedium.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: SpeariaSpacing.sm),
-              Text(
-                label,
-                style: SpeariaType.bodySmall.copyWith(
-                  color: SpeariaAura.textSecondary,
-                ),
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
               ),
             ],
           ),
-        ),
-        // Left accent border
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          child: Container(
-            width: 4,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(SpeariaRadius.md),
-                bottomLeft: Radius.circular(SpeariaRadius.md),
-              ),
-            ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.textPrimary, fontSize: 28),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _DashboardCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
+class _AiStatusBar extends StatelessWidget {
+  final Animation<double> pulseAnimation;
 
-  const _DashboardCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
+  const _AiStatusBar({required this.pulseAnimation});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(SpeariaRadius.md),
-        child: Stack(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(SpeariaSpacing.lg),
-              decoration: SpeariaFX.statCard(accentColor: color),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(SpeariaSpacing.md),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(SpeariaRadius.sm),
+    return NeyvoCard(
+      glowing: true,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Row(
+        children: [
+          AnimatedBuilder(
+            animation: pulseAnimation,
+            builder: (context, child) {
+              return Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: NeyvoColors.teal.withOpacity(pulseAnimation.value),
+                  boxShadow: [
+                    BoxShadow(
+                      color: NeyvoColors.teal.withOpacity(0.5),
+                      blurRadius: 6,
                     ),
-                    child: Icon(icon, color: color, size: 28),
-                  ),
-                  const SizedBox(width: SpeariaSpacing.lg),
-                  Expanded(
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'NEYVO AI ACTIVE',
+            style: NeyvoTextStyles.label.copyWith(
+              color: NeyvoColors.teal,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'All systems operational',
+              style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          Text(
+            'Uptime: 99.9%',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentCallsSection extends StatelessWidget {
+  final List<Map<String, dynamic>> calls;
+
+  const _RecentCallsSection({required this.calls});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Recent Calls', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 12),
+        NeyvoCard(
+          padding: EdgeInsets.zero,
+          child: calls.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: SpeariaType.titleMedium),
+                        Icon(Icons.phone_in_talk_outlined, size: 48, color: NeyvoColors.textMuted),
+                        const SizedBox(height: 12),
+                        Text('No calls yet', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textSecondary)),
                         const SizedBox(height: 4),
                         Text(
-                          subtitle,
-                          style: SpeariaType.bodySmall,
+                          'Assign a phone number to an agent to start receiving calls.',
+                          style: NeyvoTextStyles.body,
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: SpeariaAura.textMuted),
-                ],
-              ),
-            ),
-            // Left accent border
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(SpeariaRadius.md),
-                    bottomLeft: Radius.circular(SpeariaRadius.md),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header row
+                    Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NeyvoColors.borderSubtle))),
+                      child: Row(
+                        children: [
+                          Expanded(flex: 2, child: _tableHeader('Agent')),
+                          Expanded(flex: 1, child: _tableHeader('Direction')),
+                          Expanded(flex: 1, child: _tableHeader('Duration')),
+                          Expanded(flex: 1, child: _tableHeader('Outcome')),
+                          Expanded(flex: 1, child: _tableHeader('Time')),
+                        ],
+                      ),
+                    ),
+                    ...calls.asMap().entries.map((e) => _callRowWidget(context, e.value)),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _tableHeader(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Text(
+        text.toUpperCase(),
+        style: NeyvoTextStyles.label.copyWith(
+          color: NeyvoColors.textMuted,
+          fontSize: 12,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  static Widget _callRowWidget(BuildContext context, Map<String, dynamic> c) {
+    final agentName = c['agent_name'] ?? c['agent_id'] ?? '—';
+    final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
+    final duration = (c['duration_seconds'] as num?)?.toInt() ?? 0;
+    final outcome = (c['outcome'] as String?)?.toLowerCase() ?? '—';
+    final ended = c['ended_at'] ?? c['created_at'];
+    final timeStr = ended != null
+        ? (ended is DateTime
+            ? '${ended.month}/${ended.day} ${ended.hour}:${ended.minute.toString().padLeft(2, '0')}'
+            : ended.toString().length > 16
+                ? ended.toString().substring(0, 16)
+                : ended.toString())
+        : '—';
+
+    final isResolved = outcome.contains('resolved') || outcome == 'completed';
+    final outcomeColor = isResolved ? NeyvoColors.success : NeyvoColors.error;
+    final dirBg = dir == 'inbound' ? NeyvoColors.info.withOpacity(0.1) : NeyvoColors.teal.withOpacity(0.1);
+    final dirColor = dir == 'inbound' ? NeyvoColors.info : NeyvoColors.teal;
+    final dirLabel = dir == 'inbound' ? '← Inbound' : '→ Outbound';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.callHistory),
+        hoverColor: NeyvoColors.bgHover,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NeyvoColors.borderSubtle))),
+          child: Row(
+            children: [
+              Expanded(flex: 2, child: _cell(agentName.toString(), primary: true)),
+              Expanded(
+                flex: 1,
+                child: _cell(
+                  '',
+                  custom: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: dirBg,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: dirColor.withOpacity(0.2)),
+                    ),
+                    child: Text(dirLabel, style: NeyvoTextStyles.micro.copyWith(color: dirColor)),
                   ),
                 ),
               ),
-            ),
-          ],
+              Expanded(flex: 1, child: _cell('${duration}s')),
+              Expanded(
+                flex: 1,
+                child: _cell(
+                  '',
+                  custom: Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: outcomeColor),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(outcome.isEmpty ? '—' : outcome, style: NeyvoTextStyles.micro.copyWith(color: outcomeColor)),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(flex: 1, child: _cell(timeStr)),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  static Widget _cell(String text, {bool primary = false, Widget? custom}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: custom ??
+          Text(
+            text,
+            style: primary
+                ? NeyvoTextStyles.bodyPrimary
+                : NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+            overflow: TextOverflow.ellipsis,
+          ),
+    );
+  }
+}
+
+class _YourAgentsSection extends StatelessWidget {
+  final List<Map<String, dynamic>> agents;
+  final VoidCallback onCreateAgent;
+  final VoidCallback onAddCredits;
+
+  const _YourAgentsSection({
+    required this.agents,
+    required this.onCreateAgent,
+    required this.onAddCredits,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Your Agents', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 12),
+        NeyvoCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (agents.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'No agents yet. Create one to get started.',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+                  ),
+                )
+              else
+                ...agents.map((a) {
+                  final name = a['name'] as String? ?? 'Unnamed';
+                  final status = (a['status'] as String?)?.toLowerCase() ?? 'draft';
+                  final industry = (a['industry'] as String?) ?? '';
+                  final id = a['id'] as String?;
+                  final dotColor = status == 'active'
+                      ? NeyvoColors.success
+                      : status == 'inactive'
+                          ? NeyvoColors.textMuted
+                          : NeyvoColors.warning;
+                  return InkWell(
+                    onTap: id != null
+                        ? () => Navigator.of(context).pushNamed(PulseRouteNames.agentDetail, arguments: id)
+                        : null,
+                    hoverColor: NeyvoColors.bgHover.withOpacity(0.5),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: dotColor,
+                              boxShadow: status == 'active'
+                                  ? [BoxShadow(color: NeyvoColors.success.withOpacity(0.6), blurRadius: 6)]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w500)),
+                                if (industry.isNotEmpty)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: NeyvoColors.borderSubtle.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      industry,
+                                      style: NeyvoTextStyles.micro,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios, size: 12, color: NeyvoColors.textMuted),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onCreateAgent,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NeyvoColors.teal,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: const Text('+ Create Agent'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onAddCredits,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: NeyvoColors.textSecondary,
+                        side: const BorderSide(color: NeyvoColors.borderDefault),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                      ),
+                      child: const Text('+ Add Credits'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

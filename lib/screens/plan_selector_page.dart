@@ -5,7 +5,7 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
-import '../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 
 class PlanSelectorPage extends StatefulWidget {
   const PlanSelectorPage({super.key});
@@ -127,7 +127,7 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text('Loading plans…', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted)),
+            Text('Loading plans…', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted)),
           ],
         ),
       );
@@ -137,7 +137,7 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.error), textAlign: TextAlign.center),
+            Text(_error!, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.error), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton(onPressed: _load, child: const Text('Retry')),
           ],
@@ -145,18 +145,20 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Choose your plan', style: SpeariaType.headlineLarge),
-          const SizedBox(height: 8),
-          Text(
-            'Only wallet top-ups and monthly subscription charge your card. Everything else uses your credit wallet.',
-            style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
-          ),
-          const SizedBox(height: 32),
+    return Scaffold(
+      backgroundColor: NeyvoTheme.bgPrimary,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Choose your plan', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: NeyvoSpacing.sm),
+            Text(
+              'Only wallet top-ups and monthly subscription charge your card. Everything else uses your credit wallet.',
+              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: NeyvoSpacing.xl),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -168,6 +170,7 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -179,11 +182,12 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
     final showBonus = isPro || isBusiness;
 
     return Card(
+      color: NeyvoTheme.bgCard,
       elevation: isCurrent ? 4 : 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isCurrent ? SpeariaAura.primary : SpeariaAura.border,
+          color: isCurrent ? NeyvoTheme.teal : NeyvoTheme.border,
           width: isCurrent ? 2 : 1,
         ),
       ),
@@ -199,19 +203,19 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: SpeariaAura.primary.withOpacity(0.15),
+                      color: NeyvoTheme.teal.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(badge, style: SpeariaType.labelMedium.copyWith(color: SpeariaAura.primary, fontWeight: FontWeight.w600)),
+                    child: Text(badge, style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.teal, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
-            Text(title, style: SpeariaType.titleLarge),
+            Text(title, style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: 4),
-            Text(price, style: SpeariaType.headlineMedium.copyWith(color: SpeariaAura.primary)),
+            Text(price, style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.teal)),
             if (showBonus) ...[
               const SizedBox(height: 12),
-              Text(bonusText, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+              Text(bonusText, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
             ],
             const SizedBox(height: 20),
             ...features.map((f) => Padding(
@@ -219,9 +223,9 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.check_circle_outline, size: 20, color: SpeariaAura.success),
+                      Icon(Icons.check_circle_outline, size: 20, color: NeyvoTheme.success),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(f, style: SpeariaType.bodySmall)),
+                      Expanded(child: Text(f, style: NeyvoType.bodySmall)),
                     ],
                   ),
                 )),
@@ -229,7 +233,7 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
             FilledButton(
               onPressed: _actionPlan != null ? null : () => _selectPlan(planKey),
               style: FilledButton.styleFrom(
-                backgroundColor: isCurrent ? SpeariaAura.textMuted : (isPopular ? SpeariaAura.primary : null),
+                backgroundColor: isCurrent ? NeyvoTheme.textMuted : (isPopular ? NeyvoTheme.teal : null),
               ),
               child: Text(
                 _actionPlan == planKey ? 'Updating…' : isCurrent ? 'Current plan' : planKey == 'free' ? 'Downgrade' : 'Select plan',

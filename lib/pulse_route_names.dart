@@ -25,4 +25,18 @@ abstract class PulseRouteNames {
   static const String phoneNumbers = '/pulse/phone-numbers';
   static const String subscriptionPlan = '/pulse/subscription-plan';
   static const String addons = '/pulse/addons';
+  static const String agents = '/pulse/agents';
+  static const String agentDetail = '/pulse/agent-detail';
+  static const String onboarding = '/onboarding';
+  static const String workflows = '/pulse/workflows';
+  static const String projects = '/pulse/projects';
+  static const String projectDetail = '/pulse/project-detail';
+  static const String voiceLibrary = '/pulse/voice-library';
+  static const String exports = '/pulse/exports';
+  static const String analytics = '/pulse/analytics';
+
+  // Admin-only (not in sidebar; gate by admin email when ready)
+  static const String adminConsole = '/admin/console';
+  static const String adminAuditLog = '/admin/audit-log';
+  static const String adminBackendTest = '/admin/backend-test';
 }

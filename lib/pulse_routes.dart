@@ -1,7 +1,8 @@
-// lib/neyvo_pulse/pulse_routes.dart
+// lib/pulse_routes.dart
 import 'package:flutter/material.dart';
 
 import 'pulse_route_names.dart';
+import 'screens/agents_list_page.dart';
 import 'screens/outbound_calls_page.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
@@ -19,42 +20,69 @@ import 'screens/integration_page.dart';
 import 'screens/campaigns_page.dart';
 import 'screens/template_scripts_page.dart';
 import 'screens/plan_selector_page.dart';
+import 'screens/onboarding_page.dart';
+import 'screens/agent_detail_page.dart';
+import 'screens/projects_list_page.dart';
+import 'screens/project_detail_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case PulseRouteNames.auth:
         return MaterialPageRoute(builder: (_) => const PulseAuthPage());
+      case PulseRouteNames.onboarding:
+        return MaterialPageRoute(builder: (_) => const OnboardingPage());
+      case PulseRouteNames.agents:
+        // Keep drawer visible by routing through PulseShell.
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.agents));
+      case PulseRouteNames.agentDetail:
+        final agentId = settings.arguments as String? ?? '';
+        return MaterialPageRoute(builder: (_) => AgentDetailPage(agentId: agentId));
+      case PulseRouteNames.projects:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.projects));
+      case PulseRouteNames.voiceLibrary:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceLibrary));
+      case PulseRouteNames.exports:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.exports));
+      case PulseRouteNames.analytics:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+      case PulseRouteNames.projectDetail:
+        final projectId = settings.arguments as String? ?? '';
+        return MaterialPageRoute(builder: (_) => ProjectDetailPage(projectId: projectId));
       case PulseRouteNames.dashboard:
       case PulseRouteNames.campaigns:
-      case PulseRouteNames.templateScripts:
         return MaterialPageRoute(builder: (_) => const PulseShell());
+      case PulseRouteNames.templateScripts:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.templateScripts));
       case PulseRouteNames.wallet:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.wallet));
       case PulseRouteNames.usage:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.usage));
       case PulseRouteNames.voiceTier:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceTier));
+        // Voice tier lives under Settings → Billing (inside PulseShell).
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.settings));
       case PulseRouteNames.developerConsole:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.developerConsole));
+        return MaterialPageRoute(builder: (_) => const BackendTestPage());
       case PulseRouteNames.subscriptionPlan:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan));
+        // Plan selection lives under Settings → Billing (inside PulseShell).
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.settings));
       case PulseRouteNames.addons:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.addons));
       case PulseRouteNames.outbound:
         return MaterialPageRoute(builder: (_) => const OutboundCallsPage());
       case PulseRouteNames.students:
-        return MaterialPageRoute(builder: (_) => const StudentsListPage());
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.students));
       case PulseRouteNames.reminders:
         return MaterialPageRoute(builder: (_) => const RemindersPage());
       case PulseRouteNames.reports:
         return MaterialPageRoute(builder: (_) => const ReportsPage());
       case PulseRouteNames.settings:
-        return MaterialPageRoute(builder: (_) => const PulseSettingsPage());
+        // Settings must stay inside PulseShell so the drawer remains visible.
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.settings));
       case PulseRouteNames.backendTest:
         return MaterialPageRoute(builder: (_) => const BackendTestPage());
       case PulseRouteNames.callHistory:
-        return MaterialPageRoute(builder: (_) => const CallHistoryPage());
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.callHistory));
       case PulseRouteNames.payments:
         return MaterialPageRoute(builder: (_) => const PaymentsPage());
       case PulseRouteNames.aiInsights:
@@ -65,11 +93,13 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const AuditLogPage());
       case PulseRouteNames.integration:
         return MaterialPageRoute(builder: (_) => const IntegrationPage());
+      case PulseRouteNames.phoneNumbers:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.phoneNumbers));
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
             body: Center(
-              child: Text('Pulse: route not found', style: TextStyle(fontSize: 16)),
+              child: Text('Page not found', style: TextStyle(fontSize: 16)),
             ),
           ),
         );

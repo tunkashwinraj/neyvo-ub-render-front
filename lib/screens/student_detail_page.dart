@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../../api/spearia_api.dart' show ApiException;
-import '../../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 
 class StudentDetailPage extends StatefulWidget {
   final String studentId;
@@ -20,6 +20,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   Map<String, dynamic>? _student;
   List<dynamic> _payments = [];
   List<dynamic> _calls = [];
+  String _pastCallsSummary = '';
   bool _loading = true;
   String? _error;
   late TabController _tabController;
@@ -30,9 +31,13 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   final _balance = TextEditingController();
   final _dueDate = TextEditingController();
   final _lateFee = TextEditingController();
+  final _studentId = TextEditingController();
   final _notes = TextEditingController();
   bool _saving = false;
   bool _calling = false;
+
+  List<Map<String, dynamic>> _agents = [];
+  String? _selectedAgentId;
 
   @override
   void initState() {
@@ -50,6 +55,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     _balance.dispose();
     _dueDate.dispose();
     _lateFee.dispose();
+    _studentId.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -63,13 +69,28 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       final studentRes = await NeyvoPulseApi.getStudent(widget.studentId);
       final paymentsRes = await NeyvoPulseApi.listPayments(studentId: widget.studentId);
       final callsRes = await NeyvoPulseApi.listCalls(studentId: widget.studentId);
-      
+      List<Map<String, dynamic>> agentsList = [];
+      try {
+        final agentsRes = await NeyvoPulseApi.listAgents();
+        agentsList = (agentsRes['agents'] as List? ?? []).cast<Map<String, dynamic>>();
+      } catch (_) {}
+      String pastSummary = '';
+      List<dynamic> callsList = callsRes['calls'] as List? ?? [];
+      try {
+        final historyRes = await NeyvoPulseApi.getStudentCallHistory(widget.studentId);
+        pastSummary = historyRes['past_calls_summary']?.toString() ?? '';
+        final historyCalls = historyRes['calls'] as List? ?? [];
+        if (historyCalls.isNotEmpty) callsList = historyCalls;
+      } catch (_) {}
       final s = studentRes['student'] as Map<String, dynamic>? ?? {};
       if (mounted) {
         setState(() {
           _student = s;
           _payments = paymentsRes['payments'] as List? ?? [];
-          _calls = callsRes['calls'] as List? ?? [];
+          _calls = callsList;
+          _pastCallsSummary = pastSummary;
+          _agents = agentsList;
+          _selectedAgentId ??= agentsList.isNotEmpty ? (agentsList.first['id'] ?? agentsList.first['agent_id'])?.toString() : null;
           _loading = false;
           _name.text = s['name']?.toString() ?? '';
           _phone.text = s['phone']?.toString() ?? '';
@@ -77,6 +98,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
           _balance.text = s['balance']?.toString() ?? '';
           _dueDate.text = s['due_date']?.toString() ?? '';
           _lateFee.text = s['late_fee']?.toString() ?? '';
+          _studentId.text = s['student_id']?.toString() ?? '';
           _notes.text = s['notes']?.toString() ?? '';
         });
       }
@@ -100,6 +122,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
+        schoolStudentId: _studentId.text.trim().isEmpty ? null : _studentId.text.trim(),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       );
       if (mounted) {
@@ -123,9 +146,16 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone and name required')));
       return;
     }
+
+    final agentId = (_selectedAgentId ?? (_agents.isNotEmpty ? (_agents.first['id'] ?? _agents.first['agent_id'])?.toString() : null))?.trim();
+    if (agentId == null || agentId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Create/select an agent before calling')));
+      return;
+    }
     setState(() => _calling = true);
     try {
       final res = await NeyvoPulseApi.startOutboundCall(
+        agentId: agentId,
         studentPhone: phone,
         studentName: name,
         studentId: widget.studentId,
@@ -163,7 +193,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: SpeariaAura.error),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -202,12 +232,12 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Amount', hintText: '\$100.00'),
               ),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(
                 controller: methodC,
                 decoration: const InputDecoration(labelText: 'Payment Method', hintText: 'Credit Card, Cash, etc.'),
               ),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(
                 controller: noteC,
                 maxLines: 2,
@@ -254,7 +284,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Contact')),
-        body: Center(child: Text(_error!, style: TextStyle(color: SpeariaAura.error))),
+        body: Center(child: Text(_error!, style: TextStyle(color: NeyvoColors.error))),
       );
     }
     
@@ -296,33 +326,33 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         children: [
           // Details Tab
           ListView(
-            padding: const EdgeInsets.all(SpeariaSpacing.lg),
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
             children: [
               // Financial Summary Card
               if (balance.isNotEmpty || dueDate.isNotEmpty)
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(SpeariaSpacing.lg),
+                    padding: const EdgeInsets.all(NeyvoSpacing.lg),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Financial Summary', style: SpeariaType.titleLarge),
-                        const SizedBox(height: SpeariaSpacing.md),
+                        Text('Financial Summary', style: NeyvoType.titleLarge),
+                        const SizedBox(height: NeyvoSpacing.md),
                         if (balance.isNotEmpty)
-                          _InfoRow(label: 'Balance', value: balance, color: SpeariaAura.accent),
+                          _InfoRow(label: 'Balance', value: balance, color: NeyvoTheme.accent),
                         if (dueDate.isNotEmpty)
-                          _InfoRow(label: 'Due Date', value: dueDate, color: SpeariaAura.info),
+                          _InfoRow(label: 'Due Date', value: dueDate, color: NeyvoColors.info),
                         if (_lateFee.text.trim().isNotEmpty)
-                          _InfoRow(label: 'Late Fee', value: _lateFee.text.trim(), color: SpeariaAura.warning),
+                          _InfoRow(label: 'Late Fee', value: _lateFee.text.trim(), color: NeyvoColors.warning),
                       ],
                     ),
                   ),
                 ),
-              const SizedBox(height: SpeariaSpacing.lg),
+              const SizedBox(height: NeyvoSpacing.lg),
               
               // Quick Actions
-              Text('Quick Actions', style: SpeariaType.titleMedium),
-              const SizedBox(height: SpeariaSpacing.md),
+              Text('Quick Actions', style: NeyvoType.titleMedium),
+              const SizedBox(height: NeyvoSpacing.md),
               Row(
                 children: [
                   Expanded(
@@ -332,7 +362,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                       label: const Text('Call'),
                     ),
                   ),
-                  const SizedBox(width: SpeariaSpacing.md),
+                  const SizedBox(width: NeyvoSpacing.md),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _addPayment,
@@ -342,25 +372,27 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ),
                 ],
               ),
-              const SizedBox(height: SpeariaSpacing.xl),
+              const SizedBox(height: NeyvoSpacing.xl),
               
               // Edit Form
-              Text('Contact information', style: SpeariaType.titleMedium),
-              const SizedBox(height: SpeariaSpacing.md),
+              Text('Contact information', style: NeyvoType.titleMedium),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(controller: _studentId, decoration: const InputDecoration(labelText: 'Student ID (school internal)', hintText: 'Optional')),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _balance, decoration: const InputDecoration(labelText: 'Balance')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _dueDate, decoration: const InputDecoration(labelText: 'Due date')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _lateFee, decoration: const InputDecoration(labelText: 'Late fee')),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _notes, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes')),
-              const SizedBox(height: SpeariaSpacing.xl),
+              const SizedBox(height: NeyvoSpacing.xl),
               FilledButton(
                 onPressed: _saving ? null : _save,
                 child: _saving 
@@ -376,10 +408,10 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.payment_outlined, size: 64, color: SpeariaAura.textMuted),
-                      const SizedBox(height: SpeariaSpacing.md),
-                      Text('No payments yet', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted)),
-                      const SizedBox(height: SpeariaSpacing.lg),
+                      Icon(Icons.payment_outlined, size: 64, color: NeyvoColors.textMuted),
+                      const SizedBox(height: NeyvoSpacing.md),
+                      Text('No payments yet', style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted)),
+                      const SizedBox(height: NeyvoSpacing.lg),
                       FilledButton.icon(
                         onPressed: _addPayment,
                         icon: const Icon(Icons.add),
@@ -389,12 +421,12 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(SpeariaSpacing.lg),
+                  padding: const EdgeInsets.all(NeyvoSpacing.lg),
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Payment History', style: SpeariaType.titleLarge),
+                        Text('Payment History', style: NeyvoType.titleLarge),
                         FilledButton.icon(
                           onPressed: _addPayment,
                           icon: const Icon(Icons.add, size: 18),
@@ -402,26 +434,26 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                         ),
                       ],
                     ),
-                    const SizedBox(height: SpeariaSpacing.md),
+                    const SizedBox(height: NeyvoSpacing.md),
                     ..._payments.map((p) {
                       final amount = p['amount']?.toString() ?? '—';
                       final method = p['method']?.toString() ?? '';
                       final date = p['created_at']?.toString() ?? p['date']?.toString() ?? '';
                       final note = p['note']?.toString() ?? '';
                       return Card(
-                        margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
+                        margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: SpeariaAura.success.withOpacity(0.1),
-                            child: Icon(Icons.payment, color: SpeariaAura.success),
+                            backgroundColor: NeyvoColors.success.withOpacity(0.1),
+                            child: Icon(Icons.payment, color: NeyvoColors.success),
                           ),
-                          title: Text(amount, style: SpeariaType.titleMedium.copyWith(color: SpeariaAura.success)),
+                          title: Text(amount, style: NeyvoType.titleMedium.copyWith(color: NeyvoColors.success)),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (method.isNotEmpty) Text('Method: $method'),
                               if (date.isNotEmpty) Text('Date: $date'),
-                              if (note.isNotEmpty) Text(note, style: SpeariaType.bodySmall),
+                              if (note.isNotEmpty) Text(note, style: NeyvoType.bodySmall),
                             ],
                           ),
                         ),
@@ -430,82 +462,118 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ],
                 ),
           
-          // Calls Tab
-          _calls.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.phone_outlined, size: 64, color: SpeariaAura.textMuted),
-                      const SizedBox(height: SpeariaSpacing.md),
-                      Text('No calls yet', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted)),
-                      const SizedBox(height: SpeariaSpacing.lg),
-                      FilledButton.icon(
-                        onPressed: _call,
-                        icon: const Icon(Icons.phone),
-                        label: const Text('Start Call'),
-                      ),
-                    ],
+          // Calls Tab (Call History + Past Calls Summary)
+          ListView(
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Call History', style: NeyvoType.titleLarge),
+                  FilledButton.icon(
+                    onPressed: _call,
+                    icon: const Icon(Icons.phone, size: 18),
+                    label: const Text('New Call'),
                   ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(SpeariaSpacing.lg),
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ],
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              if (_calls.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Call History', style: SpeariaType.titleLarge),
+                        Icon(Icons.phone_outlined, size: 64, color: NeyvoColors.textMuted),
+                        const SizedBox(height: NeyvoSpacing.md),
+                        Text('No calls yet', style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted)),
+                        const SizedBox(height: NeyvoSpacing.lg),
                         FilledButton.icon(
                           onPressed: _call,
-                          icon: const Icon(Icons.phone, size: 18),
-                          label: const Text('New Call'),
+                          icon: const Icon(Icons.phone),
+                          label: const Text('Start Call'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: SpeariaSpacing.md),
-                    ..._calls.map((c) {
-                      final status = c['status']?.toString() ?? 'unknown';
-                      final date = c['created_at']?.toString() ?? c['date']?.toString() ?? '';
-                      final duration = c['duration']?.toString() ?? '';
-                      final transcript = c['transcript']?.toString() ?? '';
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
-                        child: ExpansionTile(
-                          leading: CircleAvatar(
-                            backgroundColor: _getStatusColor(status).withOpacity(0.1),
-                            child: Icon(Icons.phone, color: _getStatusColor(status)),
-                          ),
-                          title: Text('Call ${status}', style: SpeariaType.titleMedium),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (date.isNotEmpty) Text('Date: $date'),
-                              if (duration.isNotEmpty) Text('Duration: $duration'),
-                            ],
-                          ),
-                          children: [
-                            if (transcript.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(SpeariaSpacing.md),
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(SpeariaSpacing.md),
-                                  decoration: BoxDecoration(
-                                    color: SpeariaAura.bgDark,
-                                    borderRadius: BorderRadius.circular(SpeariaRadius.sm),
-                                  ),
-                                  child: Text(
-                                    transcript,
-                                    style: SpeariaType.bodySmall,
-                                  ),
-                                ),
+                  ),
+                )
+              else
+                ..._calls.map((c) {
+                  final status = c['status']?.toString() ?? c['outcome']?.toString() ?? 'unknown';
+                  final date = c['date']?.toString() ?? c['created_at']?.toString() ?? '';
+                  final duration = c['duration_seconds']?.toString() ?? c['duration']?.toString() ?? '';
+                  final outcome = c['outcome']?.toString() ?? status;
+                  final agentName = c['agent_name']?.toString() ?? '';
+                  final credits = c['credits_charged']?.toString() ?? '';
+                  final transcript = c['transcript']?.toString() ?? '';
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
+                    child: ExpansionTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _getStatusColor(outcome).withOpacity(0.1),
+                        child: Icon(Icons.phone, color: _getStatusColor(outcome)),
+                      ),
+                      title: Text(outcome.isNotEmpty ? outcome : 'Call', style: NeyvoType.titleMedium),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (date.isNotEmpty) Text('Date: $date'),
+                          if (duration.isNotEmpty) Text('Duration: ${duration}s'),
+                          if (agentName.isNotEmpty) Text('Agent: $agentName'),
+                          if (credits.isNotEmpty) Text('Credits: $credits'),
+                        ],
+                      ),
+                      children: [
+                        if (transcript.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(NeyvoSpacing.md),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(NeyvoSpacing.md),
+                              decoration: BoxDecoration(
+                                color: NeyvoColors.bgRaised,
+                                borderRadius: BorderRadius.circular(NeyvoRadius.sm),
                               ),
-                          ],
-                        ),
-                      );
-                    }),
+                              child: Text(transcript, style: NeyvoType.bodySmall),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+              const SizedBox(height: NeyvoSpacing.lg),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(NeyvoSpacing.md),
+                decoration: BoxDecoration(
+                  color: NeyvoColors.bgRaised,
+                  border: Border.all(color: NeyvoColors.borderDefault),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Past Calls Summary (injected into next call):',
+                      style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      _pastCallsSummary.isEmpty
+                          ? 'No previous calls yet. This will fill after the first call.'
+                          : _pastCallsSummary,
+                      style: NeyvoType.bodySmall.copyWith(
+                        color: NeyvoColors.textSecondary,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -515,14 +583,14 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     switch (status.toLowerCase()) {
       case 'completed':
       case 'success':
-        return SpeariaAura.success;
+        return NeyvoColors.success;
       case 'failed':
       case 'error':
-        return SpeariaAura.error;
+        return NeyvoColors.error;
       case 'pending':
-        return SpeariaAura.warning;
+        return NeyvoColors.warning;
       default:
-        return SpeariaAura.textMuted;
+        return NeyvoColors.textMuted;
     }
   }
 }
@@ -537,12 +605,12 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
+      padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary)),
-          Text(value, style: SpeariaType.titleMedium.copyWith(color: color, fontWeight: FontWeight.w600)),
+          Text(label, style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textSecondary)),
+          Text(value, style: NeyvoType.titleMedium.copyWith(color: color, fontWeight: FontWeight.w600)),
         ],
       ),
     );

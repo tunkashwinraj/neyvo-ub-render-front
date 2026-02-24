@@ -34,15 +34,189 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> health() async =>
       SpeariaApi.getJsonMap('/api/pulse/health');
 
-  /// GET /api/pulse/account – account_id and account_name for drawer/header.
+  /// GET /api/pulse/account – account_id (short 6–8 digit, for display and API), account_name, onboarding_completed,
+  /// surfaces_enabled, active_surface, wallet_credits. Optional: org_doc_id or business_doc_id (Firestore doc id for
+  /// real-time listener), org_collection; primary_phone_e164, primary_phone_number_id (for Phone Numbers page).
   static Future<Map<String, dynamic>> getAccountInfo() async => _get('/api/pulse/account');
 
-  // Students
-  static Future<Map<String, dynamic>> listStudents() async =>
-      _get('/api/pulse/students');
+  /// PATCH /api/pulse/account – update onboarding_completed, active_surface, surfaces_enabled, name.
+  /// Uses _patch so account_id is sent (same org as GET /account).
+  static Future<Map<String, dynamic>> updateAccountInfo(Map<String, dynamic> body) async {
+    return _patch('/api/pulse/account', body);
+  }
+
+  /// POST /api/pulse/account/link – link current user (X-User-Id) to an account. Body: { account_id }.
+  /// Does not use _post so we send only the new account_id (backend uses X-User-Id).
+  static Future<Map<String, dynamic>> linkUserToAccount(String accountId) async {
+    return SpeariaApi.postJsonMap('/api/pulse/account/link', body: {'account_id': accountId.trim()});
+  }
+
+  // Unified dashboard: agents (GET/POST /api/agents)
+  static Future<Map<String, dynamic>> listAgents({String? direction, String? industry, String? status}) async {
+    final params = <String, dynamic>{};
+    if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
+    if (direction != null && direction.isNotEmpty) params['direction'] = direction;
+    if (industry != null && industry.isNotEmpty) params['industry'] = industry;
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    return SpeariaApi.getJsonMap('/api/agents', params: params);
+  }
+
+  /// Create agent. Pass templateId only when using a seeded template (not for "Custom agent").
+  /// When templateId is null, empty, or 'custom', template_id is omitted so the backend can create an agent without a template.
+  static Future<Map<String, dynamic>> createAgent({
+    required String name,
+    String? templateId,
+    String direction = 'inbound',
+    String? industry,
+    String? useCase,
+    String? voiceTier,
+    String? systemPrompt,
+    String? openingMessage,
+    String? voiceProvider,
+    String? voiceId,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'direction': direction,
+      if (industry != null) 'industry': industry,
+      if (useCase != null) 'use_case': useCase,
+      if (voiceTier != null) 'voice_tier_override': voiceTier,
+      if (systemPrompt != null) 'system_prompt': systemPrompt,
+      if (openingMessage != null) 'opening_message': openingMessage,
+      if (voiceProvider != null && voiceProvider.isNotEmpty) 'voice_provider': voiceProvider,
+      if (voiceId != null && voiceId.isNotEmpty) 'voice_id': voiceId,
+      if (_defaultAccountId.isNotEmpty) 'account_id': _defaultAccountId,
+    };
+    if (templateId != null && templateId.isNotEmpty) {
+      body['template_id'] = templateId == 'custom' ? 'custom_blank' : templateId;
+    }
+    return SpeariaApi.postJsonMap('/api/agents', body: body);
+  }
+
+  static Future<Map<String, dynamic>> getAgent(String agentId) async =>
+      SpeariaApi.getJsonMap('/api/agents/$agentId', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+
+  /// GET /api/agents/{id}/knowledge — school_knowledge (education only).
+  static Future<Map<String, dynamic>> getAgentKnowledge(String agentId) async =>
+      _get('/api/agents/$agentId/knowledge');
+
+  /// PATCH /api/agents/{id}/knowledge — update school_knowledge fields.
+  static Future<Map<String, dynamic>> patchAgentKnowledge(String agentId, Map<String, dynamic> knowledge) async =>
+      _patch('/api/agents/$agentId/knowledge', knowledge);
+
+  static Future<Map<String, dynamic>> updateAgent(String agentId, Map<String, dynamic> body) async {
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = _defaultAccountId;
+    final v = await SpeariaApi.patchJson('/api/agents/$agentId', body: body);
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  static Future<void> deleteAgent(String agentId) async =>
+      SpeariaApi.deleteJson('/api/agents/$agentId', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+
+  static Future<Map<String, dynamic>> testCallAgent(String agentId, {required String toNumber, String? studentName}) async =>
+      SpeariaApi.postJsonMap('/api/agents/$agentId/test-call', body: {
+        'to_number': toNumber,
+        if (studentName != null) 'student_name': studentName,
+        if (_defaultAccountId.isNotEmpty) 'account_id': _defaultAccountId,
+      });
+
+  // Templates (global)
+  static Future<Map<String, dynamic>> listTemplates({String? industry, String? direction}) async {
+    final params = <String, dynamic>{};
+    if (industry != null && industry.isNotEmpty) params['industry'] = industry;
+    if (direction != null && direction.isNotEmpty) params['direction'] = direction;
+    return SpeariaApi.getJsonMap('/api/templates', params: params.isEmpty ? null : params);
+  }
+
+  static Future<Map<String, dynamic>> getTemplate(String templateId) async =>
+      SpeariaApi.getJsonMap('/api/templates/$templateId');
+
+  /// Admin: seed agent templates (run once if templates empty). POST /api/admin/seed-templates
+  static Future<Map<String, dynamic>> seedTemplates() async =>
+      SpeariaApi.postJsonMap('/api/admin/seed-templates', body: {});
+
+  /// Admin: seed voice profiles library. POST /api/admin/seed-voice-profiles
+  static Future<Map<String, dynamic>> seedVoiceProfiles() async =>
+      SpeariaApi.postJsonMap('/api/admin/seed-voice-profiles', body: {});
+
+  // Voice profiles library (Studio)
+  static Future<Map<String, dynamic>> listVoiceProfilesLibrary() async =>
+      SpeariaApi.getJsonMap('/api/voice-profiles/library');
+
+  // Studio projects
+  static Future<Map<String, dynamic>> listStudioProjects() async => _get('/api/studio/projects');
+
+  static Future<Map<String, dynamic>> createStudioProject({
+    required String name,
+    String type = 'tts',
+    String? voiceProfileId,
+    String voiceTier = 'neutral',
+  }) async =>
+      _post('/api/studio/projects', {
+        'name': name,
+        'type': type,
+        if (voiceProfileId != null) 'voice_profile_id': voiceProfileId,
+        'voice_tier': voiceTier,
+      });
+
+  static Future<Map<String, dynamic>> getStudioProject(String projectId) async =>
+      _get('/api/studio/projects/$projectId');
+
+  static Future<Map<String, dynamic>> generateTts({
+    required String projectId,
+    required String text,
+    String? scriptId,
+    String? voiceTier,
+  }) async =>
+      _post('/api/studio/generate', {
+        'project_id': projectId,
+        'text': text,
+        if (scriptId != null) 'script_id': scriptId,
+        if (voiceTier != null) 'voice_tier': voiceTier,
+      });
+
+  // Analytics (unified dashboard)
+  static Future<Map<String, dynamic>> getAnalyticsOverview() async => _get('/api/analytics/overview');
+  static Future<Map<String, dynamic>> getAnalyticsComms({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/analytics/comms', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getAnalyticsStudio({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/analytics/studio', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getAnalyticsAgent(String agentId) async =>
+      _get('/api/analytics/agents/$agentId');
+
+  // Students / Contacts (education: financial fields, filters)
+  static Future<Map<String, dynamic>> listStudents({
+    bool? hasBalance,
+    bool? isOverdue,
+    double? balanceMin,
+    double? balanceMax,
+    String? dueBefore,
+    String? dueAfter,
+  }) async {
+    final params = <String, dynamic>{};
+    if (hasBalance != null) params['has_balance'] = hasBalance;
+    if (isOverdue != null) params['is_overdue'] = isOverdue;
+    if (balanceMin != null) params['balance_min'] = balanceMin;
+    if (balanceMax != null) params['balance_max'] = balanceMax;
+    if (dueBefore != null) params['due_before'] = dueBefore;
+    if (dueAfter != null) params['due_after'] = dueAfter;
+    return _get('/api/pulse/students', params: params.isEmpty ? null : params);
+  }
 
   static Future<Map<String, dynamic>> getStudent(String studentId) async =>
       _get('/api/pulse/students/$studentId');
+
+  /// Call history for a contact/student + past_calls_summary (Phase 2).
+  static Future<Map<String, dynamic>> getStudentCallHistory(String studentId) async =>
+      _get('/api/pulse/students/$studentId/call-history');
 
   static Future<Map<String, dynamic>> createStudent({
     required String name,
@@ -51,6 +225,7 @@ class NeyvoPulseApi {
     String? balance,
     String? dueDate,
     String? lateFee,
+    String? studentId,
     String? notes,
   }) async =>
       _post('/api/pulse/students', {
@@ -60,6 +235,7 @@ class NeyvoPulseApi {
         if (balance != null) 'balance': balance,
         if (dueDate != null) 'due_date': dueDate,
         if (lateFee != null) 'late_fee': lateFee,
+        if (studentId != null) 'student_id': studentId,
         if (notes != null) 'notes': notes,
       });
 
@@ -71,16 +247,17 @@ class NeyvoPulseApi {
     String? balance,
     String? dueDate,
     String? lateFee,
+    String? schoolStudentId,
     String? notes,
   }) async =>
       _patch('/api/pulse/students/$studentId', {
-        'student_id': studentId,
         if (name != null) 'name': name,
         if (phone != null) 'phone': phone,
         if (email != null) 'email': email,
         if (balance != null) 'balance': balance,
         if (dueDate != null) 'due_date': dueDate,
         if (lateFee != null) 'late_fee': lateFee,
+        if (schoolStudentId != null) 'student_id': schoolStudentId,
         if (notes != null) 'notes': notes,
       });
 
@@ -90,6 +267,14 @@ class NeyvoPulseApi {
       params: <String, dynamic>{'account_id': _defaultAccountId},
     );
   }
+
+  /// GET /api/pulse/students/import/template — returns CSV template as string (for download or preview).
+  static Future<String> getStudentsImportTemplate() async =>
+      SpeariaApi.getText('/api/pulse/students/import/template', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+
+  /// POST /api/pulse/students/import/csv — send CSV content. Backend may accept JSON { csv: "..." } or multipart. Returns {imported, updated, failed, errors}.
+  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent) async =>
+      _post('/api/pulse/students/import/csv', {'csv': csvContent});
 
   // Payments
   static Future<Map<String, dynamic>> listPayments({String? studentId}) async =>
@@ -114,15 +299,21 @@ class NeyvoPulseApi {
 
   static Future<Map<String, dynamic>> createReminder({
     required String studentId,
+    String? agentId,
     String? reminderType,
     String? scheduledAt,
     String? message,
+    String? messageType,
+    String? notes,
   }) async =>
       _post('/api/pulse/reminders', {
         'student_id': studentId,
+        if (agentId != null) 'agent_id': agentId,
         if (reminderType != null) 'reminder_type': reminderType,
         if (scheduledAt != null) 'scheduled_at': scheduledAt,
         if (message != null) 'message': message,
+        if (messageType != null) 'message_type': messageType,
+        if (notes != null) 'notes': notes,
       });
 
   static Future<Map<String, dynamic>> getReminder(String reminderId) async =>
@@ -238,7 +429,9 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getMyRole() async =>
       _get('/api/pulse/members/me');
 
+  /// Start outbound call. Backend requires agent_id so every call is tied to an agent.
   static Future<Map<String, dynamic>> startOutboundCall({
+    required String agentId,
     required String studentPhone,
     required String studentName,
     String? studentId,
@@ -251,6 +444,7 @@ class NeyvoPulseApi {
   }) async {
     final body = <String, dynamic>{
       'account_id': _defaultAccountId,
+      'agent_id': agentId,
       'student_phone': studentPhone,
       'student_name': studentName,
       'message_type': 'balance_reminder',
@@ -273,13 +467,23 @@ class NeyvoPulseApi {
     String? schoolName,
     String? defaultLateFee,
     String? currency,
+    String? timezone,
     bool? inboundEnabled,
+    String? primaryPhoneE164,
+    String? vapiAssistantId,
+    String? vapiPhoneNumberId,
+    String? defaultAgentId,
   }) async =>
       _patch('/api/pulse/settings', {
         if (schoolName != null) 'school_name': schoolName,
         if (defaultLateFee != null) 'default_late_fee': defaultLateFee,
         if (currency != null) 'currency': currency,
+        if (timezone != null) 'timezone': timezone,
         if (inboundEnabled != null) 'inbound_enabled': inboundEnabled,
+        if (primaryPhoneE164 != null) 'primary_phone_e164': primaryPhoneE164,
+        if (vapiAssistantId != null) 'vapi_assistant_id': vapiAssistantId,
+        if (vapiPhoneNumberId != null) 'vapi_phone_number_id': vapiPhoneNumberId,
+        if (defaultAgentId != null) 'default_agent_id': defaultAgentId,
       });
 
   // Reports
@@ -344,6 +548,19 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> triggerIntegrationSync() async =>
       _post('/api/pulse/integration/sync', {});
 
+  // School Integration (webhook for SIS/ERP — Phase 6)
+  static Future<Map<String, dynamic>> getSchoolIntegration() async =>
+      _get('/api/pulse/integrations/school');
+
+  static Future<Map<String, dynamic>> patchSchoolIntegration({required bool enabled}) async =>
+      _patch('/api/pulse/integrations/school', {'enabled': enabled});
+
+  static Future<Map<String, dynamic>> regenerateSchoolIntegrationToken() async =>
+      SpeariaApi.postJsonMap('/api/pulse/integrations/school/regenerate-token', body: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : {});
+
+  static Future<Map<String, dynamic>> sendSchoolWebhookTest() async =>
+      _post('/api/pulse/integrations/school/test', {});
+
   // -------------------------------------------------------------------------
   // Call templates (scripts for assistant)
   // -------------------------------------------------------------------------
@@ -401,28 +618,75 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
       _get('/api/pulse/campaigns/$campaignId/calls', params: {'limit': limit});
 
-  /// Create a campaign (name, audience filters or student_ids, template_id, scheduled_at).
+  /// Real-time campaign runner metrics (pool status + counters).
+  static Future<Map<String, dynamic>> getCampaignMetrics(String campaignId) async =>
+      _get('/api/pulse/campaigns/$campaignId/metrics');
+
+  /// Per-target campaign call items (queued/in_progress/completed/failed).
+  static Future<Map<String, dynamic>> getCampaignCallItems(
+    String campaignId, {
+    String? status,
+    int limit = 200,
+  }) async =>
+      _get(
+        '/api/pulse/campaigns/$campaignId/call-items',
+        params: {
+          if (status != null && status.isNotEmpty) 'status': status,
+          'limit': limit,
+        },
+      );
+
+  /// Verify campaign integrity and counters (backend auto-heals minor issues).
+  static Future<Map<String, dynamic>> verifyCampaign(String campaignId) async =>
+      _get('/api/pulse/campaigns/$campaignId/verify');
+
+  /// Preview audience count and sample for financial filters (education campaigns).
+  static Future<Map<String, dynamic>> getCampaignsPreviewAudience({
+    bool? hasBalance,
+    bool? isOverdue,
+    double? balanceMin,
+    double? balanceMax,
+    String? dueBefore,
+    String? dueAfter,
+  }) async {
+    final params = <String, dynamic>{};
+    if (hasBalance != null) params['has_balance'] = hasBalance;
+    if (isOverdue != null) params['is_overdue'] = isOverdue;
+    if (balanceMin != null) params['balance_min'] = balanceMin;
+    if (balanceMax != null) params['balance_max'] = balanceMax;
+    if (dueBefore != null) params['due_before'] = dueBefore;
+    if (dueAfter != null) params['due_after'] = dueAfter;
+    return _get('/api/pulse/campaigns/preview-audience', params: params.isEmpty ? null : params);
+  }
+
+  /// Create a campaign (name, agentId, audience filters or student_ids, template_id, scheduled_at).
+  /// When agentId is set, the campaign uses that agent's voice/prompt for outbound calls.
   static Future<Map<String, dynamic>> createCampaign({
     required String name,
+    String? agentId,
     String? templateId,
     List<String>? studentIds,
     Map<String, dynamic>? filters,
+    String? audienceType,
     DateTime? scheduledAt,
   }) async {
     final body = <String, dynamic>{
       'name': name,
+      if (agentId != null && agentId.isNotEmpty) 'agent_id': agentId,
       if (templateId != null) 'template_id': templateId,
       if (studentIds != null) 'student_ids': studentIds,
       if (filters != null) 'filters': filters,
+      if (audienceType != null) 'audience_type': audienceType,
       if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
     };
     return _post('/api/pulse/campaigns', body);
   }
 
-  /// Update campaign (name, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
+  /// Update campaign (name, agentId, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
   static Future<Map<String, dynamic>> updateCampaign(
     String campaignId, {
     String? name,
+    String? agentId,
     String? templateId,
     List<String>? studentIds,
     Map<String, dynamic>? filters,
@@ -430,6 +694,7 @@ class NeyvoPulseApi {
   }) async {
     final body = <String, dynamic>{'account_id': _defaultAccountId};
     if (name != null) body['name'] = name;
+    if (agentId != null) body['agent_id'] = agentId.isEmpty ? null : agentId;
     if (templateId != null) body['template_id'] = templateId;
     if (studentIds != null) body['student_ids'] = studentIds;
     if (filters != null) body['filters'] = filters;
@@ -438,14 +703,39 @@ class NeyvoPulseApi {
   }
 
   /// Start a campaign (places outbound calls sequentially; may take a while). Can rerun completed campaigns.
-  static Future<Map<String, dynamic>> startCampaign(String campaignId) async {
-    final body = <String, dynamic>{'account_id': _defaultAccountId};
+  /// Optionally pass [phoneNumberId] to use a specific outbound number for this run (from getOutboundPhoneNumbers).
+  static Future<Map<String, dynamic>> startCampaign(
+    String campaignId, {
+    List<String>? studentIds,
+    int? maxConcurrent,
+    int? maxAttempts,
+    String? phoneNumberId,
+  }) async {
+    final body = <String, dynamic>{
+      'account_id': _defaultAccountId,
+      if (studentIds != null) 'student_ids': studentIds,
+      if (maxConcurrent != null) 'max_concurrent': maxConcurrent,
+      if (maxAttempts != null) 'max_attempts': maxAttempts,
+      if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
+    };
     return SpeariaApi.postJsonMap(
       '/api/pulse/campaigns/$campaignId/start',
       body: body,
       timeout: const Duration(seconds: 120),
     );
   }
+
+  /// Pause a running campaign (stops refilling the pool; active calls still finish).
+  static Future<Map<String, dynamic>> pauseCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/pause', {});
+
+  /// Resume a paused campaign (refills the pool again).
+  static Future<Map<String, dynamic>> resumeCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/resume', {});
+
+  /// Stop the campaign immediately: end all active calls and set status to stopped.
+  static Future<Map<String, dynamic>> stopCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/stop', {});
 
   /// Delete a campaign (only draft or scheduled). Returns 404 if not found or not deletable.
   static Future<void> deleteCampaign(String campaignId) async {
@@ -523,6 +813,14 @@ class NeyvoPulseApi {
     return Map<String, dynamic>.from(v as Map);
   }
 
+  /// Enable/disable per-agent voice tier (Business plan only). All agents use account default when disabled.
+  static Future<Map<String, dynamic>> setBillingPerAgentVoiceTier(bool enabled) async {
+    final v = await SpeariaApi.putJson('/api/billing/per-agent-voice-tier', body: {
+      'enabled': enabled,
+    });
+    return Map<String, dynamic>.from(v as Map);
+  }
+
   // -------------------------------------------------------------------------
   // Subscription (plan selector: subscribe, cancel, upgrade)
   // -------------------------------------------------------------------------
@@ -554,6 +852,29 @@ class NeyvoPulseApi {
       _patch('/api/billing/addons/hipaa', {'enabled': enabled});
 
   // -------------------------------------------------------------------------
+  // Voice library (GET /api/voices, POST /api/voices/preview)
+  // -------------------------------------------------------------------------
+
+  /// GET /api/voices?tier=neutral|natural|ultra|all. Returns list or grouped by tier.
+  static Future<dynamic> getVoices({String tier = 'all'}) async =>
+      _get('/api/voices', params: {'tier': tier});
+
+  /// POST /api/voices/preview — free preview. Returns { audio_url } or { audio_base64, content_type }.
+  static Future<Map<String, dynamic>> postVoicePreview({
+    required String voiceId,
+    required String provider,
+    String? text,
+  }) async {
+    final body = <String, dynamic>{
+      'voice_id': voiceId,
+      'provider': provider,
+      if (_defaultAccountId.isNotEmpty) 'account_id': _defaultAccountId,
+    };
+    if (text != null && text.isNotEmpty) body['text'] = text;
+    return SpeariaApi.postJsonMap('/api/voices/preview', body: body);
+  }
+
+  // -------------------------------------------------------------------------
   // Outbound capacity (Part 2: phone numbers, primary vs campaign)
   // -------------------------------------------------------------------------
 
@@ -563,10 +884,16 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getOutboundCapacity() async =>
       _get('/api/pulse/outbound/capacity');
 
-  static Future<Map<String, dynamic>> setOutboundPrimary(String phoneNumberId) async {
+  /// Set primary outbound phone number for this account.
+  /// Accepts either a Vapi phone_number_id (UUID) OR an E.164 number (e.g. +1888...) which backend can import.
+  static Future<Map<String, dynamic>> setOutboundPrimary(
+    String phoneNumberIdOrE164, {
+    String? phoneNumberE164,
+  }) async {
     final v = await SpeariaApi.putJson('/api/pulse/outbound/primary', body: {
       'account_id': _defaultAccountId,
-      'phone_number_id': phoneNumberId,
+      'phone_number_id': phoneNumberIdOrE164,
+      if (phoneNumberE164 != null && phoneNumberE164.isNotEmpty) 'phone_number_e164': phoneNumberE164,
     });
     return Map<String, dynamic>.from(v as Map);
   }
@@ -603,23 +930,39 @@ class NeyvoPulseApi {
         if (friendlyName != null && friendlyName.isNotEmpty) 'friendly_name': friendlyName,
       });
 
-  /// GET /api/numbers/search?area_code=585&country=US
+  /// GET /api/numbers/search — list available numbers with optional filters.
+  /// Pass country, type (local|mobile|tollfree), limit, areaCode, voiceEnabled, smsEnabled, mmsEnabled, includeSuggested.
   static Future<Map<String, dynamic>> searchNumbers({
-    required String areaCode,
     String country = 'US',
-  }) async =>
-      SpeariaApi.getJsonMap(
-        '/api/numbers/search',
-        params: {'area_code': areaCode, 'country': country, 'account_id': _defaultAccountId},
-      );
+    String type = 'local',
+    int limit = 20,
+    String? areaCode,
+    bool? voiceEnabled,
+    bool? smsEnabled,
+    bool? mmsEnabled,
+    bool includeSuggested = true,
+  }) async {
+    final params = <String, dynamic>{
+      'country': country,
+      'type': type,
+      'limit': limit.toString(),
+      'include_suggested': includeSuggested.toString(),
+    };
+    if (areaCode != null && areaCode.trim().isNotEmpty) params['area_code'] = areaCode.trim();
+    if (voiceEnabled != null) params['voice_enabled'] = voiceEnabled.toString();
+    if (smsEnabled != null) params['sms_enabled'] = smsEnabled.toString();
+    if (mmsEnabled != null) params['mms_enabled'] = mmsEnabled.toString();
+    return _get('/api/numbers/search', params: params);
+  }
 
-  /// POST /api/numbers/purchase – buy number (phone_number, friendly_name, role)
+  /// POST /api/numbers/purchase – buy number (phone_number, friendly_name, role). Sends account_id for Pulse.
   static Future<Map<String, dynamic>> purchaseNumber({
     required String phoneNumber,
     required String friendlyName,
     String role = 'campaign',
   }) async =>
       _post('/api/numbers/purchase', {
+        'account_id': _defaultAccountId,
         'phone_number': phoneNumber,
         'friendly_name': friendlyName,
         'role': role,
@@ -657,6 +1000,10 @@ class NeyvoPulseApi {
   /// GET /api/numbers/<number_id>/warm-up/status
   static Future<Map<String, dynamic>> getWarmUpStatus(String numberId) async =>
       _get('/api/numbers/$numberId/warm-up/status');
+
+  /// GET /api/numbers/<number_id>/capacity — daily_limit, used_today, remaining_today, warning.
+  static Future<Map<String, dynamic>> getNumberCapacity(String numberId) async =>
+      _get('/api/numbers/$numberId/capacity');
 
   /// POST /api/numbers/<number_id>/warm-up/advance (manual from dev console)
   static Future<Map<String, dynamic>> advanceWarmUp(String numberId) async =>

@@ -18,6 +18,10 @@ class OutboundCallsPage extends StatefulWidget {
 }
 
 class _OutboundCallsPageState extends State<OutboundCallsPage> {
+  List<Map<String, dynamic>> _agents = [];
+  String? _selectedAgentId;
+  bool _loadingAgents = false;
+
   List<Map<String, dynamic>> _students = [];
   Map<String, dynamic>? _selectedStudent;
   final _studentSearchController = TextEditingController();
@@ -37,6 +41,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
   @override
   void initState() {
     super.initState();
+    _loadAgents();
     _loadStudents();
     _loadCapacity();
     if (widget.prefillStudent != null) {
@@ -89,6 +94,33 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
     _fillFromStudent();
   }
 
+  static String? _agentIdOf(Map<String, dynamic> a) {
+    final v = a['id'] ?? a['agent_id'] ?? a['uid'];
+    final s = v?.toString().trim();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  Future<void> _loadAgents() async {
+    setState(() => _loadingAgents = true);
+    try {
+      final res = await NeyvoPulseApi.listAgents();
+      final list = (res['agents'] as List? ?? []).cast<Map<String, dynamic>>();
+      final firstId = list.isNotEmpty ? _agentIdOf(list.first) : null;
+      if (!mounted) return;
+      setState(() {
+        _agents = list;
+        _selectedAgentId ??= firstId;
+        _loadingAgents = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _agents = [];
+        _loadingAgents = false;
+      });
+    }
+  }
+
   Future<void> _loadCapacity() async {
     try {
       final res = await NeyvoPulseApi.getOutboundCapacity();
@@ -136,6 +168,15 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
       });
       return;
     }
+
+    final agentId = _selectedAgentId;
+    if (agentId == null || agentId.isEmpty) {
+      setState(() {
+        _message = 'Create/select an agent before calling.';
+        _success = false;
+      });
+      return;
+    }
     
     setState(() {
       _loading = true;
@@ -144,6 +185,7 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
     
     try {
       final result = await NeyvoPulseApi.startOutboundCall(
+        agentId: agentId,
         studentPhone: phone,
         studentName: name,
         studentId: _selectedStudent?['id']?.toString(),
@@ -221,6 +263,59 @@ class _OutboundCallsPageState extends State<OutboundCallsPage> {
             style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
           ),
           const SizedBox(height: SpeariaSpacing.xl),
+
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: SpeariaAura.border)),
+            child: Padding(
+              padding: const EdgeInsets.all(SpeariaSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.smart_toy_outlined, color: SpeariaAura.primary),
+                      const SizedBox(width: 8),
+                      Text('Agent', style: SpeariaType.titleMedium),
+                      const Spacer(),
+                      if (_loadingAgents)
+                        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      IconButton(
+                        tooltip: 'Refresh',
+                        onPressed: _loadingAgents ? null : _loadAgents,
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedAgentId,
+                    decoration: const InputDecoration(
+                      labelText: 'Select agent',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _agents
+                        .map((a) {
+                          final id = _agentIdOf(a);
+                          final name = (a['name']?.toString().trim().isNotEmpty ?? false) ? a['name'].toString() : (id ?? 'Agent');
+                          if (id == null) return null;
+                          return DropdownMenuItem(value: id, child: Text(name));
+                        })
+                        .whereType<DropdownMenuItem<String>>()
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedAgentId = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'All calls are saved under the selected agent.',
+                    style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: SpeariaSpacing.lg),
           
           // Part 2: Outbound capacity (one number vs multiple, primary vs campaign)
           if (_capacity != null) ...[

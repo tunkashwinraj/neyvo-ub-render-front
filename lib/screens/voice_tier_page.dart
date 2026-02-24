@@ -203,6 +203,7 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
 
     return Card(
       elevation: popular ? 4 : 0,
+      color: SpeariaAura.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -227,7 +228,7 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
             if (popular) const SizedBox(height: 12),
             Text(emoji, style: const TextStyle(fontSize: 28)),
             const SizedBox(height: 8),
-            Text(name, style: SpeariaType.titleLarge.copyWith(fontWeight: FontWeight.w700)),
+            Text(name, style: SpeariaType.titleLarge.copyWith(fontWeight: FontWeight.w700, color: SpeariaAura.textPrimary)),
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -242,7 +243,7 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(color: SpeariaAura.bgDark, borderRadius: BorderRadius.circular(8)),
-              child: Text('Avg 3-min call ≈ \$$avg3min', style: SpeariaType.bodySmall),
+              child: Text('Avg 3-min call ≈ \$$avg3min', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary)),
             ),
             const SizedBox(height: 16),
             ...bullets.map((b) => Padding(
@@ -252,7 +253,7 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
                     children: [
                       Icon(Icons.check_circle_outline, size: 18, color: SpeariaAura.primary),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(b, style: SpeariaType.bodySmall)),
+                      Expanded(child: Text(b, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textPrimary))),
                     ],
                   ),
                 )),

@@ -4,9 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
-import '../pulse_route_names.dart';
 import '../utils/export_csv.dart';
-import '../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
 
 /// Sort options: date desc/asc, duration desc/asc (when backend provides duration)
@@ -26,6 +25,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   String? _error;
   final _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, completed, failed, pending
+  String _filterDirection = 'all'; // all, inbound, outbound
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
 
@@ -114,10 +114,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     setState(() {
       var list = _allCalls.where((c) {
         if (!_isInDateRange(c)) return false;
-        final studentName = (c['student_name']?.toString() ?? '').toLowerCase();
-        final phone = (c['student_phone']?.toString() ?? '').toLowerCase();
+        if (_filterDirection != 'all') {
+          final dir = (c['direction'] as String?)?.toLowerCase();
+          if (dir != _filterDirection) return false;
+        }
+        final contactName = (c['student_name'] ?? c['contact_name'] ?? c['agent_name'] ?? '').toString().toLowerCase();
+        final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString().toLowerCase();
         final matchesSearch = query.isEmpty ||
-            studentName.contains(query) ||
+            contactName.contains(query) ||
             phone.contains(query);
         if (!matchesSearch) return false;
         if (_filterStatus == 'all') return true;
@@ -160,7 +164,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       final transcript = (map['transcript']?.toString() ?? '').replaceAll(RegExp(r'[\r\n]'), ' ');
       sb.writeln('"$name","$phone","$date","$status","$duration","$recording","$transcript"');
     }
-    final filename = 'reach_history_${DateTime.now().toIso8601String().split('T').first}.csv';
+    final filename = 'call_history_${DateTime.now().toIso8601String().split('T').first}.csv';
     await downloadCsv(filename, sb.toString(), context);
   }
 
@@ -168,15 +172,20 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'success':
-        return SpeariaAura.success;
+      case 'resolved':
+        return NeyvoTheme.success;
       case 'failed':
       case 'error':
-        return SpeariaAura.error;
+      case 'unresolved':
+        return NeyvoTheme.error;
       case 'pending':
       case 'ringing':
-        return SpeariaAura.warning;
+        return NeyvoTheme.warning;
+      case 'transferred':
+      case 'no_answer':
+        return NeyvoTheme.info;
       default:
-        return SpeariaAura.textMuted;
+        return NeyvoTheme.textMuted;
     }
   }
 
@@ -203,15 +212,17 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Reach history')),
+        appBar: AppBar(title: const Text('Call History')),
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(SpeariaSpacing.xl),
+            padding: const EdgeInsets.all(NeyvoSpacing.xl),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_error!, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.error), textAlign: TextAlign.center),
-                const SizedBox(height: SpeariaSpacing.lg),
+                Text('Something went wrong', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                const SizedBox(height: NeyvoSpacing.sm),
+                Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary), textAlign: TextAlign.center),
+                const SizedBox(height: NeyvoSpacing.lg),
                 FilledButton(onPressed: _load, child: const Text('Retry')),
               ],
             ),
@@ -221,101 +232,135 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reach history'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _filteredCalls.isEmpty ? null : _exportCsv,
-            tooltip: 'Export CSV',
-          ),
-          IconButton(
-            icon: const Icon(Icons.insights),
-            onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.aiInsights),
-            tooltip: 'AI Insights',
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Call History')),
       body: Column(
         children: [
-          // Search, date range, and filter bar
+          // Search + inline filters (single row)
           Container(
-            padding: const EdgeInsets.all(SpeariaSpacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.md, vertical: NeyvoSpacing.sm),
             decoration: BoxDecoration(
-              color: SpeariaAura.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              color: NeyvoTheme.bgSurface,
+              border: Border(bottom: BorderSide(color: NeyvoTheme.border)),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search reaches...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _filterCalls();
-                            },
-                          )
-                        : null,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search by phone number',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _filterCalls();
+                                  },
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: NeyvoSpacing.md),
+                    IconButton(
+                      icon: const Icon(Icons.download),
+                      onPressed: _filteredCalls.isEmpty ? null : _exportCsv,
+                      tooltip: 'Export CSV',
+                    ),
+                  ],
                 ),
-                const SizedBox(height: SpeariaSpacing.sm),
-                Text('Date range', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.textSecondary)),
-                const SizedBox(height: SpeariaSpacing.xs),
+                const SizedBox(height: NeyvoSpacing.sm),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FilterChip(label: 'All time', selected: _dateRange == 'all', onTap: () { setState(() { _dateRange = 'all'; _filterCalls(); }); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Last 7 days', selected: _dateRange == '7d', onTap: () { setState(() { _dateRange = '7d'; _filterCalls(); }); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Last 30 days', selected: _dateRange == '30d', onTap: () { setState(() { _dateRange = '30d'; _filterCalls(); }); }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: SpeariaSpacing.sm),
-                Text('Status', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.textSecondary)),
-                const SizedBox(height: SpeariaSpacing.xs),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FilterChip(label: 'All', selected: _filterStatus == 'all', onTap: () { setState(() => _filterStatus = 'all'); _filterCalls(); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Completed', selected: _filterStatus == 'completed', onTap: () { setState(() => _filterStatus = 'completed'); _filterCalls(); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Failed', selected: _filterStatus == 'failed', onTap: () { setState(() => _filterStatus = 'failed'); _filterCalls(); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Pending', selected: _filterStatus == 'pending', onTap: () { setState(() => _filterStatus = 'pending'); _filterCalls(); }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: SpeariaSpacing.sm),
-                Text('Sort by', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.textSecondary)),
-                const SizedBox(height: SpeariaSpacing.xs),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FilterChip(label: 'Date (newest)', selected: _sortBy == _CallSort.dateNewest, onTap: () { setState(() { _sortBy = _CallSort.dateNewest; _filterCalls(); }); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Date (oldest)', selected: _sortBy == _CallSort.dateOldest, onTap: () { setState(() { _sortBy = _CallSort.dateOldest; _filterCalls(); }); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Duration (longest)', selected: _sortBy == _CallSort.durationLongest, onTap: () { setState(() { _sortBy = _CallSort.durationLongest; _filterCalls(); }); }),
-                      const SizedBox(width: SpeariaSpacing.sm),
-                      _FilterChip(label: 'Duration (shortest)', selected: _sortBy == _CallSort.durationShortest, onTap: () { setState(() { _sortBy = _CallSort.durationShortest; _filterCalls(); }); }),
-                    ],
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButtonFormField<String>(
+                            value: _filterDirection,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Direction',
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'inbound', child: Text('Inbound', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'outbound', child: Text('Outbound', overflow: TextOverflow.ellipsis)),
+                            ],
+                            onChanged: (v) { setState(() { _filterDirection = v ?? 'all'; _filterCalls(); }); },
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        SizedBox(
+                          width: 160,
+                          child: DropdownButtonFormField<String>(
+                            value: _dateRange,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Date',
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All time', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: '7d', child: Text('Last 7 days', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: '30d', child: Text('Last 30 days', overflow: TextOverflow.ellipsis)),
+                            ],
+                            onChanged: (v) { setState(() { _dateRange = v ?? 'all'; _filterCalls(); }); },
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButtonFormField<String>(
+                            value: _filterStatus,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Status',
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'completed', child: Text('Completed', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'failed', child: Text('Failed', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'pending', child: Text('Pending', overflow: TextOverflow.ellipsis)),
+                            ],
+                            onChanged: (v) { setState(() { _filterStatus = v ?? 'all'; _filterCalls(); }); },
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        SizedBox(
+                          width: 190,
+                          child: DropdownButtonFormField<_CallSort>(
+                            value: _sortBy,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Sort',
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: _CallSort.dateNewest, child: Text('Date (newest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: _CallSort.dateOldest, child: Text('Date (oldest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: _CallSort.durationLongest, child: Text('Duration (longest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: _CallSort.durationShortest, child: Text('Duration (shortest)', overflow: TextOverflow.ellipsis)),
+                            ],
+                            onChanged: (v) { setState(() { _sortBy = v ?? _CallSort.dateNewest; _filterCalls(); }); },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -331,28 +376,29 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.phone_outlined, size: 64, color: SpeariaAura.textMuted),
-                          const SizedBox(height: SpeariaSpacing.md),
+                          Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
+                          const SizedBox(height: NeyvoSpacing.md),
                           Text(
-                            _allCalls.isEmpty ? 'No reaches yet' : 'No reaches found',
-                            style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted),
+                            _allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
+                            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.all(SpeariaSpacing.md),
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
                       itemCount: _filteredCalls.length + 1,
                       itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
-                            padding: const EdgeInsets.all(SpeariaSpacing.md),
+                            padding: const EdgeInsets.all(NeyvoSpacing.md),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Reaches (${_filteredCalls.length})',
-                                  style: SpeariaType.headlineMedium,
+                                  'Calls (${_filteredCalls.length})',
+                                  style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
                                 ),
                                 if (_filteredCalls.length != _allCalls.length)
                                   TextButton(
@@ -380,9 +426,15 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final attributedAmount = call['attributed_payment_amount']?.toString();
                         final attributedAt = call['attributed_payment_at']?.toString();
                         final outcomeType = call['outcome_type']?.toString();
+                        final creditsUsed = (call['credits_used'] ?? call['credits_charged']) as num?;
+                        final voiceTier = (call['voice_tier'] as String?)?.toLowerCase() ?? '';
+                        final creditsStr = creditsUsed != null ? '${creditsUsed is int ? creditsUsed : creditsUsed.toInt()} cr' : null;
+                        final tooltipStr = creditsStr != null
+                            ? '$creditsStr · $durationStr${voiceTier.isNotEmpty ? ' · ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
+                            : null;
                         
                         return Card(
-                          margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
+                          margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                           child: ExpansionTile(
                             trailing: IconButton(
                               icon: const Icon(Icons.open_in_new),
@@ -397,23 +449,23 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             ),
                             title: Row(
                               children: [
-                                Expanded(child: Text(studentName, style: SpeariaType.titleMedium)),
+                                Expanded(child: Text(studentName, style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary))),
                                 if (successMetric == 'payment_received')
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: SpeariaAura.success.withOpacity(0.15),
+                                      color: NeyvoTheme.success.withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
-                                    child: Text('Resolution achieved', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.success, fontWeight: FontWeight.w600)),
+                                    child: Text('Resolution achieved', style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w600)),
                                   ),
                               ],
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (studentPhone.isNotEmpty) Text(studentPhone),
-                                if (date.isNotEmpty) Text('Date: $date', style: SpeariaType.bodySmall),
+                                if (studentPhone.isNotEmpty) Text(studentPhone, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (date.isNotEmpty) Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 Row(
                                   children: [
                                     Container(
@@ -424,33 +476,40 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                       ),
                                       child: Text(
                                         status.toUpperCase(),
-                                        style: SpeariaType.labelSmall.copyWith(
+                                        style: NeyvoType.labelSmall.copyWith(
                                           color: statusColor,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ),
                                     if (durationStr != '—') ...[
-                                      const SizedBox(width: SpeariaSpacing.sm),
-                                      Text('• $durationStr', style: SpeariaType.bodySmall),
+                                      const SizedBox(width: NeyvoSpacing.sm),
+                                      Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                    ],
+                                    if (creditsStr != null) ...[
+                                      const SizedBox(width: NeyvoSpacing.sm),
+                                      Tooltip(
+                                        message: tooltipStr ?? creditsStr,
+                                        child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
+                                      ),
                                     ],
                                     if (outcomeType != null && outcomeType.isNotEmpty) ...[
-                                      const SizedBox(width: SpeariaSpacing.sm),
-                                      Text('• ${outcomeType.replaceAll('_', ' ')}', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                                      const SizedBox(width: NeyvoSpacing.sm),
+                                      Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                     ],
                                   ],
                                 ),
                                 if (attributedAmount != null && attributedAmount.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
-                                    child: Text('Payment received: $attributedAmount${attributedAt != null && attributedAt.isNotEmpty ? " ($attributedAt)" : ""}', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.success, fontWeight: FontWeight.w500)),
+                                    child: Text('Payment received: $attributedAmount${attributedAt != null && attributedAt.isNotEmpty ? " ($attributedAt)" : ""}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w500)),
                                   ),
                               ],
                             ),
                             children: [
                               if (recordingUrl != null && recordingUrl.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(SpeariaSpacing.md, SpeariaSpacing.sm, SpeariaSpacing.md, 0),
+                                  padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.sm, NeyvoSpacing.md, 0),
                                   child: InkWell(
                                     onTap: () async {
                                       final uri = Uri.tryParse(recordingUrl);
@@ -460,36 +519,36 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                     },
                                     child: Row(
                                       children: [
-                                        Icon(Icons.audiotrack, size: 20, color: SpeariaAura.primary),
-                                        const SizedBox(width: SpeariaSpacing.sm),
-                                        Text('Listen to recording', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.primary, decoration: TextDecoration.underline)),
+                                        Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
+                                        const SizedBox(width: NeyvoSpacing.sm),
+                                        Text('Listen to recording', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.teal, decoration: TextDecoration.underline)),
                                       ],
                                     ),
                                   ),
                                 ),
                               if (transcript.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.all(SpeariaSpacing.md),
+                                  padding: const EdgeInsets.all(NeyvoSpacing.md),
                                   child: Container(
                                     width: double.infinity,
-                                    padding: const EdgeInsets.all(SpeariaSpacing.md),
+                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
                                     decoration: BoxDecoration(
-                                      color: SpeariaAura.bgDark,
-                                      borderRadius: BorderRadius.circular(SpeariaRadius.sm),
+                                      color: NeyvoTheme.bgHover,
+                                      borderRadius: BorderRadius.circular(NeyvoRadius.sm),
                                     ),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Transcript',
-                                          style: SpeariaType.labelMedium.copyWith(
-                                            color: SpeariaAura.textSecondary,
+                                          style: NeyvoType.labelLarge.copyWith(
+                                            color: NeyvoTheme.textSecondary,
                                           ),
                                         ),
-                                        const SizedBox(height: SpeariaSpacing.sm),
+                                        const SizedBox(height: NeyvoSpacing.sm),
                                         Text(
                                           transcript,
-                                          style: SpeariaType.bodySmall,
+                                          style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
                                         ),
                                       ],
                                     ),
@@ -497,11 +556,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 )
                               else
                                 Padding(
-                                  padding: const EdgeInsets.all(SpeariaSpacing.md),
+                                  padding: const EdgeInsets.all(NeyvoSpacing.md),
                                   child: Text(
                                     'No transcript available',
-                                    style: SpeariaType.bodySmall.copyWith(
-                                      color: SpeariaAura.textMuted,
+                                    style: NeyvoType.bodySmall.copyWith(
+                                      color: NeyvoTheme.textMuted,
                                     ),
                                   ),
                                 ),
@@ -532,11 +591,13 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FilterChip(
-      label: Text(label),
+      label: Text(label, style: NeyvoType.bodySmall.copyWith(color: selected ? NeyvoTheme.teal : NeyvoTheme.textSecondary)),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: SpeariaAura.primary.withOpacity(0.2),
-      checkmarkColor: SpeariaAura.primary,
+      selectedColor: NeyvoTheme.teal.withOpacity(0.2),
+      checkmarkColor: NeyvoTheme.teal,
+      backgroundColor: NeyvoTheme.bgCard,
+      side: BorderSide(color: selected ? NeyvoTheme.teal : NeyvoTheme.border),
     );
   }
 }

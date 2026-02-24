@@ -1,1 +1,39 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"neyvo-pulse","appId":"1:88863977169:android:b9d67322609a10f7581ff0","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"neyvo-pulse","configurations":{"android":"1:88863977169:android:b9d67322609a10f7581ff0","ios":"1:88863977169:ios:66690cc0a8db43cc581ff0","macos":"1:88863977169:ios:66690cc0a8db43cc581ff0","web":"1:88863977169:web:3e8c001b5b6ebea2581ff0","windows":"1:88863977169:web:8631c96cebfcfda1581ff0"}}}}}}
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      { "source": "**", "destination": "/index.html" }
+    ]
+  },
+  "firestore": {
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "neyvo-launch",
+          "appId": "1:151387636667:android:0ac4f76bc37c98d53eba9e",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "neyvo-launch",
+          "configurations": {
+            "android": "1:151387636667:android:0ac4f76bc37c98d53eba9e",
+            "ios": "1:151387636667:ios:66aae9468e89fa433eba9e",
+            "macos": "1:151387636667:ios:66aae9468e89fa433eba9e",
+            "web": "1:151387636667:web:0239fe9b2f98d6773eba9e",
+            "windows": "1:151387636667:web:7d2ca9e4132b01de3eba9e"
+          }
+        }
+      }
+    }
+  }
+}

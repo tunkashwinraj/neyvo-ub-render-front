@@ -38,23 +38,45 @@ class _BackendTestPageState extends State<BackendTestPage> {
     });
 
     final tests = [
+      // —— Launch / core (neyvo-launch.onrender.com) ——
+      _Test('Health (root)', '/health', 'GET'),
+      _Test('Ping', '/ping', 'GET'),
+      _Test('Healthz', '/healthz', 'GET'),
+      _Test('Vapi Webhook Test', '/webhooks/vapi/test', 'GET'),
+      _Test('Vapi Webhook Health', '/webhooks/vapi/health', 'GET'),
+      _Test('Vapi Signature Rejection', '/webhooks/vapi/events', 'POST',
+        body: {'message': {'type': 'assistant-request'}},
+        headers: {'x-vapi-signature': 'sha256=invalid'},
+        expectStatusCodes: [400, 401],
+      ),
+      // —— Unified API ——
+      _Test('Templates', '/api/templates', 'GET'),
+      _Test('Voice Profiles Library', '/api/voice-profiles/library', 'GET'),
+      _Test('Agents', '/api/agents', 'GET'),
+      _Test('Campaigns', '/api/campaigns', 'GET'),
+      _Test('Studio Projects', '/api/studio/projects', 'GET'),
+      _Test('Analytics Overview', '/api/analytics/overview', 'GET'),
       // —— Pulse / app ——
-      _Test('Health Check', '/api/pulse/health', 'GET'),
+      _Test('Pulse Health', '/api/pulse/health', 'GET'),
       _Test('List Students', '/api/pulse/students', 'GET'),
       _Test('List Payments', '/api/pulse/payments', 'GET'),
       _Test('List Calls', '/api/pulse/calls', 'GET'),
       _Test('Get Settings', '/api/pulse/settings', 'GET'),
       _Test('Reports Summary', '/api/pulse/reports/summary', 'GET'),
       _Test('Outbound Numbers', '/api/pulse/outbound/phone-numbers', 'GET'),
+      _Test('Outbound Capacity', '/api/pulse/outbound/capacity', 'GET'),
       _Test('Call Templates', '/api/pulse/call_templates', 'GET'),
-      _Test('Campaigns', '/api/pulse/campaigns', 'GET'),
+      _Test('Campaigns (Pulse)', '/api/pulse/campaigns', 'GET'),
+      _Test('Seed Verify', '/api/pulse/seed-verify', 'GET'),
+      _Test('Insights', '/api/pulse/insights', 'GET'),
+      _Test('Knowledge Policy', '/api/pulse/knowledge/policy', 'GET'),
+      _Test('Knowledge FAQ', '/api/pulse/knowledge/faq', 'GET'),
       // —— Billing / Wallet ——
       _Test('Billing Wallet', '/api/billing/wallet', 'GET'),
       _Test('Billing Tier', '/api/billing/tier', 'GET'),
       _Test('Billing Subscription', '/api/billing/subscription', 'GET'),
       _Test('Billing Transactions', '/api/billing/transactions', 'GET', params: {'limit': 5}),
       _Test('Billing Usage', '/api/billing/usage', 'GET'),
-      // —— Stripe (create-checkout-session: success = URL returned) ——
       _Test('Stripe Create Checkout Session', '/api/billing/wallet/create-checkout-session', 'POST', body: {'pack': 'starter'}),
       // —— Admin (require admin token) ——
       _Test('Admin Billing Overview', '/api/admin/billing-overview', 'GET', adminAuth: true),
@@ -78,23 +100,34 @@ class _BackendTestPageState extends State<BackendTestPage> {
   Future<void> _runTest(_Test test) async {
     final stopwatch = Stopwatch()..start();
     TestResult result;
+    final params = test.params != null ? Map<String, dynamic>.from(test.params!) : null;
+    final body = test.body != null ? Map<String, dynamic>.from(test.body!) : null;
+    final adminAuth = test.adminAuth ?? false;
+    final headers = test.headers != null ? Map<String, String>.from(test.headers!) : null;
+    final expectStatusCodes = test.expectStatusCodes;
 
     try {
       dynamic response;
-      final params = test.params != null ? Map<String, dynamic>.from(test.params!) : null;
-      final body = test.body != null ? Map<String, dynamic>.from(test.body!) : null;
-      final adminAuth = test.adminAuth ?? false;
-
       if (test.method == 'GET') {
-        response = await SpeariaApi.getJson(test.path, params: params, adminAuth: adminAuth);
+        response = await SpeariaApi.getJson(
+          test.path,
+          params: params,
+          headers: headers,
+          adminAuth: adminAuth,
+        );
       } else if (test.method == 'POST') {
-        response = await SpeariaApi.postJson(test.path, body: body ?? {}, params: params, adminAuth: adminAuth);
+        response = await SpeariaApi.postJson(
+          test.path,
+          body: body ?? {},
+          params: params,
+          headers: headers,
+          adminAuth: adminAuth,
+        );
       } else {
         throw Exception('Unsupported method: ${test.method}');
       }
 
       stopwatch.stop();
-
       result = TestResult(
         name: test.name,
         path: test.path,
@@ -107,24 +140,25 @@ class _BackendTestPageState extends State<BackendTestPage> {
       );
     } catch (e) {
       stopwatch.stop();
-
       int? statusCode;
       String errorMsg = e.toString();
-
       if (e is ApiException) {
         statusCode = e.statusCode;
         errorMsg = e.message;
       }
-
+      // Treat expected 4xx (e.g. signature rejection) as success
+      final expectedFail = expectStatusCodes != null &&
+          statusCode != null &&
+          expectStatusCodes.contains(statusCode);
       result = TestResult(
         name: test.name,
         path: test.path,
         method: test.method,
-        status: 'Failed',
+        status: expectedFail ? 'Success' : 'Failed',
         statusCode: statusCode,
         responseTime: stopwatch.elapsedMilliseconds,
-        response: null,
-        error: errorMsg,
+        response: expectedFail ? {'expected_status': statusCode} : null,
+        error: expectedFail ? null : errorMsg,
       );
     }
 
@@ -138,7 +172,12 @@ class _BackendTestPageState extends State<BackendTestPage> {
     return Scaffold(
       backgroundColor: SpeariaAura.bg,
       appBar: AppBar(
-        title: const Text('Backend Connection Test'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: 'Back',
+        ),
+        title: const Text('Developer'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -471,6 +510,8 @@ class _Test {
   final String method;
   final Map<String, dynamic>? body;
   final Map<String, dynamic>? params;
+  final Map<String, String>? headers;
+  final List<int>? expectStatusCodes;
   final bool? adminAuth;
 
   _Test(
@@ -479,6 +520,8 @@ class _Test {
     this.method, {
     this.body,
     this.params,
+    this.headers,
+    this.expectStatusCodes,
     this.adminAuth,
   });
 }
