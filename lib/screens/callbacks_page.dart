@@ -164,7 +164,7 @@ class _CallbacksPageState extends State<CallbacksPage> {
                         final at = _formatCallbackTime(atRaw);
                         final studentId = (c['id'] ?? '').toString();
                         return Card(
-                          color: NeyvoColors.bgCard,
+                          color: NeyvoTheme.bgCard,
                           child: Padding(
                             padding: const EdgeInsets.all(NeyvoSpacing.md),
                             child: Row(
@@ -272,7 +272,7 @@ class _CallbacksPageState extends State<CallbacksPage> {
 
   Widget _statCard(String label, int value, IconData icon, Color color) {
     return Card(
-      color: NeyvoColors.bgCard,
+      color: NeyvoTheme.bgCard,
       child: Padding(
         padding: const EdgeInsets.all(NeyvoSpacing.lg),
         child: Row(
