@@ -268,6 +268,10 @@ class NeyvoPulseApi {
     );
   }
 
+  /// Cancel any scheduled/retry callback for a student.
+  static Future<Map<String, dynamic>> cancelStudentCallback(String studentId) async =>
+      _post('/api/pulse/students/$studentId/callback/cancel', {});
+
   /// GET /api/pulse/students/import/template — returns CSV template as string (for download or preview).
   static Future<String> getStudentsImportTemplate() async =>
       SpeariaApi.getText('/api/pulse/students/import/template', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
@@ -351,6 +355,10 @@ class NeyvoPulseApi {
   /// Phase D: Resolution/success summary for dashboard
   static Future<Map<String, dynamic>> getCallsSuccessSummary() async =>
       _get('/api/pulse/calls/success-summary');
+
+  /// Callback analytics across students (scheduled/completed/exhausted/etc.).
+  static Future<Map<String, dynamic>> getCallbacksAnalytics() async =>
+      _get('/api/pulse/callbacks/analytics');
 
   // Knowledge (Phase C: training – FAQ + policy)
   static Future<Map<String, dynamic>> getKnowledgePolicy() async =>

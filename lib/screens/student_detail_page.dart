@@ -39,6 +39,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   List<Map<String, dynamic>> _agents = [];
   String? _selectedAgentId;
 
+  bool _cancelingCallback = false;
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +109,33 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _cancelCallbackIfAny() async {
+    if (_student == null) return;
+    final status = (_student!['callback_status'] ?? '').toString().toLowerCase();
+    if (status.isEmpty || status == 'canceled' || status == 'completed' || status == 'exhausted') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active callback to cancel.')),
+      );
+      return;
+    }
+    setState(() => _cancelingCallback = true);
+    try {
+      await NeyvoPulseApi.cancelStudentCallback(widget.studentId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Callback cancelled')),
+        );
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _cancelingCallback = false);
     }
   }
 
@@ -290,6 +319,10 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     
     final balance = _balance.text.trim();
     final dueDate = _dueDate.text.trim();
+    final callbackStatus = (_student?['callback_status'] ?? '').toString();
+    final callbackAt = _student?['callback_at'];
+    final callbackAttempts = _student?['callback_attempt_count'];
+    final callbackMaxAttempts = _student?['callback_max_attempts'];
     
     return Scaffold(
       appBar: AppBar(
@@ -349,6 +382,62 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ),
                 ),
               const SizedBox(height: NeyvoSpacing.lg),
+              
+              // Callback status (if any)
+              if (callbackStatus.isNotEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Callback', style: NeyvoType.titleMedium),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Row(
+                          children: [
+                            Chip(
+                              label: Text(
+                                'Status: ${callbackStatus[0].toUpperCase()}${callbackStatus.substring(1)}',
+                                style: NeyvoType.bodySmall,
+                              ),
+                            ),
+                            const SizedBox(width: NeyvoSpacing.sm),
+                            if (callbackAttempts != null && callbackMaxAttempts != null)
+                              Chip(
+                                label: Text(
+                                  'Attempts: $callbackAttempts / $callbackMaxAttempts',
+                                  style: NeyvoType.bodySmall,
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (callbackAt != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: NeyvoSpacing.sm),
+                            child: Text(
+                              'Next time: ${callbackAt.toString()}',
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+                            ),
+                          ),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Row(
+                          children: [
+                            FilledButton.tonal(
+                              onPressed: _cancelingCallback ? null : _cancelCallbackIfAny,
+                              child: _cancelingCallback
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Text('Cancel callback'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               
               // Quick Actions
               Text('Quick Actions', style: NeyvoType.titleMedium),
