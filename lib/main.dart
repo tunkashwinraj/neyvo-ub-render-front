@@ -61,7 +61,12 @@
             return const PulseAuthPage();
           },
         ),
-        onGenerateRoute: PulseRouter.generateRoute,
+      onGenerateRoute: (settings) {
+        if (settings.name == PulseRouteNames.settings && settings.arguments is Map) {
+          // Forward tab hint down to Settings page via PulseShell initialRouteName; SettingsPage reads arguments.
+        }
+        return PulseRouter.generateRoute(settings);
+      },
       );
     }
   }

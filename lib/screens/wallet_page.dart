@@ -193,13 +193,21 @@ class _WalletPageState extends State<WalletPage> {
           ),
         const SizedBox(height: NeyvoSpacing.xl),
         OutlinedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            PulseRouteNames.settings,
+            arguments: const {'tab': 'billing'},
+          ),
           icon: const Icon(Icons.payment),
           label: const Text('Manage plan & billing'),
         ),
         const SizedBox(height: NeyvoSpacing.sm),
         OutlinedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            PulseRouteNames.settings,
+            arguments: const {'tab': 'billing'},
+          ),
           icon: const Icon(Icons.record_voice_over_outlined),
           label: const Text('Change voice tier (Settings → Billing)'),
         ),

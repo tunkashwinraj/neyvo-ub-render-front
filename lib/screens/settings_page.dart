@@ -11,7 +11,9 @@ import 'billing_tab_content.dart';
 import '../theme/neyvo_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
-  const PulseSettingsPage({super.key});
+  const PulseSettingsPage({super.key, this.initialBillingTabIndex});
+
+  final int? initialBillingTabIndex;
 
   @override
   State<PulseSettingsPage> createState() => _PulseSettingsPageState();
@@ -62,6 +64,20 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
     _tabController = TabController(length: 5, vsync: this);
     _load();
     _checkPaymentResultAndSwitchToBilling();
+    final initial = widget.initialBillingTabIndex;
+    if (initial != null && initial >= 0 && initial < _tabController.length) {
+      _tabController.index = initial;
+    }
+    // Also honor Navigator arguments: if caller passed {'tab': 'billing'}, jump to Billing tab.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final route = ModalRoute.of(context);
+      final args = route?.settings.arguments;
+      if (args is Map && (args['tab'] as String?) == 'billing') {
+        if (_tabController.index != 2) {
+          _tabController.index = 2; // 0: Plan, 1: Wallet, 2: Voice Tier (Billing)
+        }
+      }
+    });
   }
 
   void _checkPaymentResultAndSwitchToBilling() {

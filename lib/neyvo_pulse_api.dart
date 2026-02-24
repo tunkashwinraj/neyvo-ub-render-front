@@ -360,6 +360,10 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCallbacksAnalytics() async =>
       _get('/api/pulse/callbacks/analytics');
 
+  /// List students with active callbacks (scheduled / retry_wait / dialing).
+  static Future<Map<String, dynamic>> listCallbacks() async =>
+      _get('/api/pulse/callbacks');
+
   // Knowledge (Phase C: training – FAQ + policy)
   static Future<Map<String, dynamic>> getKnowledgePolicy() async =>
       _get('/api/pulse/knowledge/policy');

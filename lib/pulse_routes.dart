@@ -95,6 +95,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const IntegrationPage());
       case PulseRouteNames.phoneNumbers:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.phoneNumbers));
+      case PulseRouteNames.callbacks:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.callbacks));
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

@@ -380,6 +380,15 @@ class _BillingTabContentState extends State<BillingTabContent>
             Text(name, style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: 4),
             Text(price, style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.teal)),
+            const SizedBox(height: 4),
+            Text(
+              key == 'free'
+                  ? 'Pay-as-you-go credits at standard rate.'
+                  : key == 'pro'
+                      ? 'Includes credit bonus on every top-up (≈10% more credits).'
+                      : 'Includes highest credit bonus on every top-up (≈20% more credits).',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
             const SizedBox(height: 16),
             ...features.map((f) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
