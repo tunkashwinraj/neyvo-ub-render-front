@@ -162,8 +162,9 @@ class _CallbacksPageState extends State<CallbacksPage> {
                         final status = (c['callback_status'] ?? '').toString();
                         final attempts = (c['callback_attempt_count'] as num?)?.toInt();
                         final maxAttempts = (c['callback_max_attempts'] as num?)?.toInt();
-                        final atRaw = c['callback_at'];
-                        final at = formatCallbackTime12h(atRaw);
+                        final at = (c['callback_at_display'] ?? '').toString().trim().isNotEmpty
+                            ? (c['callback_at_display'] ?? '').toString()
+                            : formatCallbackTime12h(c['callback_at']);
                         final studentId = (c['id'] ?? '').toString();
                         return Material(
                           color: Colors.transparent,

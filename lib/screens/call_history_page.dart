@@ -157,7 +157,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       final map = c as Map<String, dynamic>;
       final name = (map['student_name']?.toString() ?? '').replaceAll(',', ';');
       final phone = map['student_phone']?.toString() ?? '';
-      final date = map['created_at']?.toString() ?? map['date']?.toString() ?? '';
+      final date = (map['created_at_display'] ?? map['created_at'] ?? map['date'] ?? '').toString();
       final status = map['status']?.toString() ?? '';
       final duration = formatDuration(map);
       final recording = map['recording_url']?.toString() ?? '';
@@ -417,7 +417,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final status = call['status']?.toString() ?? 'unknown';
                         final studentName = call['student_name']?.toString() ?? 'Unknown';
                         final studentPhone = call['student_phone']?.toString() ?? '';
-                        final date = call['created_at']?.toString() ?? call['date']?.toString() ?? '';
+                        final date = (call['created_at_display'] ?? call['created_at'] ?? call['date'] ?? '').toString();
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
                         final recordingUrl = call['recording_url']?.toString();
