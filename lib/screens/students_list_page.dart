@@ -3,6 +3,8 @@
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
@@ -1125,6 +1127,15 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   }
 
   Future<void> _downloadTemplate() async {
+    // On web, prefer a real CSV download via the browser.
+    if (kIsWeb) {
+      final url = '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await SpeariaApi.launchExternal(url);
+      if (ok) return;
+      // Fall through to text fallback if launch fails.
+    }
+
+    // Fallback (mobile/desktop, or if launchExternal failed): show the CSV so user can copy/save.
     try {
       final template = await NeyvoPulseApi.getStudentsImportTemplate();
       if (context.mounted) {
@@ -1144,7 +1155,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Template: name,phone,balance,due_date,late_fee,student_id,email,notes')),
+          const SnackBar(content: Text('Template: name,phone,email,student_id,balance,due_date,late_fee,notes')),
         );
       }
     }
