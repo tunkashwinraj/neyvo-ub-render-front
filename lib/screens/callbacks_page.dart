@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../utils/callback_date_format.dart';
 import 'outbound_calls_page.dart';
+import 'student_detail_page.dart';
 
 class CallbacksPage extends StatefulWidget {
   const CallbacksPage({super.key});
@@ -161,103 +163,135 @@ class _CallbacksPageState extends State<CallbacksPage> {
                         final attempts = (c['callback_attempt_count'] as num?)?.toInt();
                         final maxAttempts = (c['callback_max_attempts'] as num?)?.toInt();
                         final atRaw = c['callback_at'];
-                        final at = _formatCallbackTime(atRaw);
+                        final at = formatCallbackTime12h(atRaw);
                         final studentId = (c['id'] ?? '').toString();
-                        return Card(
-                          color: NeyvoTheme.bgCard,
-                          child: Padding(
-                            padding: const EdgeInsets.all(NeyvoSpacing.md),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        style: NeyvoType.titleMedium.copyWith(color: NeyvoColors.textPrimary),
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: studentId.isEmpty
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => StudentDetailPage(
+                                          studentId: studentId,
+                                          onUpdated: _load,
+                                        ),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        phone,
-                                        style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: NeyvoSpacing.sm,
-                                        runSpacing: NeyvoSpacing.sm,
+                                    );
+                                  },
+                            borderRadius: BorderRadius.circular(NeyvoRadius.lg),
+                            child: Card(
+                              color: NeyvoTheme.bgCard,
+                              child: Padding(
+                                padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Row(
                                         children: [
-                                          Chip(
-                                            label: Text(
-                                              'Status: ${status.isEmpty ? 'unknown' : status}',
-                                              style: NeyvoType.bodySmall,
-                                            ),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  name,
+                                                  style: NeyvoType.titleMedium.copyWith(color: NeyvoColors.textPrimary),
+                                                ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            phone,
+                                            style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
                                           ),
-                                          if (attempts != null && maxAttempts != null)
-                                            Chip(
-                                              label: Text(
-                                                'Attempts: $attempts / $maxAttempts',
-                                                style: NeyvoType.bodySmall,
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: NeyvoSpacing.sm,
+                                            runSpacing: NeyvoSpacing.sm,
+                                            children: [
+                                              Chip(
+                                                label: Text(
+                                                  'Status: ${status.isEmpty ? 'unknown' : status}',
+                                                  style: NeyvoType.bodySmall,
+                                                ),
+                                              ),
+                                              if (attempts != null && maxAttempts != null)
+                                                Chip(
+                                                  label: Text(
+                                                    'Attempts: $attempts / $maxAttempts',
+                                                    style: NeyvoType.bodySmall,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          if (at.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Next: $at',
+                                              style: NeyvoType.bodyMedium.copyWith(
+                                                color: NeyvoColors.tealLight,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                          if (at.isNotEmpty)
-                                            Chip(
-                                              label: Text(
-                                                'Next: $at',
-                                                style: NeyvoType.bodySmall,
+                                          ],
+                                        ],
                                               ),
+                                            ),
+                                          if (studentId.isNotEmpty)
+                                            Icon(
+                                              Icons.chevron_right,
+                                              color: NeyvoColors.textMuted,
+                                              size: 24,
                                             ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: NeyvoSpacing.md),
-                                Wrap(
-                                  spacing: NeyvoSpacing.sm,
-                                  children: [
-                                    FilledButton.tonal(
-                                      onPressed: studentId.isEmpty
-                                          ? null
-                                          : () {
-                                              // Navigate to outbound calls page prefilled with this student.
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (_) => OutboundCallsPage(
-                                                    prefillStudent: {
-                                                      'id': studentId,
-                                                      'name': name,
-                                                      'phone': phone,
-                                                    },
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                      child: const Text('Call now'),
                                     ),
-                                    OutlinedButton(
-                                      onPressed: studentId.isEmpty
-                                          ? null
-                                          : () async {
-                                              try {
-                                                await NeyvoPulseApi.cancelStudentCallback(studentId);
-                                                if (!mounted) return;
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Callback cancelled')),
-                                                );
-                                                await _load();
-                                              } catch (e) {
-                                                if (!mounted) return;
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(content: Text(e.toString())),
-                                                );
-                                              }
-                                            },
-                                      child: const Text('Cancel'),
+                                    const SizedBox(width: NeyvoSpacing.md),
+                                    Wrap(
+                                      spacing: NeyvoSpacing.sm,
+                                      children: [
+                                        FilledButton.tonal(
+                                          onPressed: studentId.isEmpty
+                                              ? null
+                                              : () {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) => OutboundCallsPage(
+                                                        prefillStudent: {
+                                                          'id': studentId,
+                                                          'name': name,
+                                                          'phone': phone,
+                                                        },
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                          child: const Text('Call now'),
+                                        ),
+                                        OutlinedButton(
+                                          onPressed: studentId.isEmpty
+                                              ? null
+                                              : () async {
+                                                  try {
+                                                    await NeyvoPulseApi.cancelStudentCallback(studentId);
+                                                    if (!mounted) return;
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('Callback cancelled')),
+                                                    );
+                                                    await _load();
+                                                  } catch (e) {
+                                                    if (!mounted) return;
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text(e.toString())),
+                                                    );
+                                                  }
+                                                },
+                                          child: const Text('Cancel'),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         );
@@ -316,15 +350,5 @@ class _CallbacksPageState extends State<CallbacksPage> {
     return _callbacks;
   }
 
-  String _formatCallbackTime(dynamic raw) {
-    if (raw == null) return '';
-    try {
-      final dt = DateTime.parse(raw.toString()).toLocal();
-      return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw.toString();
-    }
-  }
 }
 

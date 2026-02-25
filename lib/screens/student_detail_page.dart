@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../../api/spearia_api.dart' show ApiException;
 import '../theme/neyvo_theme.dart';
+import '../utils/callback_date_format.dart';
 
 class StudentDetailPage extends StatefulWidget {
   final String studentId;
@@ -415,8 +416,11 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                           Padding(
                             padding: const EdgeInsets.only(top: NeyvoSpacing.sm),
                             child: Text(
-                              'Next time: ${callbackAt.toString()}',
-                              style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+                              'Next: ${formatCallbackTime12h(callbackAt)}',
+                              style: NeyvoType.bodyMedium.copyWith(
+                                color: NeyvoColors.tealLight,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         const SizedBox(height: NeyvoSpacing.sm),

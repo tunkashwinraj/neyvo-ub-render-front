@@ -247,6 +247,30 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     }
   }
 
+  Future<void> _setBackgroundSound(bool enabled) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await NeyvoPulseApi.updateAgent(widget.agentId, {
+        'background_sound': enabled ? 'office' : 'off',
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(enabled ? 'Background voice on' : 'Background voice off')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _setComplianceFlag(String key, bool value) async {
     if (_saving) return;
     final current = Map<String, dynamic>.from(
@@ -649,6 +673,17 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   const SizedBox(height: 12),
                   _buildSimilarityBoostSlider(),
                 ],
+                const SizedBox(height: 24),
+                SwitchListTile(
+                  title: const Text('Background voice'),
+                  subtitle: Text(
+                    'Play ambient sound during calls. Turn off if you hear unwanted background audio.',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  ),
+                  value: (_agent?['background_sound'] ?? 'off').toString().toLowerCase() != 'off',
+                  onChanged: _saving ? null : (v) => _setBackgroundSound(v),
+                  activeColor: NeyvoTheme.teal,
+                ),
               ],
             ),
           ),
