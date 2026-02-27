@@ -42,12 +42,8 @@ class PulseRouter {
       case PulseRouteNames.managedProfiles:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
       case PulseRouteNames.managedProfileDetail:
-        final profileId = settings.arguments as String? ?? '';
-        // Keep the drawer visible while showing the managed profile detail.
-        return MaterialPageRoute(
-          builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles),
-          settings: settings.copyWith(arguments: profileId),
-        );
+        // Managed profile detail is now shown via split-view inside PulseShell.
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
       case PulseRouteNames.projects:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.projects));
       case PulseRouteNames.voiceLibrary:

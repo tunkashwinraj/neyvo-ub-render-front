@@ -35,7 +35,11 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   String _schedulingSystem = 'None yet';
   String _voiceStyle = 'warm_friendly';
   bool _voicemailEnabled = true;
+  bool _allowCallbacks = true;
   bool _portalStepsYes = false;
+  String _educationCallType = 'loan_acceptance';
+  bool _requireIdentityVerification = false;
+  bool _salonAllowUpsell = false;
   // Phone number selection (optional)
   String? _selectedPhoneNumberId;
   String? _selectedVapiPhoneNumberId;
@@ -97,11 +101,23 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     final profileName = _profileName.text.trim().isEmpty ? generatedProfileName : _profileName.text.trim();
     final businessSpecifics = <String, dynamic>{};
     if (_selectedIndustryId == 'school_financial_aid') {
+      businessSpecifics['call_type'] = _educationCallType;
       if (_officeHours.text.trim().isNotEmpty) businessSpecifics['office_hours'] = _officeHours.text.trim();
-      if (_portalStepsYes && _portalSteps.text.trim().isNotEmpty) businessSpecifics['portal_steps'] = _portalSteps.text.trim();
+      if (_portalStepsYes && _portalSteps.text.trim().isNotEmpty) {
+        businessSpecifics['portal_steps'] = _portalSteps.text.trim();
+      }
+      businessSpecifics['require_identity_verification'] = _requireIdentityVerification;
     } else {
-      if (_servicesOffered.text.trim().isNotEmpty) businessSpecifics['services'] = _servicesOffered.text.trim();
-      if (_schedulingSystem.trim().isNotEmpty) businessSpecifics['scheduling_system'] = _schedulingSystem.trim();
+      if (_servicesOffered.text.trim().isNotEmpty) {
+        businessSpecifics['services_offered'] = _servicesOffered.text.trim();
+      }
+      if (_officeHours.text.trim().isNotEmpty) {
+        businessSpecifics['business_hours'] = _officeHours.text.trim();
+      }
+      if (_schedulingSystem.trim().isNotEmpty) {
+        businessSpecifics['scheduling_system'] = _schedulingSystem.trim();
+      }
+      businessSpecifics['allow_upsell'] = _salonAllowUpsell;
     }
     final payload = {
       'industry_id': _selectedIndustryId!,
@@ -109,8 +125,10 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
       'business_name': _businessName.text.trim(),
       'primary_goal': _primaryGoal.text.trim().length > 200 ? _primaryGoal.text.trim().substring(0, 200) : _primaryGoal.text.trim(),
       'phone_number': _phoneNumber.text.trim(),
+      'callback_phone': _phoneNumber.text.trim(),
       'voice_style': _voiceStyle,
       'voicemail_enabled': _voicemailEnabled,
+      'allow_callbacks': _allowCallbacks,
       'agent_persona_name': _agentName.text.trim().isEmpty ? 'Alex' : _agentName.text.trim(),
       'business_specifics': businessSpecifics,
     };
@@ -373,6 +391,33 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
         ),
         if (isEducation) ...[
           const SizedBox(height: 12),
+          Text('What type of calls is this profile making?', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (id, label) in const [
+                ('loan_acceptance', 'Loan acceptance'),
+                ('payment_reminder', 'Payment reminder'),
+                ('portal_guidance', 'Portal guidance'),
+                ('general_followup', 'General follow-up'),
+              ])
+                ChoiceChip(
+                  label: Text(label),
+                  selected: _educationCallType == id,
+                  selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+                  backgroundColor: NeyvoColors.bgRaised,
+                  labelStyle: NeyvoTextStyles.micro.copyWith(color: _educationCallType == id ? NeyvoColors.teal : NeyvoColors.textSecondary),
+                  onSelected: (_) => setState(() => _educationCallType = id),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: NeyvoColors.borderDefault),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
           _field('Office hours (optional)', _officeHours, hint: 'e.g. Monday–Friday, 9am–5pm'),
           const SizedBox(height: 12),
           Row(
@@ -383,6 +428,19 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
             ],
           ),
           if (_portalStepsYes) _field('Portal steps', _portalSteps, lines: 2),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text('Confirm identity before discussing account', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+              const SizedBox(width: 8),
+              Switch(
+                value: _requireIdentityVerification,
+                onChanged: (v) => setState(() => _requireIdentityVerification = v),
+                activeTrackColor: NeyvoColors.teal,
+                activeThumbColor: NeyvoColors.teal,
+              ),
+            ],
+          ),
         ] else ...[
           const SizedBox(height: 12),
           _field('Services offered (brief)', _servicesOffered, hint: 'e.g. Haircuts, color services, blowouts'),
@@ -412,6 +470,19 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
             Text('Leave voicemail if no answer', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
             const SizedBox(width: 8),
             Switch(value: _voicemailEnabled, onChanged: (v) => setState(() => _voicemailEnabled = v), activeTrackColor: NeyvoColors.teal, activeThumbColor: NeyvoColors.teal),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Text('Allow callbacks from this profile', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+            const SizedBox(width: 8),
+            Switch(
+              value: _allowCallbacks,
+              onChanged: (v) => setState(() => _allowCallbacks = v),
+              activeTrackColor: NeyvoColors.teal,
+              activeThumbColor: NeyvoColors.teal,
+            ),
           ],
         ),
       ],

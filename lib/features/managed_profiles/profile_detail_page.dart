@@ -14,9 +14,14 @@ import '../../screens/plan_selector_page.dart';
 import 'managed_profile_api_service.dart';
 
 class ManagedProfileDetailPage extends StatefulWidget {
-  const ManagedProfileDetailPage({super.key, required this.profileId});
+  const ManagedProfileDetailPage({
+    super.key,
+    required this.profileId,
+    this.embedded = false,
+  });
 
   final String profileId;
+  final bool embedded;
 
   @override
   State<ManagedProfileDetailPage> createState() => _ManagedProfileDetailPageState();
@@ -111,6 +116,92 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
 
   @override
   Widget build(BuildContext context) {
+    final content = _loading
+        ? const Center(child: CircularProgressIndicator(color: NeyvoColors.teal))
+        : _error != null
+            ? Center(child: Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)))
+            : Column(
+                children: [
+                  if ((_profile?['status'] as String? ?? 'active') == 'active')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _canMakeOutboundCalls
+                                  ? _onMakeOutboundCall
+                                  : _showUpgradeForOutbound,
+                              icon: Icon(
+                                _canMakeOutboundCalls ? Icons.call : Icons.lock,
+                                size: 16,
+                              ),
+                              label: Text(
+                                _canMakeOutboundCalls
+                                    ? 'Make Outbound Call'
+                                    : 'Upgrade to enable outbound calls',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _onTestCall,
+                              icon: const Icon(Icons.headset, size: 16),
+                              label: const Text('Test Call'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _OverviewTab(profileId: widget.profileId, profile: _profile!, onRefresh: _load),
+                        _EditTab(profileId: widget.profileId, profile: _profile!, onSaved: _load),
+                        _AIStudioTab(
+                          profileId: widget.profileId,
+                          subscriptionPlan: _subscriptionPlan,
+                          loadingPlan: _loadingPlan,
+                        ),
+                        _CallLogsTab(profileId: widget.profileId),
+                        _PerformanceTab(profileId: widget.profileId),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+
+    if (widget.embedded) {
+      // Embedded inside split-view; no own Scaffold or back button.
+      return Container(
+        color: NeyvoColors.bgVoid,
+        child: Column(
+          children: [
+            Container(
+              color: NeyvoColors.bgBase,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: NeyvoColors.teal,
+                unselectedLabelColor: NeyvoColors.textSecondary,
+                indicatorColor: NeyvoColors.teal,
+                tabs: const [
+                  Tab(text: 'Overview'),
+                  Tab(text: 'Edit'),
+                  Tab(text: 'AI Studio'),
+                  Tab(text: 'Calls'),
+                  Tab(text: 'Performance'),
+                ],
+              ),
+            ),
+            Expanded(child: content),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       appBar: AppBar(
@@ -137,62 +228,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: NeyvoColors.teal))
-          : _error != null
-              ? Center(child: Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)))
-              : Column(
-                  children: [
-                    if ((_profile?['status'] as String? ?? 'active') == 'active')
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _canMakeOutboundCalls
-                                    ? _onMakeOutboundCall
-                                    : _showUpgradeForOutbound,
-                                icon: Icon(
-                                  _canMakeOutboundCalls ? Icons.call : Icons.lock,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  _canMakeOutboundCalls
-                                      ? 'Make Outbound Call'
-                                      : 'Upgrade to enable outbound calls',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _onTestCall,
-                                icon: const Icon(Icons.headset, size: 16),
-                                label: const Text('Test Call'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _OverviewTab(profileId: widget.profileId, profile: _profile!, onRefresh: _load),
-                          _EditTab(profileId: widget.profileId, profile: _profile!, onSaved: _load),
-                          _AIStudioTab(
-                            profileId: widget.profileId,
-                            subscriptionPlan: _subscriptionPlan,
-                            loadingPlan: _loadingPlan,
-                          ),
-                          _CallLogsTab(profileId: widget.profileId),
-                          _PerformanceTab(profileId: widget.profileId),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+      body: content,
     );
   }
 
@@ -411,6 +447,7 @@ class _OverviewTabState extends State<_OverviewTab> {
     final attachedNumberId = widget.profile['attached_phone_number_id'] as String?;
     final subscriptionTier = (widget.profile['subscription_tier'] as String?)?.toLowerCase();
     final voiceTier = (widget.profile['voice_tier'] as String?)?.toLowerCase();
+    final installedCapabilities = (widget.profile['installed_capabilities'] as List?)?.cast<dynamic>() ?? const [];
 
     String _tierLabel(String? t) {
       switch (t) {
@@ -489,6 +526,32 @@ class _OverviewTabState extends State<_OverviewTab> {
                     'Goal: ${bc['primary_goal'] ?? ''}',
                     style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
                   ),
+                  if (installedCapabilities.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Capabilities:',
+                      style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: installedCapabilities
+                          .map((c) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: NeyvoColors.bgRaised,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: NeyvoColors.borderSubtle),
+                                ),
+                                child: Text(
+                                  c.toString().replaceAll('Capability_v1', '').replaceAll('_', ' '),
+                                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -558,7 +621,7 @@ class _OverviewTabState extends State<_OverviewTab> {
             children: [
               Expanded(
                 child: Text(
-                  'Vapi assistant ID: $vapiId',
+                  'Profile ID: $vapiId',
                   style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
                   overflow: TextOverflow.ellipsis,
                 ),

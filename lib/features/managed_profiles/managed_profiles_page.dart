@@ -6,6 +6,7 @@ import '../../pulse_route_names.dart';
 import '../../theme/neyvo_theme.dart';
 import 'create_profile_wizard.dart';
 import 'managed_profile_api_service.dart';
+import 'profile_detail_page.dart';
 
 class ManagedProfilesPage extends StatefulWidget {
   const ManagedProfilesPage({super.key});
@@ -224,7 +225,10 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
                   ),
                 )
-              : ManagedProfileDetailPage(profileId: _selectedProfileId!),
+              : ManagedProfileDetailPage(
+                  profileId: _selectedProfileId!,
+                  embedded: true,
+                ),
         ),
       ],
     );

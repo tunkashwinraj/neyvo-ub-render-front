@@ -7,6 +7,7 @@ import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../widgets/neyvo_empty_state.dart';
 import 'agent_creation_wizard.dart';
+import 'agent_detail_page.dart';
 
 class AgentsListPage extends StatefulWidget {
   const AgentsListPage({super.key});
