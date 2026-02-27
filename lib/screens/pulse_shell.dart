@@ -24,6 +24,7 @@ import 'analytics_page.dart';
 import 'callbacks_page.dart';
 import 'students_list_page.dart';
 import 'template_scripts_page.dart';
+import '../features/managed_profiles/managed_profiles_page.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 
@@ -39,12 +40,13 @@ class PulseShell extends StatefulWidget {
 class _PulseShellState extends State<PulseShell> {
   int _selectedIndex = 0;
   int? _walletCredits;
-  int? _numbersCount;
+  int? _numbersCount; // kept for future analytics panels
   int? _callsTodayCapacity;
   int? _callsTodayUsed;
   double? _usageSpend;
   int _addonsCount = 0;
   String? _subscriptionStatus;
+  String? _subscriptionTier;
   String? _orgStatus;
   String? _accountName;
   String? _accountIdDisplay;
@@ -58,6 +60,7 @@ class _PulseShellState extends State<PulseShell> {
   static List<_NavItem> get _navComms => [
     const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
     const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
+    const _NavItem('Voice Profiles', Icons.tune, PulseRouteNames.managedProfiles),
     const _NavItem('Contacts', Icons.people_outline, PulseRouteNames.students),
     const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.callHistory),
     const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
@@ -84,6 +87,7 @@ class _PulseShellState extends State<PulseShell> {
   List<Widget> get _pagesComms => [
     const PulseDashboardPage(),     // Home
     const AgentsListPage(),        // Agents
+    const ManagedProfilesPage(),   // Voice Profiles
     const StudentsListPage(),      // Contacts
     const CallHistoryPage(),       // Calls
     const CampaignsPage(),         // Campaigns
@@ -126,8 +130,12 @@ class _PulseShellState extends State<PulseShell> {
     _loadWalletCredits();
     _loadNumbersSummary();
     _loadUsageSummary();
+    // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
+    // Otherwise Firestore rules typically deny access and we get permission-denied. Wallet
+    // data still loads via _loadWalletCredits() (API) above.
     final docId = _orgDocId ?? NeyvoPulseApi.defaultAccountId;
-    if (docId.isNotEmpty && _orgCollection.isNotEmpty) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (docId.isNotEmpty && _orgCollection.isNotEmpty && user != null) {
       _walletSubscription = FirebaseFirestore.instance
           .collection(_orgCollection)
           .doc(docId)
@@ -146,7 +154,9 @@ class _PulseShellState extends State<PulseShell> {
           });
         },
         onError: (error) {
-          // Gracefully handle Firestore permission errors so the UI doesn't crash.
+          // On permission-denied, cancel so we don't keep logging; wallet stays from API.
+          _walletSubscription?.cancel();
+          _walletSubscription = null;
           debugPrint('Wallet subscription error: $error');
         },
       );
@@ -169,7 +179,10 @@ class _PulseShellState extends State<PulseShell> {
         setState(() {
           _walletCredits = credits;
           _addonsCount = shield.length + (hipaa ? 1 : 0);
-          _subscriptionStatus = (w['subscription_status'] as String?)?.toLowerCase();
+          _subscriptionStatus =
+              (w['subscription_status'] as String?)?.toLowerCase();
+          _subscriptionTier =
+              (w['subscription_tier'] as String?)?.toLowerCase();
           _orgStatus = (w['status'] as String?)?.toLowerCase();
         });
       }
@@ -387,6 +400,37 @@ class _PulseShellState extends State<PulseShell> {
                       style: NeyvoTextStyles.micro,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (_subscriptionTier != null && _subscriptionTier!.isNotEmpty)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: NeyvoColors.teal.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: NeyvoColors.teal.withOpacity(0.3),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          _subscriptionTier == 'business'
+                              ? 'Business'
+                              : _subscriptionTier == 'pro'
+                                  ? 'Pro'
+                                  : 'Free',
+                          style: NeyvoTextStyles.micro.copyWith(
+                            color: NeyvoColors.teal,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 // Account ID shown in Settings → Organization only (not raw org doc id in sidebar)

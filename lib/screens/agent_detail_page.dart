@@ -1,6 +1,8 @@
 // lib/screens/agent_detail_page.dart
 // Agent detail: all configurations — basics, scripts & prompts, voice, compliance.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -25,6 +27,9 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _systemPromptController = TextEditingController();
   final TextEditingController _openingMessageController = TextEditingController();
+  final TextEditingController _voicemailMessageController = TextEditingController();
+  final TextEditingController _endCallPhrasesController = TextEditingController();
+  final TextEditingController _advancedConfigController = TextEditingController();
   double? _stabilityOverride;
   double? _similarityBoostOverride;
 
@@ -33,6 +38,9 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     _nameController.dispose();
     _systemPromptController.dispose();
     _openingMessageController.dispose();
+    _voicemailMessageController.dispose();
+    _endCallPhrasesController.dispose();
+    _advancedConfigController.dispose();
     super.dispose();
   }
 
@@ -58,8 +66,14 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
         _nameController.text = (agentData['name'] as String?) ?? '';
         _systemPromptController.text = (agentData['system_prompt'] as String?) ?? '';
         _openingMessageController.text = (agentData['opening_message'] as String?) ?? '';
+        _voicemailMessageController.text = (agentData['voicemail_message'] as String?) ?? '';
+        final endPhrases = agentData['end_call_phrases'] as List?;
+        _endCallPhrasesController.text = endPhrases != null
+            ? (endPhrases.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).join('\n'))
+            : '';
         _stabilityOverride = null;
         _similarityBoostOverride = null;
+        _advancedConfigController.text = _formatAdvancedConfig(agentData);
         if (mounted) {
           setState(() {
             _agent = agentData;
@@ -82,6 +96,98 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  /// Format agent's full-parity fields as readable JSON for the advanced text area.
+  String _formatAdvancedConfig(Map<String, dynamic> agent) {
+    final map = <String, dynamic>{};
+    for (final key in [
+      'voice_config',
+      'model_config',
+      'transcriber_config',
+      'analysis_plan',
+      'message_plan',
+      'start_speaking_plan',
+      'stop_speaking_plan',
+    ]) {
+      final v = agent[key];
+      if (v != null && (v is Map || v is List)) map[key] = v;
+    }
+    if (map.isEmpty) return '';
+    try {
+      const encoder = JsonEncoder.withIndent('  ');
+      return encoder.convert(map);
+    } catch (_) {
+      return map.toString();
+    }
+  }
+
+  Future<void> _saveCallBehavior() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final voicemail = _voicemailMessageController.text.trim();
+      final phrasesText = _endCallPhrasesController.text.trim();
+      final endCallPhrases = phrasesText.isEmpty
+          ? <String>[]
+          : phrasesText.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final payload = <String, dynamic>{
+        'voicemail_message': voicemail.isEmpty ? null : voicemail,
+        'end_call_phrases': endCallPhrases.isEmpty ? null : endCallPhrases,
+      };
+      payload.removeWhere((_, v) => v == null);
+      await NeyvoPulseApi.updateAgent(widget.agentId, payload);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Call behavior saved')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveAdvancedConfig() async {
+    final raw = _advancedConfigController.text.trim();
+    if (raw.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter JSON or leave empty to skip.')),
+        );
+      }
+      return;
+    }
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>?;
+      if (decoded == null || decoded.isEmpty) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+      await NeyvoPulseApi.updateAgent(widget.agentId, decoded);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Advanced config saved')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid JSON or failed to save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -197,27 +303,68 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     }
   }
 
-  Future<void> _saveBasicsAndScripts() async {
+  Future<void> _saveName() async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final payload = <String, dynamic>{
-        'name': _nameController.text.trim().isEmpty ? null : _nameController.text.trim(),
-        'system_prompt': _systemPromptController.text.trim().isEmpty ? null : _systemPromptController.text.trim(),
-        'opening_message': _openingMessageController.text.trim().isEmpty ? null : _openingMessageController.text.trim(),
-      };
-      payload.removeWhere((_, v) => v == null);
-      await NeyvoPulseApi.updateAgent(widget.agentId, payload);
+      final name = _nameController.text.trim();
+      await NeyvoPulseApi.updateAgent(widget.agentId, {'name': name.isEmpty ? null : name});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Agent updated')),
+          const SnackBar(content: Text('Name saved')),
         );
         _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: $e')),
+          SnackBar(content: Text('Failed to save name: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveSystemPrompt() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final value = _systemPromptController.text.trim();
+      await NeyvoPulseApi.updateAgent(widget.agentId, {'system_prompt': value.isEmpty ? null : value});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('System prompt saved')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save system prompt: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveOpeningMessage() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final value = _openingMessageController.text.trim();
+      await NeyvoPulseApi.updateAgent(widget.agentId, {'opening_message': value.isEmpty ? null : value});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Opening message saved')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save opening message: $e')),
         );
       }
     } finally {
@@ -505,6 +652,11 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                         style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonal(
+                      onPressed: _saving ? null : _saveName,
+                      child: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save name'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -536,7 +688,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
           const SizedBox(height: NeyvoSpacing.lg),
           _sectionCard(
             'Scripts & prompts',
-            'System prompt and opening message. You can use variables like {{business_name}}.',
+            'System prompt and opening message (first message). Use variables like {{business_name}}. Save each field separately.',
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -552,20 +704,68 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
                 ),
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.tonal(
-                    onPressed: _saving ? null : _enhanceSystemPrompt,
-                    child: const Text('Enhance script with AI'),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    FilledButton.tonal(
+                      onPressed: _saving ? null : _enhanceSystemPrompt,
+                      child: const Text('Enhance script with AI'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _saving ? null : _saveSystemPrompt,
+                      child: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save system prompt'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _openingMessageController,
                   maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: 'Opening message',
+                    labelText: 'Opening message (first message)',
                     hintText: 'First thing the agent says when a call starts...',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _saving ? null : _saveOpeningMessage,
+                    child: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save opening message'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: NeyvoSpacing.lg),
+          _sectionCard(
+            'Call behavior',
+            'Voicemail message and end-call phrases (synced to Vapi).',
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _voicemailMessageController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Voicemail message',
+                    hintText: 'Message when call goes to voicemail...',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _endCallPhrasesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'End-call phrases',
+                    hintText: 'One phrase per line (e.g. "Goodbye", "Talk to you later")',
                     alignLabelWithHint: true,
                     border: OutlineInputBorder(),
                   ),
@@ -574,9 +774,9 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _saving ? null : _saveBasicsAndScripts,
-                    child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save name & scripts'),
+                  child: FilledButton.tonal(
+                    onPressed: _saving ? null : _saveCallBehavior,
+                    child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save call behavior'),
                   ),
                 ),
               ],
@@ -703,6 +903,50 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
               ),
             ),
           ],
+          const SizedBox(height: NeyvoSpacing.lg),
+          const SizedBox(height: NeyvoSpacing.lg),
+          ExpansionTile(
+            title: Text('Advanced (Vapi parity)', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            subtitle: Text(
+              'voice_config, model_config, transcriber_config, analysis_plan, message_plan, start_speaking_plan, stop_speaking_plan',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            collapsedBackgroundColor: NeyvoTheme.bgCard,
+            backgroundColor: NeyvoTheme.bgCard,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Edit as JSON. Keys: voice_config, model_config, transcriber_config, analysis_plan, message_plan, start_speaking_plan, stop_speaking_plan. Use snake_case.',
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textTertiary),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _advancedConfigController,
+                      maxLines: 12,
+                      decoration: const InputDecoration(
+                        hintText: '{}',
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonal(
+                        onPressed: _saving ? null : _saveAdvancedConfig,
+                        child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save advanced config'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: NeyvoSpacing.lg),
           _sectionCard(
             'Configuration',

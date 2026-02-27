@@ -9,6 +9,8 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../widgets/add_credits_modal.dart';
+import '../models/subscription_model.dart';
+import '../services/subscription_service.dart';
 
 class BillingTabContent extends StatefulWidget {
   const BillingTabContent({super.key});
@@ -52,12 +54,14 @@ class _BillingTabContentState extends State<BillingTabContent>
         NeyvoPulseApi.getBillingWallet(),
         NeyvoPulseApi.getBillingTransactions(limit: 20, offset: 0),
         NeyvoPulseApi.listNumbers(),
+        SubscriptionService.getCurrentPlan(),
       ]);
       if (mounted) {
         setState(() {
           _wallet = results[0] as Map<String, dynamic>?;
           _transactions = results[1] as Map<String, dynamic>?;
           _numbers = results[2] as Map<String, dynamic>?;
+          _subscriptionPlan = results[3] as SubscriptionPlan;
           _loading = false;
         });
       }
@@ -99,6 +103,7 @@ class _BillingTabContentState extends State<BillingTabContent>
       _monthlyCreditsExtraNumbers + _monthlyCreditsShield + _monthlyCreditsHipaa;
 
   bool _changingPlan = false;
+  SubscriptionPlan? _subscriptionPlan;
 
   void _showAddCreditsModal() {
     final origin = Uri.base.origin;
@@ -113,6 +118,8 @@ class _BillingTabContentState extends State<BillingTabContent>
 
   String _formatCredits(int n) =>
       n.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+
+  SubscriptionPlan? get _plan => _subscriptionPlan;
 
   Future<void> _setTier(String tier) async {
     if (_updatingTier != null) return;
@@ -460,6 +467,7 @@ class _BillingTabContentState extends State<BillingTabContent>
         0;
     final cpm = (_wallet?['credits_per_minute'] as num?)?.toInt() ?? 25;
     final estMin = cpm > 0 ? credits ~/ cpm : 0;
+    final plan = _plan;
     final tierLabel = _tierDisplay(_currentVoiceTier);
     final lowBalance = credits < 500;
 
@@ -500,10 +508,25 @@ class _BillingTabContentState extends State<BillingTabContent>
                 Text(
                   _formatCredits(credits),
                   style: NeyvoType.displayLarge.copyWith(
-                      fontSize: 40, fontWeight: FontWeight.w700, color: NeyvoTheme.textPrimary),
+                      fontSize: 40,
+                      fontWeight: FontWeight.w700,
+                      color: NeyvoTheme.textPrimary),
                 ),
-                Text('credits · ≈ $estMin min at $tierLabel',
-                    style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                Text(
+                  'credits · ≈ $estMin min at $tierLabel',
+                  style: NeyvoType.bodyMedium
+                      .copyWith(color: NeyvoTheme.textSecondary),
+                ),
+                if (plan != null && plan.creditBonusPct > 0) ...[
+                  const SizedBox(height: NeyvoSpacing.xs),
+                  Text(
+                    plan.isBusiness
+                        ? '+20% bonus credits on every top-up'
+                        : '+10% bonus credits on every top-up',
+                    style: NeyvoType.bodySmall
+                        .copyWith(color: NeyvoTheme.success),
+                  ),
+                ],
                 const SizedBox(height: NeyvoSpacing.lg),
                 FilledButton.icon(
                   onPressed: _showAddCreditsModal,

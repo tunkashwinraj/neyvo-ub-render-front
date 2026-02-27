@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
+import '../features/managed_profiles/profile_detail_page.dart';
 
 const String _kLinkedNumbersKey = 'neyvo_pulse_linked_numbers';
 
@@ -537,28 +539,30 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
       return;
     }
     try {
+      final messenger = ScaffoldMessenger.of(context);
       final res = await NeyvoPulseApi.attachNumber(
         phoneNumberE164: e164,
         phoneNumberId: id,
         friendlyName: _devNameController.text.trim().isEmpty ? null : _devNameController.text.trim(),
       );
-      if (mounted) {
-        if (res['ok'] == true) {
-          await _saveLinkedNumberToStorage({
-            'id': id,
-            'phone_number_id': id,
-            'phone_number': e164,
-            'phone_number_e164': e164,
-            'friendly_name': _devNameController.text.trim().isEmpty ? null : _devNameController.text.trim(),
-          });
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number linked via API. Refreshing.')));
-          _load();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error']?.toString() ?? 'Failed')));
-        }
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        await _saveLinkedNumberToStorage({
+          'id': id,
+          'phone_number_id': id,
+          'phone_number': e164,
+          'phone_number_e164': e164,
+          'friendly_name': _devNameController.text.trim().isNotEmpty ? _devNameController.text.trim() : null,
+        });
+        messenger.showSnackBar(const SnackBar(content: Text('Number linked via API. Refreshing.')));
+        _load();
+      } else {
+        messenger.showSnackBar(SnackBar(content: Text(res['error']?.toString() ?? 'Failed')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -714,7 +718,7 @@ class _NumberCardState extends State<_NumberCard> {
   @override
   Widget build(BuildContext context) {
     final n = widget.number;
-    final numberId = n['number_id']?.toString() ?? '';
+    final numberId = (n['number_id'] ?? n['id'] ?? n['phone_number_id'])?.toString() ?? '';
     final rawPhone = n['phone_number']?.toString() ?? '';
     final phone = widget.formatPhone(rawPhone);
     final friendlyName = n['friendly_name']?.toString() ?? '';
@@ -730,6 +734,8 @@ class _NumberCardState extends State<_NumberCard> {
     final callsRemaining = (n['calls_remaining_today'] as num?)?.toInt() ?? 0;
     final registeredFreecaller = n['registered_freecaller'] as bool? ?? false;
     final isPrimary = role == 'primary';
+    final attachedProfileId = n['attached_profile_id']?.toString();
+    final attachedProfileName = n['attached_profile_name']?.toString();
 
     return Card(
       elevation: 0,
@@ -868,6 +874,55 @@ class _NumberCardState extends State<_NumberCard> {
                 ],
               ),
             const SizedBox(height: 12),
+            // Voice profile attachment
+            if (attachedProfileId != null && attachedProfileId.isNotEmpty && attachedProfileName != null && attachedProfileName.isNotEmpty)
+              Row(
+                children: [
+                  Icon(Icons.record_voice_over, size: 18, color: NeyvoTheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Voice Profile: $attachedProfileName',
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ManagedProfileDetailPage(profileId: attachedProfileId),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'View Profile →',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Icon(Icons.record_voice_over_outlined, size: 18, color: NeyvoTheme.textMuted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Not attached to any profile',
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _showAttachProfileSheet(n),
+                    child: const Text(
+                      'Attach to Profile →',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 12),
             if (!isPrimary)
               TextButton(
                 onPressed: () => _setPrimary(numberId),
@@ -911,6 +966,105 @@ class _NumberCardState extends State<_NumberCard> {
       widget.onUpdated();
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to mark registered')));
+    }
+  }
+
+  Future<void> _showAttachProfileSheet(Map<String, dynamic> number) async {
+    try {
+      final profilesRes = await ManagedProfileApiService.listProfiles();
+      final profilesList = (profilesRes['profiles'] as List?)?.cast<dynamic>() ?? [];
+      if (!mounted) return;
+      if (profilesList.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No voice profiles yet. Go to Voice Profiles to create one.')),
+        );
+        return;
+      }
+      final numberId = (number['number_id'] ?? number['id'] ?? number['phone_number_id'])?.toString() ?? '';
+      if (numberId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot attach this number – missing ID.')),
+        );
+        return;
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: NeyvoTheme.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (context) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Attach to Voice Profile',
+                    style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+                  ),
+                  const SizedBox(height: NeyvoSpacing.sm),
+                  Text(
+                    'Choose which managed profile should use this number.',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  ),
+                  const SizedBox(height: NeyvoSpacing.md),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: profilesList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final p = Map<String, dynamic>.from(profilesList[index] as Map);
+                        final profileId = p['profile_id']?.toString() ?? '';
+                        final name = p['profile_name']?.toString() ?? 'Voice Profile';
+                        final industry = p['industry_id']?.toString() ?? '';
+                        final status = p['status']?.toString() ?? '';
+                        return ListTile(
+                          title: Text(name, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                          subtitle: Text(
+                            [if (industry.isNotEmpty) industry, if (status.isNotEmpty) status].join(' · '),
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          onTap: () async {
+                            Navigator.of(context).pop();
+                            try {
+                              await ManagedProfileApiService.attachPhoneNumber(
+                                profileId: profileId,
+                                phoneNumberId: numberId,
+                                vapiPhoneNumberId: numberId,
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Attached to $name')),
+                                );
+                                widget.onUpdated();
+                              }
+                            } catch (e) {
+                              if (!mounted) return;
+                              final msg = e.toString();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to attach number: $msg')),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load profiles: $e')),
+      );
     }
   }
 

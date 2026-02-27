@@ -1,10 +1,11 @@
 // lib/screens/plan_selector_page.dart
 // Subscription plan selector: Free / Pro ($29/mo) / Business ($79/mo).
-// Accessible from Settings → Subscription Plan and Upgrade CTAs. Calls POST/GET/PUT billing subscription APIs.
+// Accessible from Settings → Subscription Plan and upgrade CTAs.
 
 import 'package:flutter/material.dart';
-import '../neyvo_pulse_api.dart';
-import '../pulse_route_names.dart';
+
+import '../models/subscription_model.dart';
+import '../services/subscription_service.dart';
 import '../theme/neyvo_theme.dart';
 
 class PlanSelectorPage extends StatefulWidget {
@@ -15,10 +16,10 @@ class PlanSelectorPage extends StatefulWidget {
 }
 
 class _PlanSelectorPageState extends State<PlanSelectorPage> {
-  Map<String, dynamic>? _subscription;
+  SubscriptionPlan? _plan;
   bool _loading = true;
   String? _error;
-  String? _actionPlan;
+  bool _updating = false;
 
   @override
   void initState() {
@@ -32,211 +33,314 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
       _error = null;
     });
     try {
-      final sub = await NeyvoPulseApi.getSubscription();
-      if (mounted) setState(() {
-        _subscription = sub;
+      final p = await SubscriptionService.getCurrentPlan();
+      if (!mounted) return;
+      setState(() {
+        _plan = p;
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() {
+      if (!mounted) return;
+      setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
   }
 
-  String get _currentTier {
-    final t = (_subscription?['tier'] as String?)?.toLowerCase() ?? 'free';
-    return t == 'pro' || t == 'business' ? t : 'free';
-  }
-
-  Future<void> _selectPlan(String plan) async {
-    if (_actionPlan != null) return;
-    setState(() => _actionPlan = plan);
+  Future<void> _changePlan(String tier) async {
+    if (_plan?.tier == tier) return;
+    setState(() => _updating = true);
     try {
-      if (plan == 'free') {
-        final end = _subscription?['end'] as String?;
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Downgrade to Free'),
-            content: Text(
-              end != null
-                  ? 'Your current plan features remain active until $end. After that you will be on the Free plan.'
-                  : 'Your current plan will cancel at the end of the billing period. You will then be on the Free plan.',
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirm')),
-            ],
-          ),
-        );
-        if (ok != true || !mounted) {
-          setState(() => _actionPlan = null);
-          return;
-        }
-        await NeyvoPulseApi.cancelSubscription();
-      } else if (_currentTier == 'free') {
-        await NeyvoPulseApi.subscribe(plan);
-      } else {
-        await NeyvoPulseApi.upgradeSubscription(plan);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Plan updated to ${plan == 'free' ? 'Free' : plan == 'pro' ? 'Pro' : 'Business'}')));
-        _load();
-      }
+      await SubscriptionService.upgradePlan(tier);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Plan updated to ${tier.toUpperCase()}')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update plan: $e')),
+      );
     } finally {
-      if (mounted) setState(() => _actionPlan = null);
+      if (mounted) {
+        setState(() => _updating = false);
+      }
     }
   }
-
-  static const List<String> _freeFeatures = [
-    'Basic logs only',
-    '1 phone number',
-    'Neutral Human voice only',
-  ];
-  static const List<String> _proFeatures = [
-    'All 3 voice tiers',
-    'Up to 3 phone numbers',
-    'Outcome analytics',
-    'Call memory',
-    'Campaign scheduling',
-    'API access',
-    '+10% credit bonus on every top-up',
-  ];
-  static const List<String> _businessFeatures = [
-    'Everything in Pro',
-    'Up to 10 phone numbers',
-    'HIPAA included',
-    'White-label',
-    'Slack support',
-    'Multi-org',
-    '+20% credit bonus on every top-up',
-  ];
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _subscription == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text('Loading plans…', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted)),
-          ],
-        ),
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.error), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _load, child: const Text('Retry')),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: NeyvoTheme.bgPrimary,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(NeyvoSpacing.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Choose your plan', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
-            const SizedBox(height: NeyvoSpacing.sm),
-            Text(
-              'Only wallet top-ups and monthly subscription charge your card. Everything else uses your credit wallet.',
-              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-            ),
-            const SizedBox(height: NeyvoSpacing.xl),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    if (_error != null || _plan == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Subscription')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(child: _planCard('free', 'Free', '\$0', 'No credit bonus', _freeFeatures, null, false)),
-              const SizedBox(width: 16),
-              Expanded(child: _planCard('pro', 'Pro', '\$29/mo', 'Get 10% more credits on every top-up. On the Growth pack (\$149), you get 18,150 credits instead of 16,500 — \$16.50 extra value free.', _proFeatures, 'Most Popular', true)),
-              const SizedBox(width: 16),
-              Expanded(child: _planCard('business', 'Business', '\$79/mo', 'Get 20% more credits on every top-up. On the Growth pack (\$149), you get 19,800 credits instead of 16,500 — \$33 extra value free.', _businessFeatures, null, false)),
+              Text(
+                _error ?? 'Unable to load plan.',
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _load, child: const Text('Retry')),
             ],
           ),
-        ],
+        ),
+      );
+    }
+    final plan = _plan!;
+    final children = [
+      _PlanCard.free(
+        currentTier: plan.tier,
+        onSelect: () => _changePlan('free'),
+        updating: _updating,
+      ),
+      _PlanCard.pro(
+        currentTier: plan.tier,
+        onSelect: () => _changePlan('pro'),
+        updating: _updating,
+      ),
+      _PlanCard.business(
+        currentTier: plan.tier,
+        onSelect: () => _changePlan('business'),
+        updating: _updating,
+      ),
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Choose your plan'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 800;
+            if (isNarrow) {
+              return ListView(
+                children: [
+                  for (final c in children) ...[
+                    c,
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: children[0]),
+                const SizedBox(width: 16),
+                Expanded(child: children[1]),
+                const SizedBox(width: 16),
+                Expanded(child: children[2]),
+              ],
+            );
+          },
         ),
       ),
     );
   }
+}
 
-  Widget _planCard(String planKey, String title, String price, String bonusText, List<String> features, String? badge, bool isPopular) {
-    final isCurrent = _currentTier == planKey;
-    final isPro = planKey == 'pro';
-    final isBusiness = planKey == 'business';
-    final showBonus = isPro || isBusiness;
+class _PlanCard extends StatelessWidget {
+  final String name;
+  final String tier;
+  final String price;
+  final String description;
+  final List<String> bullets;
+  final String currentTier;
+  final VoidCallback onSelect;
+  final bool highlight;
+  final bool updating;
 
+  const _PlanCard({
+    required this.name,
+    required this.tier,
+    required this.price,
+    required this.description,
+    required this.bullets,
+    required this.currentTier,
+    required this.onSelect,
+    required this.highlight,
+    required this.updating,
+  });
+
+  factory _PlanCard.free({
+    required String currentTier,
+    required VoidCallback onSelect,
+    required bool updating,
+  }) {
+    return _PlanCard(
+      name: 'Free',
+      tier: 'free',
+      price: '\$0 / month',
+      description: 'Start with 1 voice profile and 1 number.',
+      bullets: const [
+        '1 managed voice profile',
+        '1 phone number',
+        'Neutral Human voice',
+        'Inbound calls',
+        'Basic call logs',
+        'Locked: Natural & Ultra voices',
+        'Locked: Outbound calls',
+        'Locked: AI Studio',
+      ],
+      currentTier: currentTier,
+      onSelect: onSelect,
+      highlight: false,
+      updating: updating,
+    );
+  }
+
+  factory _PlanCard.pro({
+    required String currentTier,
+    required VoidCallback onSelect,
+    required bool updating,
+  }) {
+    return _PlanCard(
+      name: 'Pro',
+      tier: 'pro',
+      price: '\$29 / month',
+      description: 'Most popular — richer voices and more profiles.',
+      bullets: const [
+        'Up to 5 voice profiles',
+        'Up to 3 phone numbers',
+        'Neutral, Natural & Ultra Human voices',
+        'Inbound + outbound calls',
+        'AI Studio',
+        'Campaign scheduling',
+        'Full call analytics',
+        '+10% bonus credits on every top-up',
+      ],
+      currentTier: currentTier,
+      onSelect: onSelect,
+      highlight: true,
+      updating: updating,
+    );
+  }
+
+  factory _PlanCard.business({
+    required String currentTier,
+    required VoidCallback onSelect,
+    required bool updating,
+  }) {
+    return _PlanCard(
+      name: 'Business',
+      tier: 'business',
+      price: '\$79 / month',
+      description: 'Scale with HIPAA, white-label, and more seats.',
+      bullets: const [
+        'Up to 20 voice profiles',
+        'Up to 10 phone numbers',
+        'All 3 voice tiers',
+        'Everything in Pro',
+        'HIPAA mode included',
+        'White-label & agency access',
+        '+20% bonus credits on every top-up',
+      ],
+      currentTier: currentTier,
+      onSelect: onSelect,
+      highlight: false,
+      updating: updating,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isCurrent = currentTier == tier;
+    final borderColor =
+        isCurrent ? NeyvoTheme.primary : NeyvoTheme.border;
+    final bgColor = NeyvoTheme.bgCard;
     return Card(
-      color: NeyvoTheme.bgCard,
-      elevation: isCurrent ? 4 : 0,
+      elevation: highlight ? 4 : 1,
+      color: bgColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isCurrent ? NeyvoTheme.teal : NeyvoTheme.border,
-          width: isCurrent ? 2 : 1,
-        ),
+        side: BorderSide(color: borderColor),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (badge != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: NeyvoTheme.teal.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(badge, style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.teal, fontWeight: FontWeight.w600)),
-                  ),
+            Row(
+              children: [
+                Text(
+                  name,
+                  style: NeyvoType.titleLarge
+                      .copyWith(color: NeyvoTheme.textPrimary),
                 ),
-              ),
-            Text(title, style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
-            const SizedBox(height: 4),
-            Text(price, style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.teal)),
-            if (showBonus) ...[
-              const SizedBox(height: 12),
-              Text(bonusText, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-            ],
-            const SizedBox(height: 20),
-            ...features.map((f) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.check_circle_outline, size: 20, color: NeyvoTheme.success),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(f, style: NeyvoType.bodySmall)),
-                    ],
+                if (highlight) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: NeyvoTheme.primary,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      'Most Popular',
+                      style: NeyvoType.bodySmall.copyWith(
+                        color: NeyvoTheme.textPrimary,
+                      ),
+                    ),
                   ),
-                )),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _actionPlan != null ? null : () => _selectPlan(planKey),
-              style: FilledButton.styleFrom(
-                backgroundColor: isCurrent ? NeyvoTheme.textMuted : (isPopular ? NeyvoTheme.teal : null),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              price,
+              style: NeyvoType.titleLarge
+                  .copyWith(color: NeyvoTheme.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: NeyvoType.bodySmall
+                  .copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            for (final b in bullets) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• ',
+                      style: TextStyle(color: NeyvoTheme.textPrimary)),
+                  Expanded(
+                    child: Text(
+                      b,
+                      style: NeyvoType.bodySmall
+                          .copyWith(color: NeyvoTheme.textSecondary),
+                    ),
+                  ),
+                ],
               ),
-              child: Text(
-                _actionPlan == planKey ? 'Updating…' : isCurrent ? 'Current plan' : planKey == 'free' ? 'Downgrade' : 'Select plan',
+              const SizedBox(height: 4),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: isCurrent || updating ? null : onSelect,
+                child: updating && !isCurrent
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(
+                        isCurrent ? 'Current plan' : 'Switch to $name',
+                      ),
               ),
             ),
           ],

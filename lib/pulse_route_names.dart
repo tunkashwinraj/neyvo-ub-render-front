@@ -27,6 +27,8 @@ abstract class PulseRouteNames {
   static const String addons = '/pulse/addons';
   static const String agents = '/pulse/agents';
   static const String agentDetail = '/pulse/agent-detail';
+  static const String managedProfiles = '/pulse/managed-profiles';
+  static const String managedProfileDetail = '/pulse/managed-profile-detail';
   static const String callbacks = '/pulse/callbacks';
   static const String onboarding = '/onboarding';
   static const String workflows = '/pulse/workflows';

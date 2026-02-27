@@ -38,6 +38,8 @@ class PulseRouter {
       case PulseRouteNames.agentDetail:
         final agentId = settings.arguments as String? ?? '';
         return MaterialPageRoute(builder: (_) => AgentDetailPage(agentId: agentId));
+      case PulseRouteNames.managedProfiles:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
       case PulseRouteNames.projects:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.projects));
       case PulseRouteNames.voiceLibrary:
