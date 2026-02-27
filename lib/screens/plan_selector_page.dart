@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/subscription_model.dart';
+import '../pulse_route_names.dart';
 import '../services/subscription_service.dart';
 import '../theme/neyvo_theme.dart';
 
@@ -55,8 +56,50 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
       await SubscriptionService.upgradePlan(tier);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Plan updated to ${tier.toUpperCase()}')),
+      final plan = _plan!;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          final isBusiness = plan.tier == 'business';
+          final title = isBusiness ? 'You’re now on the Business plan' : 'You’re now on the Pro plan';
+          final benefits = isBusiness
+              ? 'You’ve unlocked up to 20 voice profiles, 10 numbers, all three voice tiers, HIPAA mode, and +20% bonus credits on every top-up.'
+              : 'You’ve unlocked up to 5 voice profiles, 3 numbers, Natural & Ultra voices, AI Studio, outbound calls, and +10% bonus credits on every top-up.';
+          return AlertDialog(
+            title: Text(title),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  benefits,
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'All plans keep the same ultra-human conversation quality. Your plan controls voice quality, features, and credit bonuses.',
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Later'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  Navigator.of(context).pushNamed(
+                    PulseRouteNames.settings,
+                    arguments: const {'tab': 'billing'},
+                  );
+                },
+                child: const Text('Explore features'),
+              ),
+            ],
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
@@ -181,7 +224,7 @@ class _PlanCard extends StatelessWidget {
       name: 'Free',
       tier: 'free',
       price: '\$0 / month',
-      description: 'Start with 1 voice profile and 1 number.',
+      description: 'Start with 1 voice profile and 1 number. Neutral Human calls are billed at 25 credits per minute (~\$0.25; a typical 3‑minute call is about \$0.75).',
       bullets: const [
         '1 managed voice profile',
         '1 phone number',
@@ -208,7 +251,7 @@ class _PlanCard extends StatelessWidget {
       name: 'Pro',
       tier: 'pro',
       price: '\$29 / month',
-      description: 'Most popular — richer voices and more profiles.',
+      description: 'Most popular — richer voices and more profiles. Neutral, Natural, and Ultra quality calls are billed at 25 / 35 / 49 credits per minute (~\$0.25 / \$0.35 / \$0.49; a 3‑minute call is about \$0.75 / \$1.05 / \$1.47).',
       bullets: const [
         'Up to 5 voice profiles',
         'Up to 3 phone numbers',
@@ -235,7 +278,7 @@ class _PlanCard extends StatelessWidget {
       name: 'Business',
       tier: 'business',
       price: '\$79 / month',
-      description: 'Scale with HIPAA, white-label, and more seats.',
+      description: 'Scale with HIPAA, white-label, and more seats. Usage pricing stays the same as Pro (25 / 35 / 49 credits per minute), but you receive +20% bonus credits on every top-up, effectively lowering your per-minute cost over time.',
       bullets: const [
         'Up to 20 voice profiles',
         'Up to 10 phone numbers',

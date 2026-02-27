@@ -24,6 +24,7 @@ import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'screens/projects_list_page.dart';
 import 'screens/project_detail_page.dart';
+import 'features/managed_profiles/profile_detail_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -40,6 +41,13 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => AgentDetailPage(agentId: agentId));
       case PulseRouteNames.managedProfiles:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
+      case PulseRouteNames.managedProfileDetail:
+        final profileId = settings.arguments as String? ?? '';
+        // Keep the drawer visible while showing the managed profile detail.
+        return MaterialPageRoute(
+          builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles),
+          settings: settings.copyWith(arguments: profileId),
+        );
       case PulseRouteNames.projects:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.projects));
       case PulseRouteNames.voiceLibrary:

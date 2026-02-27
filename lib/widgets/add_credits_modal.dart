@@ -150,11 +150,11 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
               style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
             ),
             const SizedBox(height: 24),
-            _packRow('Starter', 49, _bonused(5000), cpm, 'starter'),
+            _packRow('Starter', 49, 5000, cpm, 'starter'),
             const SizedBox(height: 12),
-            _packRow('Growth', 149, _bonused(16500), cpm, 'growth'),
+            _packRow('Growth', 149, 16500, cpm, 'growth'),
             const SizedBox(height: 12),
-            _packRow('Scale', 399, _bonused(50000), cpm, 'scale'),
+            _packRow('Scale', 399, 50000, cpm, 'scale'),
             const SizedBox(height: 24),
             const Divider(color: NeyvoTheme.border),
             const SizedBox(height: 12),
@@ -173,7 +173,9 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
     );
   }
 
-  Widget _packRow(String name, int price, int totalCredits, int cpm, String packKey) {
+  Widget _packRow(String name, int price, int baseCredits, int cpm, String packKey) {
+    final totalCredits = _bonused(baseCredits);
+    final bonusCredits = totalCredits - baseCredits;
     final approxMin = totalCredits ~/ cpm;
     final isGrowth = packKey == 'growth';
     return Container(
@@ -215,7 +217,11 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
                       style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
                     ),
                     Text(
-                      '${_formatCredits(totalCredits)} credits · ~$approxMin min',
+                      bonusCredits > 0
+                          ? '${_formatCredits(totalCredits)} credits '
+                              '(${_formatCredits(baseCredits)} base + ${_formatCredits(bonusCredits)} bonus) '
+                              '· ~$approxMin min'
+                          : '${_formatCredits(totalCredits)} credits · ~$approxMin min',
                       style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.teal),
                     ),
                   ],

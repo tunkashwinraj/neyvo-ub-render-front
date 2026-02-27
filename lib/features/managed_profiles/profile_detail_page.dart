@@ -223,55 +223,68 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
             top: 24,
             bottom: 24 + MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Make Outbound Call', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
-              const SizedBox(height: 8),
-              Text('Calling from: $attachedNumber', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
-              Text('Using profile: ${profile['profile_name'] ?? ''}', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone number to call',
-                  hintText: '+12035551234',
-                  border: OutlineInputBorder(),
-                ),
-                style: NeyvoTextStyles.bodyPrimary,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: label,
-                  border: const OutlineInputBorder(),
-                ),
-                style: NeyvoTextStyles.bodyPrimary,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+          child: StatefulBuilder(
+            builder: (context, setInnerState) {
+              bool _isValid(String input) {
+                final trimmed = input.trim();
+                final e164 = RegExp(r'^\+[0-9]{8,15}$');
+                return e164.hasMatch(trimmed);
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
+                  Text('Make Outbound Call', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+                  const SizedBox(height: 8),
+                  Text('From: $attachedNumber', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+                  Text(
+                    'Using profile: ${profile['profile_name'] ?? ''}',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _callInitiating
-                        ? null
-                        : () async {
-                            final to = phoneController.text.trim();
-                            if (to.isEmpty) {
-                              final messenger = ScaffoldMessenger.of(context);
-                              messenger.showSnackBar(
-                                const SnackBar(content: Text('Enter a phone number to call.')),
-                              );
-                              return;
-                            }
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number to call',
+                      hintText: '+12035551234',
+                      border: OutlineInputBorder(),
+                    ),
+                    style: NeyvoTextStyles.bodyPrimary,
+                    onChanged: (_) => setInnerState(() {}),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Use full international format (E.164), for example +12035551234.',
+                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: label,
+                      helperText: industryId == 'school_financial_aid'
+                          ? 'Used only to greet the student by name; not stored permanently.'
+                          : 'Used only for a warmer greeting; not stored permanently.',
+                      border: const OutlineInputBorder(),
+                    ),
+                    style: NeyvoTextStyles.bodyPrimary,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _callInitiating || !_isValid(phoneController.text)
+                            ? null
+                            : () async {
+                                final to = phoneController.text.trim();
                             final overrides = <String, dynamic>{};
                             final name = nameController.text.trim();
                             if (name.isNotEmpty) {
@@ -313,18 +326,20 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
                               }
                             }
                           },
-                    style: ElevatedButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                    child: _callInitiating
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Call Now'),
+                        style: ElevatedButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                        child: _callInitiating
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Call Now'),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
+              );
+            },
           ),
         );
       },
@@ -394,35 +409,146 @@ class _OverviewTabState extends State<_OverviewTab> {
     final vapiId = widget.profile['vapi_assistant_id'] as String? ?? '';
     final attachedNumber = widget.profile['attached_phone_number'] as String?;
     final attachedNumberId = widget.profile['attached_phone_number_id'] as String?;
+    final subscriptionTier = (widget.profile['subscription_tier'] as String?)?.toLowerCase();
+    final voiceTier = (widget.profile['voice_tier'] as String?)?.toLowerCase();
+
+    String _tierLabel(String? t) {
+      switch (t) {
+        case 'business':
+          return 'Business';
+        case 'pro':
+          return 'Pro';
+        case 'free':
+          return 'Free';
+        default:
+          return '';
+      }
+    }
+
+    String _voiceTierLabel(String? t) {
+      switch (t) {
+        case 'neutral':
+          return 'Neutral Human';
+        case 'natural':
+          return 'Natural Human';
+        case 'ultra':
+          return 'Ultra Real Human';
+        default:
+          return '';
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.profile['profile_name'] as String? ?? '', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
-          const SizedBox(height: 8),
-          Text('Industry: ${widget.profile['industry_id'] == 'school_financial_aid' ? 'Education' : 'Salon & Spa'}', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
-          Text('Goal: ${bc['primary_goal'] ?? ''}', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text('Status: ', style: NeyvoTextStyles.label),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: status == 'active' ? NeyvoColors.teal.withValues(alpha: 0.2) : NeyvoColors.warning.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(status, style: NeyvoTextStyles.micro.copyWith(color: status == 'active' ? NeyvoColors.teal : NeyvoColors.warning)),
+          NeyvoCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        widget.profile['industry_id'] == 'school_financial_aid'
+                            ? Icons.school
+                            : Icons.content_cut,
+                        size: 28,
+                        color: NeyvoColors.teal,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.profile['profile_name'] as String? ?? '',
+                          style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: status == 'active' ? NeyvoColors.teal.withValues(alpha: 0.2) : NeyvoColors.warning.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          status,
+                          style: NeyvoTextStyles.micro.copyWith(color: status == 'active' ? NeyvoColors.teal : NeyvoColors.warning),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Industry: ${widget.profile['industry_id'] == 'school_financial_aid' ? 'Education' : 'Salon & Spa'}',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                  Text(
+                    'Goal: ${bc['primary_goal'] ?? ''}',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (subscriptionTier != null && subscriptionTier.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.bgRaised,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: NeyvoColors.borderSubtle),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.workspace_premium_outlined, size: 14, color: NeyvoColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                _tierLabel(subscriptionTier),
+                                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (voiceTier != null && voiceTier.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.bgRaised,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: NeyvoColors.borderSubtle),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.record_voice_over_outlined, size: 14, color: NeyvoColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                _voiceTierLabel(voiceTier),
+                                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (_toggling)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal),
+                        )
+                      else if (status == 'active')
+                        TextButton(onPressed: () => _setStatus('paused'), child: const Text('Pause'))
+                      else
+                        TextButton(onPressed: () => _setStatus('active'), child: const Text('Activate')),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              if (_toggling)
-                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal))
-              else if (status == 'active')
-                TextButton(onPressed: () => _setStatus('paused'), child: const Text('Pause'))
-              else
-                TextButton(onPressed: () => _setStatus('active'), child: const Text('Activate')),
-            ],
+            ),
           ),
           const SizedBox(height: 16),
           _buildPhoneNumberCard(attachedNumberId, attachedNumber ?? ''),
@@ -430,13 +556,21 @@ class _OverviewTabState extends State<_OverviewTab> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: Text('Vapi assistant ID: $vapiId', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  'Vapi assistant ID: $vapiId',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               if (vapiId.isNotEmpty)
                 IconButton(
                   icon: const Icon(Icons.copy, size: 18, color: NeyvoColors.textSecondary),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: vapiId));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
+                    );
                   },
                 ),
             ],
@@ -881,32 +1015,57 @@ class _AIStudioTabState extends State<_AIStudioTab> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < 700;
+        final header = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Text(
+            'AI suggestions use a small amount of studio credits, not your call minutes. Good for refining goal, wording, and business specifics.',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+        );
         if (narrow) {
           return Column(
             children: [
+              header,
               Expanded(child: _chatPanel()),
-              if (_suggestion != null) _suggestionPanel(onApply: _applyChanges, onDismiss: () => setState(() => _suggestion = null)),
+              if (_suggestion != null)
+                _suggestionPanel(
+                  onApply: _applyChanges,
+                  onDismiss: () => setState(() => _suggestion = null),
+                ),
             ],
           );
         }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return Column(
           children: [
-            Expanded(flex: 6, child: _chatPanel()),
-            const SizedBox(width: 16),
-            if (_suggestion != null)
-              Expanded(flex: 4, child: _suggestionPanel(onApply: _applyChanges, onDismiss: () => setState(() => _suggestion = null)))
-            else
-              Expanded(
-                flex: 4,
-                child: Center(
-                  child: Text(
-                    'Describe what you want to change. Suggested changes will appear here.',
-                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+            header,
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: _chatPanel()),
+                  const SizedBox(width: 16),
+                  if (_suggestion != null)
+                    Expanded(
+                      flex: 4,
+                      child: _suggestionPanel(
+                        onApply: _applyChanges,
+                        onDismiss: () => setState(() => _suggestion = null),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      flex: 4,
+                      child: Center(
+                        child: Text(
+                          'Describe what you want to change. Suggested changes will appear here.',
+                          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
               ),
+            ),
           ],
         );
       },

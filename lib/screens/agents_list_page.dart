@@ -7,7 +7,6 @@ import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../widgets/neyvo_empty_state.dart';
 import 'agent_creation_wizard.dart';
-import 'agent_detail_page.dart';
 
 class AgentsListPage extends StatefulWidget {
   const AgentsListPage({super.key});
@@ -22,6 +21,7 @@ class _AgentsListPageState extends State<AgentsListPage> {
   List<dynamic> _agents = [];
   String? _filterDirection;
   String? _filterIndustry;
+  String? _selectedAgentId;
 
   @override
   void initState() {
@@ -57,9 +57,11 @@ class _AgentsListPageState extends State<AgentsListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isWide = width >= 1200;
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
-      body: _body(),
+      body: isWide ? _wideBody() : _body(),
     );
   }
 
@@ -112,6 +114,90 @@ class _AgentsListPageState extends State<AgentsListPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _wideBody() {
+    if (_loading) return buildNeyvoLoadingState();
+    if (_error != null) return buildNeyvoErrorState(onRetry: _load);
+    if (_agents.isEmpty) return _emptyState();
+
+    final currentSelected = _selectedAgentId;
+    if (currentSelected == null && _agents.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_selectedAgentId == null && _agents.isNotEmpty) {
+          setState(() {
+            _selectedAgentId = (_agents.first as Map<String, dynamic>)['id'] as String?;
+          });
+        }
+      });
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          flex: 6,
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Agents', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+                        const SizedBox(width: 16),
+                        TextButton.icon(
+                          onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
+                          icon: const Icon(Icons.people_outlined, size: 18),
+                          label: const Text('Contacts'),
+                        ),
+                      ],
+                    ),
+                    FilledButton.icon(
+                      onPressed: _openCreateAgent,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('+ New Agent'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NeyvoColors.teal,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                NeyvoCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _tableHeader(),
+                      ...List.generate(_agents.length, (i) => _agentRow(i, _agents[i] as Map<String, dynamic>)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const VerticalDivider(width: 1, color: NeyvoColors.borderSubtle),
+        Expanded(
+          flex: 7,
+          child: _selectedAgentId == null
+              ? Center(
+                  child: Text(
+                    'Select an agent to see details.',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                )
+              : AgentDetailPage(agentId: _selectedAgentId!),
+        ),
+      ],
     );
   }
 
@@ -213,7 +299,23 @@ class _AgentsListPageState extends State<AgentsListPage> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: id != null ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => AgentDetailPage(agentId: id))) : null,
+        onTap: id != null
+            ? () {
+                final width = MediaQuery.of(context).size.width;
+                final isWide = width >= 1200;
+                if (isWide) {
+                  setState(() {
+                    _selectedAgentId = id;
+                  });
+                } else {
+                  Navigator.pushNamed(
+                    context,
+                    PulseRouteNames.agentDetail,
+                    arguments: id,
+                  );
+                }
+              }
+            : null,
         hoverColor: NeyvoColors.bgHover,
         child: Container(
           height: 52,
