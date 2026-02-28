@@ -2,14 +2,16 @@
 // Managed Voice Profiles — isolated feature; no changes to Agents page.
 
 import 'package:flutter/material.dart';
-import '../../pulse_route_names.dart';
 import '../../theme/neyvo_theme.dart';
 import 'create_profile_wizard.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
 
 class ManagedProfilesPage extends StatefulWidget {
-  const ManagedProfilesPage({super.key});
+  const ManagedProfilesPage({super.key, this.onOpenProfileDetail});
+
+  /// When set (e.g. by Pulse shell), opening a profile on narrow screens navigates inside the shell instead of pushing a full-screen page.
+  final void Function(String profileId)? onOpenProfileDetail;
 
   @override
   State<ManagedProfilesPage> createState() => _ManagedProfilesPageState();
@@ -56,6 +58,12 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
       setState(() {
         _selectedProfileId = profileId;
       });
+      return;
+    }
+    // Stay inside Pulse shell: use callback so shell's nested Navigator shows the detail page.
+    final onOpen = widget.onOpenProfileDetail;
+    if (onOpen != null) {
+      onOpen(profileId);
       return;
     }
     Navigator.of(context).push(

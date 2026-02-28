@@ -25,13 +25,16 @@ import 'callbacks_page.dart';
 import 'students_list_page.dart';
 import 'template_scripts_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
+import '../features/managed_profiles/profile_detail_page.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 
 class PulseShell extends StatefulWidget {
-  const PulseShell({super.key, this.initialRouteName});
+  const PulseShell({super.key, this.initialRouteName, this.initialProfileId});
 
   final String? initialRouteName;
+  /// When set with initialRouteName == managedProfiles, open Voice Profiles and show this profile's detail (inside shell).
+  final String? initialProfileId;
 
   @override
   State<PulseShell> createState() => _PulseShellState();
@@ -40,6 +43,7 @@ class PulseShell extends StatefulWidget {
 class _PulseShellState extends State<PulseShell> {
   int _selectedIndex = 0;
   int? _walletCredits;
+  final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
   int? _numbersCount; // kept for future analytics panels
   int? _callsTodayCapacity;
   int? _callsTodayUsed;
@@ -84,10 +88,12 @@ class _PulseShellState extends State<PulseShell> {
 
   List<_NavItem> get _currentNav => _activeSurface == 'studio' ? _navStudio : _navComms;
 
+  static const String _managedProfileDetailRoute = 'detail';
+
   List<Widget> get _pagesComms => [
     const PulseDashboardPage(),     // Home
     const AgentsListPage(),        // Agents
-    const ManagedProfilesPage(),   // Voice Profiles
+    _buildManagedProfilesContent(), // Voice Profiles (nested Navigator so detail stays in shell)
     const StudentsListPage(),      // Contacts
     const CallHistoryPage(),       // Calls
     const CampaignsPage(),         // Campaigns
@@ -110,6 +116,32 @@ class _PulseShellState extends State<PulseShell> {
 
   List<Widget> get _currentPages => _activeSurface == 'studio' ? _pagesStudio : _pagesComms;
 
+  Widget _buildManagedProfilesContent() {
+    return Navigator(
+      key: _managedProfilesNavKey,
+      initialRoute: '/',
+      onGenerateRoute: (RouteSettings settings) {
+        if (settings.name == _managedProfileDetailRoute) {
+          final profileId = settings.arguments as String? ?? '';
+          return MaterialPageRoute<void>(
+            builder: (_) => ManagedProfileDetailPage(profileId: profileId, embedded: false),
+          );
+        }
+        // '/' = list
+        return MaterialPageRoute<void>(
+          builder: (_) => ManagedProfilesPage(
+            onOpenProfileDetail: (String profileId) {
+              _managedProfilesNavKey.currentState?.pushNamed<void>(
+                _managedProfileDetailRoute,
+                arguments: profileId,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -119,6 +151,16 @@ class _PulseShellState extends State<PulseShell> {
     if (name != null && name.isNotEmpty) {
       final idx = _currentNav.indexWhere((n) => n.route == name);
       if (idx >= 0) _selectedIndex = idx;
+    }
+    // When deep-linked to a profile detail, push it after the nested Navigator is built.
+    if (widget.initialProfileId != null && widget.initialProfileId!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _managedProfilesNavKey.currentState?.pushNamed<void>(
+          _managedProfileDetailRoute,
+          arguments: widget.initialProfileId,
+        );
+      });
     }
   }
 
