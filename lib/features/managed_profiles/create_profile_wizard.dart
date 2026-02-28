@@ -2,8 +2,10 @@
 // 4-step wizard: Industry → Identity+Voice → Packs → Connect & Rules → Preview & Create.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
+import '../../pulse_route_names.dart';
 import '../../theme/neyvo_theme.dart';
 import 'managed_profile_api_service.dart';
 
@@ -23,6 +25,11 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   bool _saving = false;
   String? _error;
 
+  // Voice samples (text-to-speech)
+  final FlutterTts _tts = FlutterTts();
+  String? _playingVoiceStyle;
+  bool _isSpeaking = false;
+
   // Form data
   final _profileName = TextEditingController();
   final _agentName = TextEditingController();
@@ -30,16 +37,10 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   final _primaryGoal = TextEditingController();
   final _phoneNumber = TextEditingController();
   final _officeHours = TextEditingController();
-  final _portalSteps = TextEditingController();
   final _servicesOffered = TextEditingController();
-  String _schedulingSystem = 'None yet';
   String _voiceStyle = 'warm_friendly';
   bool _voicemailEnabled = true;
-  bool _allowCallbacks = true;
-  bool _portalStepsYes = false;
-  String _educationCallType = 'loan_acceptance';
-  bool _requireIdentityVerification = false;
-  bool _salonAllowUpsell = false;
+  // Legacy fields removed (portal steps, upsell).
   // Wizard v2: packs and structured data
   String? _selectedPack;
   List<String> _enabledCapabilities = [];
@@ -66,20 +67,105 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     super.initState();
     _loadIndustries();
     _loadNumbers();
+    _initTts();
   }
 
   @override
   void dispose() {
+    _tts.stop();
     _profileName.dispose();
     _agentName.dispose();
     _businessName.dispose();
     _primaryGoal.dispose();
     _phoneNumber.dispose();
     _officeHours.dispose();
-    _portalSteps.dispose();
     _servicesOffered.dispose();
     _knowledgeSnippet.dispose();
     super.dispose();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _tts.awaitSpeakCompletion(true);
+      _tts.setStartHandler(() {
+        if (!mounted) return;
+        setState(() => _isSpeaking = true);
+      });
+      _tts.setCompletionHandler(() {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _playingVoiceStyle = null;
+        });
+      });
+      _tts.setCancelHandler(() {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _playingVoiceStyle = null;
+        });
+      });
+      _tts.setErrorHandler((_) {
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _playingVoiceStyle = null;
+        });
+      });
+    } catch (_) {
+      // TTS not supported on this platform; we'll fall back to a snackbar on play.
+    }
+  }
+
+  String _voiceSampleText() {
+    final agent = _agentName.text.trim().isEmpty ? 'Alex' : _agentName.text.trim();
+    final biz = _businessName.text.trim().isEmpty ? 'your business' : _businessName.text.trim();
+    final isEducation = _selectedIndustryId == 'school_financial_aid';
+    if (isEducation) {
+      return 'Hi, this is $agent from $biz. I can help with financial aid questions, guide portal steps, and schedule a callback if you need one. How can I help today?';
+    }
+    return 'Hi, this is $agent from $biz. I can help book, confirm, or change an appointment, and answer quick questions. What can I do for you today?';
+  }
+
+  Future<void> _toggleVoiceSample(String styleKey) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (_playingVoiceStyle == styleKey && _isSpeaking) {
+        await _tts.stop();
+        if (!mounted) return;
+        setState(() {
+          _isSpeaking = false;
+          _playingVoiceStyle = null;
+        });
+        return;
+      }
+
+      await _tts.stop();
+
+      // Tune speaking style to make each card feel distinct.
+      if (styleKey == 'warm_friendly') {
+        await _tts.setSpeechRate(0.50);
+        await _tts.setPitch(1.08);
+      } else if (styleKey == 'professional_clear') {
+        await _tts.setSpeechRate(0.46);
+        await _tts.setPitch(1.00);
+      } else {
+        await _tts.setSpeechRate(0.40);
+        await _tts.setPitch(0.96);
+      }
+
+      if (!mounted) return;
+      setState(() => _playingVoiceStyle = styleKey);
+      await _tts.speak(_voiceSampleText());
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Voice sample is not available on this device.'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _loadIndustries() async {
@@ -119,11 +205,8 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     final businessSpecifics = <String, dynamic>{};
     if (_selectedIndustryId == 'school_financial_aid') {
       final packToCallType = {'financial_aid': 'loan_acceptance', 'billing_fees': 'payment_reminder', 'front_desk': 'general_followup'};
-      businessSpecifics['call_type'] = packToCallType[_selectedPack] ?? _educationCallType;
+      businessSpecifics['call_type'] = packToCallType[_selectedPack] ?? 'loan_acceptance';
       businessSpecifics['office_hours'] = _businessHoursDisplay;
-      if (_portalStepsYes && _portalSteps.text.trim().isNotEmpty) {
-        businessSpecifics['portal_steps'] = _portalSteps.text.trim();
-      }
       businessSpecifics['require_identity_verification'] = _identityVerificationRequired;
       if (_identityVerificationRequired) {
         businessSpecifics['identity_verification_method'] = _identityVerificationMethod;
@@ -138,7 +221,6 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
       businessSpecifics['business_hours'] = _businessHoursDisplay;
       final sched = _schedulingProvider == 'none' ? 'None yet' : _schedulingProvider;
       businessSpecifics['scheduling_system'] = sched;
-      businessSpecifics['allow_upsell'] = _salonAllowUpsell;
     }
     final primaryGoal = _primaryGoal.text.trim().length > 200
         ? _primaryGoal.text.trim().substring(0, 200)
@@ -679,16 +761,27 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
               decoration: BoxDecoration(color: NeyvoColors.bgRaised, borderRadius: BorderRadius.circular(8), border: Border.all(color: NeyvoColors.borderSubtle)),
               child: Row(
                 children: [
-                  Icon(_schedulingProvider != 'none' ? Icons.check_circle : Icons.info_outline, size: 20, color: _schedulingProvider != 'none' ? NeyvoColors.success : NeyvoColors.textMuted),
+                  Icon(_schedulingProvider != 'none' ? Icons.warning_amber_rounded : Icons.info_outline, size: 20, color: _schedulingProvider != 'none' ? NeyvoColors.warning : NeyvoColors.textMuted),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       isLeadCapture
                           ? 'Lead capture mode — your agent will collect details and your team can confirm by text or call.'
-                          : 'Connect your scheduling system in Settings to enable live booking.',
+                          : 'Not connected — connect now to enable live booking. You can skip and finish.',
                       style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
                     ),
                   ),
+                  if (_schedulingProvider != 'none') ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _openConnectionSettings,
+                      child: const Text('Connect now'),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() => _schedulingProvider = 'none'),
+                      child: const Text('Skip'),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -751,6 +844,49 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                 Switch(value: _depositRequired, onChanged: (v) => setState(() => _depositRequired = v), activeTrackColor: NeyvoColors.teal),
               ],
             ),
+            if (_depositRequired) ...[
+              const SizedBox(height: 10),
+              Text('Deposit type', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Fixed amount'),
+                    selected: _depositType == 'fixed',
+                    selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+                    onSelected: (_) => setState(() => _depositType = 'fixed'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Percent'),
+                    selected: _depositType == 'percent',
+                    selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+                    onSelected: (_) => setState(() => _depositType = 'percent'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text('Deposit amount', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+              const SizedBox(height: 4),
+              TextField(
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: _depositType == 'percent' ? 'e.g. 20' : 'e.g. 25',
+                  filled: true,
+                  fillColor: NeyvoColors.bgRaised,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: NeyvoColors.borderDefault)),
+                ),
+                style: NeyvoTextStyles.bodyPrimary,
+                onChanged: (v) => setState(() => _depositAmount = v.trim()),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _depositType == 'percent'
+                    ? 'Your agent will explain the deposit as a percentage (ex: 20%).'
+                    : 'Your agent will explain the deposit as a fixed amount (ex: \$25).',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+              ),
+            ],
             const SizedBox(height: 16),
           ],
           if (!isEducation) ...[
@@ -785,6 +921,63 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
             ],
           ),
           const SizedBox(height: 16),
+          Text('Phone number for inbound calls (optional)', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+          const SizedBox(height: 6),
+          Text(
+            'Attach a number now so inbound calls can route to this voice profile right after creation. You can also attach later.',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+          const SizedBox(height: 8),
+          if (_loadingNumbers)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(color: NeyvoColors.teal),
+            )
+          else
+            InputDecorator(
+              decoration: const InputDecoration(
+                filled: true,
+                fillColor: NeyvoColors.bgRaised,
+                border: OutlineInputBorder(),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  value: _selectedPhoneNumberId,
+                  isExpanded: true,
+                  dropdownColor: NeyvoColors.bgRaised,
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Skip for now')),
+                    ..._numbers.map((n) {
+                      final id = (n['number_id'] ?? n['id'] ?? n['phone_number_id'])?.toString() ?? '';
+                      final e164 = (n['phone_number_e164'] ?? n['phone_number'])?.toString() ?? '';
+                      final friendly = (n['friendly_name'] ?? '').toString().trim();
+                      final label = [
+                        if (friendly.isNotEmpty) friendly,
+                        if (e164.isNotEmpty) e164,
+                        if (friendly.isEmpty && e164.isEmpty && id.isNotEmpty) id.length >= 8 ? '${id.substring(0, 8)}…' : id,
+                      ].join(' · ');
+                      return DropdownMenuItem<String?>(value: id.isEmpty ? null : id, child: Text(label, style: NeyvoTextStyles.bodyPrimary));
+                    }),
+                  ],
+                  onChanged: (v) {
+                    setState(() {
+                      _selectedPhoneNumberId = v;
+                      _selectedVapiPhoneNumberId = v;
+                    });
+                  },
+                ),
+              ),
+            ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.phone_outlined, size: 18),
+              label: const Text('Manage numbers'),
+              onPressed: _openNumbers,
+            ),
+          ),
+          const SizedBox(height: 10),
           _field(
             'Anything your agent must know? (optional, 280 chars)',
             _knowledgeSnippet,
@@ -885,6 +1078,28 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     );
   }
 
+  void _openConnectionSettings() {
+    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.settings);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Integration setup will open in Settings. Return here when you’re done.'),
+        duration: Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _openNumbers() {
+    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Numbers will open in a new screen. Come back here to finish setup.'),
+        duration: Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _field(String label, TextEditingController c, {String? hint, int lines = 1, int? maxLength, TextInputType? keyboard}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -910,6 +1125,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
 
   Widget _voiceCard(String value, String title, String subtitle, String emoji, {bool showPlaySample = false}) {
     final selected = _voiceStyle == value;
+    final isPlayingThis = _playingVoiceStyle == value && _isSpeaking;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -939,11 +1155,13 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                 ),
                 if (showPlaySample)
                   TextButton.icon(
-                    icon: const Icon(Icons.play_circle_outline, size: 18, color: NeyvoColors.teal),
-                    label: const Text('Play sample'),
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Voice sample coming soon'), duration: Duration(seconds: 2), behavior: SnackBarBehavior.floating),
+                    icon: Icon(
+                      isPlayingThis ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+                      size: 18,
+                      color: NeyvoColors.teal,
                     ),
+                    label: Text(isPlayingThis ? 'Stop' : 'Play sample'),
+                    onPressed: () => _toggleVoiceSample(value),
                   ),
               ],
             ),

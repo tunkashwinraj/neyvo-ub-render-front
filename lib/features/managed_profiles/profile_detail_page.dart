@@ -8,6 +8,7 @@ import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
 import '../../models/subscription_model.dart';
 import '../../services/subscription_service.dart';
+import '../../pulse_route_names.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../widgets/upgrade_nudge_widget.dart';
 import '../../screens/plan_selector_page.dart';
@@ -261,7 +262,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
           ),
           child: StatefulBuilder(
             builder: (context, setInnerState) {
-              bool _isValid(String input) {
+              bool isValid(String input) {
                 final trimmed = input.trim();
                 final e164 = RegExp(r'^\+[0-9]{8,15}$');
                 return e164.hasMatch(trimmed);
@@ -317,7 +318,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _callInitiating || !_isValid(phoneController.text)
+                        onPressed: _callInitiating || !isValid(phoneController.text)
                             ? null
                             : () async {
                                 final to = phoneController.text.trim();
@@ -428,6 +429,85 @@ class _OverviewTab extends StatefulWidget {
 class _OverviewTabState extends State<_OverviewTab> {
   bool _toggling = false;
 
+  Widget _buildConnectionsCard(Map<String, dynamic> businessContent) {
+    final integration = businessContent['integration_selection'];
+    final integrationMap = integration is Map ? Map<String, dynamic>.from(integration) : <String, dynamic>{};
+    final schedulingProvider = (integrationMap['scheduling_provider'] ?? '').toString().trim().toLowerCase();
+    final hasSchedulingSelected = schedulingProvider.isNotEmpty && schedulingProvider != 'none';
+    final leadCaptureMode = !hasSchedulingSelected;
+
+    final title = leadCaptureMode ? 'Lead capture mode' : 'Scheduling system selected';
+    final statusText = leadCaptureMode
+        ? 'Your voice profile will collect details and your team can confirm by text or call.'
+        : 'Connection not verified yet. Connect to enable live booking actions.';
+
+    final icon = leadCaptureMode ? Icons.info_outline : Icons.warning_amber_rounded;
+    final iconColor = leadCaptureMode ? NeyvoColors.textMuted : NeyvoColors.warning;
+
+    return NeyvoCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.link, size: 20, color: NeyvoColors.teal),
+                const SizedBox(width: 8),
+                Text('Connections', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: NeyvoColors.borderSubtle),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, size: 20, color: iconColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textPrimary)),
+                        const SizedBox(height: 4),
+                        Text(statusText, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!leadCaptureMode)
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.integration),
+                    style: ElevatedButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Connect now'),
+                  ),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.settings),
+                  icon: const Icon(Icons.settings_outlined, size: 18),
+                  label: const Text('Open settings'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _setStatus(String status) async {
     setState(() => _toggling = true);
     try {
@@ -449,7 +529,7 @@ class _OverviewTabState extends State<_OverviewTab> {
     final voiceTier = (widget.profile['voice_tier'] as String?)?.toLowerCase();
     final installedCapabilities = (widget.profile['installed_capabilities'] as List?)?.cast<dynamic>() ?? const [];
 
-    String _tierLabel(String? t) {
+    String tierLabel(String? t) {
       switch (t) {
         case 'business':
           return 'Business';
@@ -462,7 +542,7 @@ class _OverviewTabState extends State<_OverviewTab> {
       }
     }
 
-    String _voiceTierLabel(String? t) {
+    String voiceTierLabel(String? t) {
       switch (t) {
         case 'neutral':
           return 'Neutral Human';
@@ -569,7 +649,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                               const Icon(Icons.workspace_premium_outlined, size: 14, color: NeyvoColors.textSecondary),
                               const SizedBox(width: 4),
                               Text(
-                                _tierLabel(subscriptionTier),
+                                tierLabel(subscriptionTier),
                                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
                               ),
                             ],
@@ -589,7 +669,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                               const Icon(Icons.record_voice_over_outlined, size: 14, color: NeyvoColors.textSecondary),
                               const SizedBox(width: 4),
                               Text(
-                                _voiceTierLabel(voiceTier),
+                                voiceTierLabel(voiceTier),
                                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
                               ),
                             ],
@@ -613,6 +693,8 @@ class _OverviewTabState extends State<_OverviewTab> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          _buildConnectionsCard(bc),
           const SizedBox(height: 16),
           _buildPhoneNumberCard(attachedNumberId, attachedNumber ?? ''),
           const SizedBox(height: 8),

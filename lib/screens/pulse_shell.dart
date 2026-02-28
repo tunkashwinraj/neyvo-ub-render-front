@@ -24,6 +24,7 @@ import 'analytics_page.dart';
 import 'callbacks_page.dart';
 import 'students_list_page.dart';
 import 'template_scripts_page.dart';
+import 'integration_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../neyvo_pulse_api.dart';
@@ -71,6 +72,7 @@ class _PulseShellState extends State<PulseShell> {
     const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
     const _NavItem('Callbacks', Icons.schedule_outlined, PulseRouteNames.callbacks),
     const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
+    const _NavItem('Integration', Icons.integration_instructions_outlined, PulseRouteNames.integration),
     const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.wallet),
     const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
   ];
@@ -100,6 +102,7 @@ class _PulseShellState extends State<PulseShell> {
     const AnalyticsPage(),         // Analytics
     const CallbacksPage(),         // Callbacks / Scheduler
     const PhoneNumbersPage(),      // Numbers
+    const IntegrationPage(),       // Integration (data sync & webhooks)
     const WalletPage(),            // Billing (Wallet summary)
     const PulseSettingsPage(),     // Settings
   ];
