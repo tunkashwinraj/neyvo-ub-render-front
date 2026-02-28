@@ -39,6 +39,10 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> getIndustries() async =>
       _get('/api/managed-profiles/industries');
 
+  /// Preview profile (happy + fallback text) without creating. Body: partial ProfileSpec.
+  static Future<Map<String, dynamic>> previewProfile(Map<String, dynamic> body) async =>
+      _post('/api/managed-profiles/preview', body);
+
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
       _post('/api/managed-profiles', body);
 
