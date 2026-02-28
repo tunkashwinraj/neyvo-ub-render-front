@@ -10,7 +10,7 @@ import 'profile_detail_page.dart';
 class ManagedProfilesPage extends StatefulWidget {
   const ManagedProfilesPage({super.key, this.onOpenProfileDetail});
 
-  /// When set (e.g. by Pulse shell), opening a profile on narrow screens navigates inside the shell instead of pushing a full-screen page.
+  /// When set (e.g. by Pulse shell), opening a profile navigates to the detail page inside the shell instead of pushing a full-screen page.
   final void Function(String profileId)? onOpenProfileDetail;
 
   @override
@@ -21,7 +21,6 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _profiles = [];
-  String? _selectedProfileId;
 
   @override
   void initState() {
@@ -52,15 +51,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
   }
 
   void _openProfileDetail(String profileId) {
-    final width = MediaQuery.of(context).size.width;
-    final isWide = width >= 1100;
-    if (isWide) {
-      setState(() {
-        _selectedProfileId = profileId;
-      });
-      return;
-    }
-    // Stay inside Pulse shell: use callback so shell's nested Navigator shows the detail page.
+    // Always open detail on a separate page (inside Pulse shell when callback is set).
     final onOpen = widget.onOpenProfileDetail;
     if (onOpen != null) {
       onOpen(profileId);
@@ -75,8 +66,6 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final isWide = width >= 1100;
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Column(
@@ -105,9 +94,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
               ],
             ),
           ),
-          Expanded(
-            child: isWide ? _wideBody() : _body(),
-          ),
+          Expanded(child: _body()),
         ],
       ),
     );
@@ -167,78 +154,6 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
           );
         },
       ),
-    );
-  }
-
-  Widget _wideBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
-    }
-    if (_error != null) {
-      return _body();
-    }
-    if (_profiles.isEmpty) {
-      return _body();
-    }
-
-    // Ensure a selection exists when in wide mode.
-    final currentSelected = _selectedProfileId;
-    if (currentSelected == null && _profiles.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_selectedProfileId == null && _profiles.isNotEmpty) {
-          setState(() {
-            _selectedProfileId = _profiles.first['profile_id'] as String?;
-          });
-        }
-      });
-    }
-
-    return Row(
-      children: [
-        // Left: profiles list
-        Expanded(
-          flex: 5,
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 400 ? 2 : 1;
-                return GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: 2.2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: _profiles.length,
-                  itemBuilder: (context, i) {
-                    final p = _profiles[i];
-                    return _profileCard(p);
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-        const VerticalDivider(width: 1, color: NeyvoColors.borderSubtle),
-        // Right: detail pane
-        Expanded(
-          flex: 6,
-          child: _selectedProfileId == null
-              ? Center(
-                  child: Text(
-                    'Select a voice profile to see details.',
-                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-                  ),
-                )
-              : ManagedProfileDetailPage(
-                  profileId: _selectedProfileId!,
-                  embedded: true,
-                ),
-        ),
-      ],
     );
   }
 
