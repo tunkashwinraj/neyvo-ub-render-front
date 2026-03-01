@@ -43,6 +43,10 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> previewProfile(Map<String, dynamic> body) async =>
       _post('/api/managed-profiles/preview', body);
 
+  /// IBA v2: Preview business understanding and enabled tools without creating.
+  static Future<Map<String, dynamic>> previewProfileV2(Map<String, dynamic> body) async =>
+      _post('/api/managed-profiles/preview_v2', body);
+
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
       _post('/api/managed-profiles', body);
 
@@ -66,6 +70,18 @@ class ManagedProfileApiService {
 
   static Future<Map<String, dynamic>> getProfilePerformance(String profileId) async =>
       _get('/api/managed-profiles/$profileId/performance');
+
+  /// Hardening: profile health metrics (goal completion, tool failure rate, handoff rate).
+  static Future<Map<String, dynamic>> getProfileHealth(String profileId, {int windowDays = 7}) async =>
+      _get('/api/managed-profiles/$profileId/health', params: {'window': windowDays});
+
+  /// Hardening: recent tool runs for debug (args, result, fallback).
+  static Future<Map<String, dynamic>> getProfileToolRuns(String profileId, {int limit = 50}) async =>
+      _get('/api/managed-profiles/$profileId/tool_runs', params: {'limit': limit});
+
+  /// Hardening: call insights (goal_completed, sentiment, primary_intent).
+  static Future<Map<String, dynamic>> getProfileCallInsights(String profileId, {int limit = 50}) async =>
+      _get('/api/managed-profiles/$profileId/call_insights', params: {'limit': limit});
 
   static Future<void> archiveProfile(String profileId) async {
     await _delete('/api/managed-profiles/$profileId');

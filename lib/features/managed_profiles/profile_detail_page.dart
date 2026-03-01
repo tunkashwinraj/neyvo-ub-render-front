@@ -40,7 +40,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _load();
     _loadSubscription();
   }
@@ -168,6 +168,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
                         ),
                         _CallLogsTab(profileId: widget.profileId),
                         _PerformanceTab(profileId: widget.profileId),
+                        _HealthDebugTab(profileId: widget.profileId),
                       ],
                     ),
                   ),
@@ -194,6 +195,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage> wit
                   Tab(text: 'AI Studio'),
                   Tab(text: 'Calls'),
                   Tab(text: 'Performance'),
+                  Tab(text: 'Health'),
                 ],
               ),
             ),
@@ -1604,6 +1606,169 @@ class _PerformanceTabState extends State<_PerformanceTab> {
               Text(value, style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hardening: profile health metrics, tool runs debug, call insights.
+class _HealthDebugTab extends StatefulWidget {
+  const _HealthDebugTab({required this.profileId});
+
+  final String profileId;
+
+  @override
+  State<_HealthDebugTab> createState() => _HealthDebugTabState();
+}
+
+class _HealthDebugTabState extends State<_HealthDebugTab> {
+  Map<String, dynamic>? _health;
+  List<dynamic> _toolRuns = [];
+  List<dynamic> _callInsights = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final health = await ManagedProfileApiService.getProfileHealth(widget.profileId, windowDays: 7);
+      final runs = await ManagedProfileApiService.getProfileToolRuns(widget.profileId, limit: 30);
+      final insights = await ManagedProfileApiService.getProfileCallInsights(widget.profileId, limit: 30);
+      if (!mounted) return;
+      setState(() {
+        _health = health;
+        _toolRuns = (runs['tool_runs'] as List?) ?? [];
+        _callInsights = (insights['call_insights'] as List?) ?? [];
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            const SizedBox(height: 12),
+            TextButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    final metrics = _health?['metrics'] as Map<String, dynamic>? ?? {};
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Profile health (last 7 days)', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _metricChip('Calls', '${metrics['callsTotal'] ?? 0}'),
+              _metricChip('Goal completion', '${((metrics['goalCompletionRate'] as num?) ?? 0) * 100}%'),
+              _metricChip('Handoff rate', '${((metrics['handoffRate'] as num?) ?? 0) * 100}%'),
+              _metricChip('Tool failure rate', '${((metrics['toolFailureRate'] as num?) ?? 0) * 100}%'),
+              _metricChip('Tool runs', '${metrics['toolRunsTotal'] ?? 0}'),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text('Tool runs (debug)', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+          const SizedBox(height: 8),
+          if (_toolRuns.isEmpty)
+            Text('No tool runs yet.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary))
+          else
+            ..._toolRuns.take(20).map((r) {
+              final map = Map<String, dynamic>.from(r as Map);
+              final ok = map['result']?['ok'] == true;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: NeyvoCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: ok ? NeyvoColors.success.withValues(alpha: 0.2) : NeyvoColors.error.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(ok ? 'OK' : 'Fail', style: NeyvoTextStyles.micro.copyWith(color: ok ? NeyvoColors.success : NeyvoColors.error)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(map['toolKey'] as String? ?? '—', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textPrimary)),
+                          const Spacer(),
+                          Text(map['runId'] as String? ?? '', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+                        ],
+                      ),
+                      if (map['result']?['userFacingSummary'] != null && (map['result']!['userFacingSummary'] as String).isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(map['result']!['userFacingSummary'] as String, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 24),
+          Text('Call insights', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+          const SizedBox(height: 8),
+          if (_callInsights.isEmpty)
+            Text('No call insights yet.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary))
+          else
+            ..._callInsights.take(15).map((c) {
+              final map = Map<String, dynamic>.from(c as Map);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Text(map['callId'] as String? ?? '—', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+                    const SizedBox(width: 12),
+                    if (map['goal_completed'] == true) const Icon(Icons.check_circle, size: 14, color: NeyvoColors.success),
+                    if (map['escalated'] == true) const Icon(Icons.phone_forwarded, size: 14, color: NeyvoColors.warning),
+                    const SizedBox(width: 8),
+                    Text(map['sentiment'] as String? ?? '—', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                    const SizedBox(width: 8),
+                    Text(map['primary_intent'] as String? ?? '—', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricChip(String label, String value) {
+    return NeyvoCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+            const SizedBox(height: 2),
+            Text(value, style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+          ],
         ),
       ),
     );

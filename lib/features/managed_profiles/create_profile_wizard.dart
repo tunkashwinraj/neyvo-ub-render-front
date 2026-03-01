@@ -18,12 +18,19 @@ class CreateProfileWizard extends StatefulWidget {
 
 class _CreateProfileWizardState extends State<CreateProfileWizard> {
   int _currentStep = 0;
-  static const int _totalSteps = 5; // Industry, Identity+Voice, Packs, Connect, Preview
+  static const int _totalStepsClassic = 5; // Industry, Identity+Voice, Packs, Connect, Preview
+  static const int _totalStepsV2 = 6;      // Choice, Identity, Services, Hours+Policies, Integrations+Actions, Voice+Preview
+  int get _totalSteps => _useIbaV2 ? _totalStepsV2 : _totalStepsClassic;
   String? _selectedIndustryId;
+  bool _useIbaV2 = false; // When true, use IBA v2 (any business) flow and API
   List<Map<String, dynamic>> _industries = [];
   bool _loadingIndustries = true;
   bool _saving = false;
   String? _error;
+  String _verbosity = 'short'; // for IBA v2: short | medium
+  List<String> _allowedActionsV2 = ['answer_questions', 'create_callback'];
+  Map<String, dynamic>? _previewV2Data; // BUS + enabledToolKeys from preview_v2
+  bool _loadingPreviewV2 = false;
 
   // Voice samples (text-to-speech)
   final FlutterTts _tts = FlutterTts();
@@ -61,6 +68,14 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   String? _selectedVapiPhoneNumberId;
   bool _loadingNumbers = false;
   List<Map<String, dynamic>> _numbers = [];
+  // IBA v2–specific form fields
+  final _businessCategory = TextEditingController();
+  final _businessDescription = TextEditingController();
+  final _supportEmail = TextEditingController();
+  final _website = TextEditingController();
+  final _v2PoliciesNote = TextEditingController();
+  String _v2Timezone = 'America/New_York';
+  String _v2Scheduler = 'none';
 
   @override
   void initState() {
@@ -81,6 +96,11 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     _officeHours.dispose();
     _servicesOffered.dispose();
     _knowledgeSnippet.dispose();
+    _businessCategory.dispose();
+    _businessDescription.dispose();
+    _supportEmail.dispose();
+    _website.dispose();
+    _v2PoliciesNote.dispose();
     super.dispose();
   }
 
@@ -290,7 +310,124 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
     return ['SalonSchedulingCapability_v1'];
   }
 
+  Map<String, dynamic> _buildPayloadV2() {
+    final bn = _businessName.text.trim();
+    final profileName = _profileName.text.trim().isEmpty
+        ? (bn.isEmpty ? 'IBA Profile' : '${bn.split(RegExp(r'\s+')).first} · IBA')
+        : _profileName.text.trim();
+    final servicesText = _servicesOffered.text.trim();
+    final servicesList = servicesText.isEmpty
+        ? <String>[]
+        : servicesText.split(RegExp(r'\n')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    return {
+      'schema_version': 2,
+      'profile_name': profileName,
+      'business_name': bn.isEmpty ? 'My Business' : bn,
+      'phone_number': _phoneNumber.text.trim(),
+      'identity': {
+        'name': bn.isEmpty ? 'My Business' : bn,
+        'category': _businessCategory.text.trim(),
+        'description': _businessDescription.text.trim(),
+      },
+      'contact': {
+        'main_phone': _phoneNumber.text.trim(),
+        'support_email': _supportEmail.text.trim(),
+        'website': _website.text.trim(),
+      },
+      'offerings': {
+        'services': servicesList,
+        'products': [],
+      },
+      'operations': {
+        'timezone': _v2Timezone,
+        'hours': _officeHours.text.trim().isEmpty ? {} : {'custom': _officeHours.text.trim()},
+        'locations': [],
+      },
+      'policies': {
+        'business_hours': _officeHours.text.trim(),
+        'cancellation': _v2PoliciesNote.text.trim().isNotEmpty ? {'text': _v2PoliciesNote.text.trim()} : {},
+        'reschedule': {},
+        'deposit': {},
+        'identity_verification': {},
+        'refund': {},
+        'escalation': {},
+      },
+      'integration_selection': {
+        'scheduling_provider': _v2Scheduler,
+        'calendar_provider': _v2Scheduler == 'google' ? 'neyvo_scheduler' : 'none',
+        'payments_provider': 'none',
+      },
+      'integrations': {
+        'scheduler': _v2Scheduler != 'none' ? {'provider': _v2Scheduler} : {},
+        'crm': {},
+        'payments': {},
+      },
+      'allowed_actions': _allowedActionsV2.isEmpty ? ['answer_questions', 'create_callback'] : _allowedActionsV2,
+      'conversation_profile': {
+        'persona_name': _agentName.text.trim().isEmpty ? 'Alex' : _agentName.text.trim(),
+        'tone': _voiceStyle,
+        'verbosity': _verbosity,
+        'upsell_allowed': false,
+        'language': 'en',
+      },
+      'agent_persona_name': _agentName.text.trim().isEmpty ? 'Alex' : _agentName.text.trim(),
+      'voice_style': _voiceStyle,
+    };
+  }
+
+  Future<void> _loadPreviewV2() async {
+    if (_loadingPreviewV2 || !mounted) return;
+    setState(() { _loadingPreviewV2 = true; _previewV2Data = null; });
+    try {
+      final body = _buildPayloadV2();
+      final res = await ManagedProfileApiService.previewProfileV2(body);
+      if (mounted) setState(() { _previewV2Data = res; _loadingPreviewV2 = false; });
+    } catch (e) {
+      if (mounted) setState(() {
+        _previewV2Data = null;
+        _loadingPreviewV2 = false;
+        _error = e is ApiException ? e.message : e.toString();
+      });
+    }
+  }
+
+  Future<void> _createProfileV2() async {
+    if (_businessName.text.trim().isEmpty || _phoneNumber.text.trim().isEmpty) {
+      setState(() => _error = 'Please fill business name and callback number.');
+      return;
+    }
+    setState(() { _saving = true; _error = null; });
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final body = _buildPayloadV2();
+      final res = await ManagedProfileApiService.createProfile(body);
+      if (res['profile_id'] != null && mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('${res['profile_name'] ?? 'Voice Profile'} is ready to use', style: const TextStyle(color: NeyvoColors.textPrimary)),
+            backgroundColor: NeyvoColors.bgRaised,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        navigator.pop(true);
+      } else {
+        setState(() {
+          _error = res['error'] as String? ?? res['details'] as String? ?? 'Failed to create profile';
+          _saving = false;
+        });
+      }
+    } catch (e) {
+      final msg = e is ApiException ? e.message : e.toString();
+      setState(() { _error = msg; _saving = false; });
+    }
+  }
+
   Future<void> _createProfile() async {
+    if (_useIbaV2) {
+      await _createProfileV2();
+      return;
+    }
     if (_selectedIndustryId == null) return;
     if (_businessName.text.trim().isEmpty || _phoneNumber.text.trim().isEmpty) {
       setState(() => _error = 'Please fill business name and callback number.');
@@ -387,14 +524,21 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                     ElevatedButton(
                       onPressed: _canProceed() && !_saving
                           ? () => setState(() {
-                                if (_currentStep == 1 && _selectedPack == null) {
-                                  _selectedPack = _selectedIndustryId == 'school_financial_aid' ? 'financial_aid' : 'receptionist';
-                                  _enabledCapabilities = _capabilitiesForPack(_selectedPack!);
-                                }
-                                if (_currentStep == 3) {
-                                  final bn = _businessName.text.trim();
-                                  final generated = bn.isEmpty ? 'Voice Profile' : '${bn.split(RegExp(r'\s+')).first} · ${_selectedIndustryId == 'school_financial_aid' ? 'UB' : 'Profile'}';
-                                  if (_profileName.text.trim().isEmpty) _profileName.text = generated;
+                                if (!_useIbaV2) {
+                                  if (_currentStep == 1 && _selectedPack == null) {
+                                    _selectedPack = _selectedIndustryId == 'school_financial_aid' ? 'financial_aid' : 'receptionist';
+                                    _enabledCapabilities = _capabilitiesForPack(_selectedPack!);
+                                  }
+                                  if (_currentStep == 3) {
+                                    final bn = _businessName.text.trim();
+                                    final generated = bn.isEmpty ? 'Voice Profile' : '${bn.split(RegExp(r'\s+')).first} · ${_selectedIndustryId == 'school_financial_aid' ? 'UB' : 'Profile'}';
+                                    if (_profileName.text.trim().isEmpty) _profileName.text = generated;
+                                  }
+                                } else {
+                                  if (_currentStep == 1) {
+                                    final bn = _businessName.text.trim();
+                                    if (_profileName.text.trim().isEmpty) _profileName.text = bn.isEmpty ? 'IBA Profile' : '${bn.split(RegExp(r'\s+')).first} · IBA';
+                                  }
                                 }
                                 _currentStep++;
                                 _error = null;
@@ -419,6 +563,21 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   }
 
   bool _canProceed() {
+    if (_useIbaV2) {
+      switch (_currentStep) {
+        case 0:
+          return _useIbaV2 || _selectedIndustryId != null; // must select an option
+        case 1:
+          return _businessName.text.trim().isNotEmpty && _phoneNumber.text.trim().isNotEmpty;
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+          return true;
+        default:
+          return true;
+      }
+    }
     switch (_currentStep) {
       case 0:
         return _selectedIndustryId != null;
@@ -436,6 +595,24 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   }
 
   Widget _stepContent() {
+    if (_useIbaV2) {
+      switch (_currentStep) {
+        case 0:
+          return _buildIndustryStep();
+        case 1:
+          return _buildV2IdentityStep();
+        case 2:
+          return _buildV2ServicesStep();
+        case 3:
+          return _buildV2HoursPoliciesStep();
+        case 4:
+          return _buildV2IntegrationsStep();
+        case 5:
+          return _buildV2VoicePreviewStep();
+        default:
+          return const SizedBox();
+      }
+    }
     switch (_currentStep) {
       case 0:
         return _buildIndustryStep();
@@ -461,19 +638,72 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
       children: [
         Text('What kind of business is this?', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
         const SizedBox(height: 20),
+        // IBA v2: Any business (industry-agnostic)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: _useIbaV2 ? NeyvoColors.tealGlow : NeyvoColors.bgRaised,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: () => setState(() {
+                _useIbaV2 = true;
+                _selectedIndustryId = null;
+                _currentStep = 0;
+              }),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _useIbaV2 ? NeyvoColors.teal : NeyvoColors.borderDefault, width: _useIbaV2 ? 2 : 1),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.business_center, size: 32, color: _useIbaV2 ? NeyvoColors.teal : NeyvoColors.textSecondary),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text('Any business (IBA v2)', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: NeyvoColors.teal.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                                child: Text('Recommended', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.teal)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text('Industry-agnostic. Add your business details, services, hours, and policies. Works for any vertical.',
+                              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
         ..._industries.map((ind) {
           final id = ind['id'] as String? ?? '';
           final name = ind['display_name'] as String? ?? id;
           final desc = ind['description'] as String? ?? '';
           final iconName = ind['icon'] as String? ?? 'tune';
-          final selected = _selectedIndustryId == id;
+          final selected = !_useIbaV2 && _selectedIndustryId == id;
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Material(
               color: selected ? NeyvoColors.tealGlow : NeyvoColors.bgRaised,
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
-                onTap: () => setState(() => _selectedIndustryId = id),
+                onTap: () => setState(() {
+                  _useIbaV2 = false;
+                  _selectedIndustryId = id;
+                }),
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -506,6 +736,193 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
             ),
           );
         }),
+      ],
+    );
+  }
+
+  Widget _buildV2IdentityStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Business identity', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('Core details for your voice assistant.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 20),
+        _field('Business name', _businessName, hint: 'e.g. Downtown Dental'),
+        const SizedBox(height: 12),
+        _field('Main phone (callbacks)', _phoneNumber, hint: '+1 555 123 4567', keyboard: TextInputType.phone),
+        const SizedBox(height: 12),
+        _field('Category (optional)', _businessCategory, hint: 'e.g. Dental, Salon, Legal'),
+        const SizedBox(height: 12),
+        _field('Short description (optional)', _businessDescription, hint: 'One line about your business', lines: 2),
+        const SizedBox(height: 12),
+        _field('Support email (optional)', _supportEmail, hint: 'support@example.com', keyboard: TextInputType.emailAddress),
+        const SizedBox(height: 12),
+        _field('Website (optional)', _website, hint: 'https://example.com', keyboard: TextInputType.url),
+        const SizedBox(height: 16),
+        Text('Agent name', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: ['Alex', 'Mia', 'Jordan', 'Emma', 'Sophia'].map((name) => ChoiceChip(
+            label: Text(name),
+            selected: _agentName.text.trim() == name,
+            selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+            onSelected: (_) => setState(() => _agentName.text = name),
+          )).toList(),
+        ),
+        if (_agentName.text.trim().isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _field('Custom agent name', _agentName, hint: 'e.g. Alex'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildV2ServicesStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Services / products', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('List what you offer. One per line.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 20),
+        _field('Services offered', _servicesOffered, hint: 'Consultation\nCleaning\nCheck-up', lines: 5),
+      ],
+    );
+  }
+
+  Widget _buildV2HoursPoliciesStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Hours & policies', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('When you\'re open and any policy notes.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 20),
+        Text('Timezone', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _v2Timezone,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']
+              .map((z) => DropdownMenuItem(value: z, child: Text(z))).toList(),
+          onChanged: (v) => setState(() => _v2Timezone = v ?? _v2Timezone),
+        ),
+        const SizedBox(height: 12),
+        _field('Business hours (e.g. Mon–Fri 9 AM–5 PM)', _officeHours, hint: 'Mon–Fri 9:00 AM–5:00 PM'),
+        const SizedBox(height: 12),
+        _field('Policy notes (cancellation, reschedule, etc.)', _v2PoliciesNote, hint: 'Optional', lines: 2),
+      ],
+    );
+  }
+
+  Widget _buildV2IntegrationsStep() {
+    const actions = [
+      'answer_questions',
+      'create_callback',
+      'create_lead',
+      'create_booking',
+      'check_availability',
+      'cancel_booking',
+      'reschedule_booking',
+      'handoff_to_human',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Integrations & actions', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('What the assistant is allowed to do.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 20),
+        Text('Scheduling', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: _v2Scheduler,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: const [
+            DropdownMenuItem(value: 'none', child: Text('None')),
+            DropdownMenuItem(value: 'google', child: Text('Google Calendar')),
+          ],
+          onChanged: (v) => setState(() => _v2Scheduler = v ?? 'none'),
+        ),
+        const SizedBox(height: 16),
+        Text('Allowed actions', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: actions.map((a) => FilterChip(
+            label: Text(a.replaceAll('_', ' ')),
+            selected: _allowedActionsV2.contains(a),
+            selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+            onSelected: (sel) => setState(() {
+              if (sel) _allowedActionsV2 = [..._allowedActionsV2, a]..sort();
+              else _allowedActionsV2 = _allowedActionsV2.where((x) => x != a).toList();
+            }),
+          )).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildV2VoicePreviewStep() {
+    if (_previewV2Data == null && !_loadingPreviewV2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPreviewV2());
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Voice & preview', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('Tone and how your assistant understands your business.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 20),
+        Text('Tone', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: ['warm_friendly', 'professional_clear', 'calm_reassuring'].map((t) => ChoiceChip(
+            label: Text(t.replaceAll('_', ' ')),
+            selected: _voiceStyle == t,
+            selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+            onSelected: (_) => setState(() => _voiceStyle = t),
+          )).toList(),
+        ),
+        const SizedBox(height: 12),
+        Text('Verbosity', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: ['short', 'medium'].map((v) => ChoiceChip(
+            label: Text(v),
+            selected: _verbosity == v,
+            selectedColor: NeyvoColors.teal.withValues(alpha: 0.25),
+            onSelected: (_) => setState(() => _verbosity = v),
+          )).toList(),
+        ),
+        const SizedBox(height: 16),
+        if (_loadingPreviewV2)
+          const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)))
+        else if (_previewV2Data != null) ...[
+          Text('This is how your assistant understands your business.', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: NeyvoColors.bgRaised, borderRadius: BorderRadius.circular(12), border: Border.all(color: NeyvoColors.borderDefault)),
+            child: SelectableText(
+              (_previewV2Data!['businessUnderstanding'] as Map?)?['summary'] as String? ?? '—',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+            ),
+          ),
+          if ((_previewV2Data!['enabledToolKeys'] as List?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 12),
+            Text('Enabled tools: ${(_previewV2Data!['enabledToolKeys'] as List).join(', ')}', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+          ],
+        ],
       ],
     );
   }
