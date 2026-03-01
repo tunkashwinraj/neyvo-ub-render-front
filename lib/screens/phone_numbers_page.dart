@@ -122,6 +122,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
 
   Future<void> _openRoutingSettings() async {
     Map<String, dynamic>? config;
+    List<Map<String, dynamic>> profiles = [];
     String? loadError;
     bool saving = false;
 
@@ -129,36 +130,57 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
       context: context,
       builder: (dialogContext) {
         final modeController = ValueNotifier<String>('single');
-        final defaultProfileCtrl = TextEditingController();
-        final salesCtrl = TextEditingController();
-        final supportCtrl = TextEditingController();
-        final bookingCtrl = TextEditingController();
-        final billingCtrl = TextEditingController();
+        final defaultProfileController = ValueNotifier<String>('');
+        final salesController = ValueNotifier<String>('');
+        final supportController = ValueNotifier<String>('');
+        final bookingController = ValueNotifier<String>('');
+        final billingController = ValueNotifier<String>('');
         final thresholdCtrl = TextEditingController(text: '0.75');
 
-        Future<void> loadConfig() async {
+        Future<void> loadData() async {
           try {
-            final res = await RoutingApiService.getConfig();
+            final results = await Future.wait([
+              RoutingApiService.getConfig(),
+              ManagedProfileApiService.listProfiles(),
+            ]);
+            final res = results[0] as Map<String, dynamic>;
+            final profRes = results[1] as Map<String, dynamic>;
             if (res['ok'] == true) {
               config = Map<String, dynamic>.from(res['config'] as Map? ?? {});
               modeController.value = (config!['mode'] as String? ?? 'single').toString();
-              defaultProfileCtrl.text = (config!['defaultProfileId'] ?? '').toString();
+              defaultProfileController.value = (config!['defaultProfileId'] ?? '').toString();
               final intentMap = Map<String, dynamic>.from(config!['intentMap'] as Map? ?? {});
-              salesCtrl.text = (intentMap['sales'] ?? '').toString();
-              supportCtrl.text = (intentMap['support'] ?? '').toString();
-              bookingCtrl.text = (intentMap['booking'] ?? '').toString();
-              billingCtrl.text = (intentMap['billing'] ?? '').toString();
+              salesController.value = (intentMap['sales'] ?? '').toString();
+              supportController.value = (intentMap['support'] ?? '').toString();
+              bookingController.value = (intentMap['booking'] ?? '').toString();
+              billingController.value = (intentMap['billing'] ?? '').toString();
               thresholdCtrl.text = (config!['confidenceThreshold'] ?? 0.75).toString();
             }
+            final list = (profRes['profiles'] as List? ?? []).cast<dynamic>();
+            profiles = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
           } catch (e) {
             loadError = e.toString();
           }
         }
 
+        List<DropdownMenuItem<String>> _profileDropdownItems() {
+          final items = <DropdownMenuItem<String>>[
+            const DropdownMenuItem(value: '', child: Text('— None —')),
+          ];
+          for (final p in profiles) {
+            final id = (p['profile_id'] ?? '').toString();
+            final name = (p['profile_name'] ?? 'Unnamed').toString();
+            if (id.isNotEmpty) {
+              items.add(DropdownMenuItem(value: id, child: Text(name, overflow: TextOverflow.ellipsis)));
+            }
+          }
+          return items;
+        }
+
         return StatefulBuilder(
           builder: (ctx, setState) {
             if (config == null && loadError == null) {
-              loadConfig().then((_) {
+              loadData().then((_) {
                 if (ctx.mounted) setState(() {});
               });
             }
@@ -169,70 +191,80 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 width: 440,
                 child: config == null && loadError == null
                     ? const Center(child: CircularProgressIndicator())
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (loadError != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                loadError!,
-                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                    : SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (loadError != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  loadError!,
+                                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                                ),
                               ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Mode', style: NeyvoTextStyles.label),
                             ),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Mode', style: NeyvoTextStyles.label),
-                          ),
-                          const SizedBox(height: 4),
-                          ValueListenableBuilder<String>(
-                            valueListenable: modeController,
-                            builder: (context, mode, _) {
-                              return DropdownButtonFormField<String>(
-                                value: mode,
-                                items: const [
-                                  DropdownMenuItem(value: 'single', child: Text('Single profile')),
-                                  DropdownMenuItem(value: 'silent_intent', child: Text('Silent AI routing')),
-                                ],
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  modeController.value = v;
-                                },
-                              );
-                            },
-                          ),
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Default profile ID', style: NeyvoTextStyles.label),
-                          ),
-                          const SizedBox(height: 4),
-                          TextField(
-                            controller: defaultProfileCtrl,
-                            decoration: const InputDecoration(hintText: 'profile_support'),
-                          ),
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Intent → Profile', style: NeyvoTextStyles.label),
-                          ),
-                          const SizedBox(height: 4),
-                          _intentField('Sales', salesCtrl),
-                          _intentField('Support', supportCtrl),
-                          _intentField('Booking', bookingCtrl),
-                          _intentField('Billing', billingCtrl),
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Confidence threshold', style: NeyvoTextStyles.label),
-                          ),
-                          const SizedBox(height: 4),
-                          TextField(
-                            controller: thresholdCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(hintText: '0.75'),
-                          ),
-                        ],
+                            const SizedBox(height: 4),
+                            ValueListenableBuilder<String>(
+                              valueListenable: modeController,
+                              builder: (context, mode, _) {
+                                return DropdownButtonFormField<String>(
+                                  value: mode,
+                                  items: const [
+                                    DropdownMenuItem(value: 'single', child: Text('Single profile')),
+                                    DropdownMenuItem(value: 'silent_intent', child: Text('Silent AI routing')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    modeController.value = v;
+                                  },
+                                );
+                              },
+                            ),
+                            const SizedBox(height: NeyvoSpacing.md),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Default profile', style: NeyvoTextStyles.label),
+                            ),
+                            const SizedBox(height: 4),
+                            ValueListenableBuilder<String>(
+                              valueListenable: defaultProfileController,
+                              builder: (context, val, _) {
+                                final valid = profiles.any((p) => (p['profile_id'] ?? '').toString() == val);
+                                final v = valid ? val : '';
+                                return DropdownButtonFormField<String>(
+                                  value: v,
+                                  items: _profileDropdownItems(),
+                                  onChanged: (nv) => defaultProfileController.value = nv ?? '',
+                                );
+                              },
+                            ),
+                            const SizedBox(height: NeyvoSpacing.md),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Intent → Profile', style: NeyvoTextStyles.label),
+                            ),
+                            const SizedBox(height: 4),
+                            _intentDropdown('Sales', salesController, profiles),
+                            _intentDropdown('Support', supportController, profiles),
+                            _intentDropdown('Booking', bookingController, profiles),
+                            _intentDropdown('Billing', billingController, profiles),
+                            const SizedBox(height: NeyvoSpacing.md),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Confidence threshold', style: NeyvoTextStyles.label),
+                            ),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: thresholdCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(hintText: '0.75'),
+                            ),
+                          ],
+                        ),
                       ),
               ),
               actions: [
@@ -247,13 +279,13 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                           setState(() => saving = true);
                           try {
                             final intentMap = <String, String>{};
-                            if (salesCtrl.text.trim().isNotEmpty) intentMap['sales'] = salesCtrl.text.trim();
-                            if (supportCtrl.text.trim().isNotEmpty) intentMap['support'] = supportCtrl.text.trim();
-                            if (bookingCtrl.text.trim().isNotEmpty) intentMap['booking'] = bookingCtrl.text.trim();
-                            if (billingCtrl.text.trim().isNotEmpty) intentMap['billing'] = billingCtrl.text.trim();
+                            if (salesController.value.isNotEmpty) intentMap['sales'] = salesController.value;
+                            if (supportController.value.isNotEmpty) intentMap['support'] = supportController.value;
+                            if (bookingController.value.isNotEmpty) intentMap['booking'] = bookingController.value;
+                            if (billingController.value.isNotEmpty) intentMap['billing'] = billingController.value;
                             final body = <String, dynamic>{
                               'mode': modeController.value,
-                              'defaultProfileId': defaultProfileCtrl.text.trim(),
+                              'defaultProfileId': defaultProfileController.value.trim(),
                               'intentMap': intentMap,
                             };
                             final t = double.tryParse(thresholdCtrl.text.trim());
@@ -291,15 +323,35 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     );
   }
 
-  static Widget _intentField(String label, TextEditingController ctrl) {
+  static Widget _intentDropdown(
+    String label,
+    ValueNotifier<String> controller,
+    List<Map<String, dynamic>> profiles,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: TextField(
-        controller: ctrl,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: 'profile_${label.toLowerCase()}',
-        ),
+      child: ValueListenableBuilder<String>(
+        valueListenable: controller,
+        builder: (context, val, _) {
+          final items = <DropdownMenuItem<String>>[
+            const DropdownMenuItem(value: '', child: Text('— None —')),
+          ];
+          for (final p in profiles) {
+            final id = (p['profile_id'] ?? '').toString();
+            final name = (p['profile_name'] ?? 'Unnamed').toString();
+            if (id.isNotEmpty) {
+              items.add(DropdownMenuItem(value: id, child: Text(name, overflow: TextOverflow.ellipsis)));
+            }
+          }
+          final valid = profiles.any((p) => (p['profile_id'] ?? '').toString() == val);
+          final v = valid ? val : '';
+          return DropdownButtonFormField<String>(
+            decoration: InputDecoration(labelText: label),
+            value: v,
+            items: items,
+            onChanged: (nv) => controller.value = nv ?? '',
+          );
+        },
       ),
     );
   }
