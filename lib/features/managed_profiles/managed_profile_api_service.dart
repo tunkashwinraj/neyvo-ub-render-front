@@ -50,6 +50,27 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
       _post('/api/managed-profiles', body);
 
+  /// Create profile from BI (use_bi=true). Requires org to have BI ready.
+  /// Body: role, goal, allowed_actions, profile_name, conversation overrides.
+  static Future<Map<String, dynamic>> createProfileFromBi({
+    required String role,
+    required String goal,
+    required List<String> allowedActions,
+    String? profileName,
+    String? tone,
+    String direction = 'inbound',
+  }) =>
+      _post('/api/managed-profiles', {
+        'use_bi': true,
+        'schema_version': 2,
+        'role': role,
+        'goal': goal,
+        'allowed_actions': allowedActions,
+        if (profileName != null) 'profile_name': profileName,
+        if (tone != null) 'conversation_profile': {'tone': tone},
+        'direction': direction,
+      });
+
   static Future<Map<String, dynamic>> listProfiles() async =>
       _get('/api/managed-profiles');
 
