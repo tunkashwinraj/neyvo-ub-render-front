@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../features/business_intelligence/routing_api_service.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 
@@ -119,6 +120,190 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     return numbers.any((n) => (n['registered_freecaller'] as bool? ?? false) == false);
   }
 
+  Future<void> _openRoutingSettings() async {
+    Map<String, dynamic>? config;
+    String? loadError;
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final modeController = ValueNotifier<String>('single');
+        final defaultProfileCtrl = TextEditingController();
+        final salesCtrl = TextEditingController();
+        final supportCtrl = TextEditingController();
+        final bookingCtrl = TextEditingController();
+        final billingCtrl = TextEditingController();
+        final thresholdCtrl = TextEditingController(text: '0.75');
+
+        Future<void> loadConfig() async {
+          try {
+            final res = await RoutingApiService.getConfig();
+            if (res['ok'] == true) {
+              config = Map<String, dynamic>.from(res['config'] as Map? ?? {});
+              modeController.value = (config!['mode'] as String? ?? 'single').toString();
+              defaultProfileCtrl.text = (config!['defaultProfileId'] ?? '').toString();
+              final intentMap = Map<String, dynamic>.from(config!['intentMap'] as Map? ?? {});
+              salesCtrl.text = (intentMap['sales'] ?? '').toString();
+              supportCtrl.text = (intentMap['support'] ?? '').toString();
+              bookingCtrl.text = (intentMap['booking'] ?? '').toString();
+              billingCtrl.text = (intentMap['billing'] ?? '').toString();
+              thresholdCtrl.text = (config!['confidenceThreshold'] ?? 0.75).toString();
+            }
+          } catch (e) {
+            loadError = e.toString();
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            if (config == null && loadError == null) {
+              loadConfig().then((_) {
+                if (ctx.mounted) setState(() {});
+              });
+            }
+            return AlertDialog(
+              backgroundColor: NeyvoColors.bgBase,
+              title: const Text('Routing & Answering Rules'),
+              content: SizedBox(
+                width: 440,
+                child: config == null && loadError == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (loadError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                loadError!,
+                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                              ),
+                            ),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Mode', style: NeyvoTextStyles.label),
+                          ),
+                          const SizedBox(height: 4),
+                          ValueListenableBuilder<String>(
+                            valueListenable: modeController,
+                            builder: (context, mode, _) {
+                              return DropdownButtonFormField<String>(
+                                value: mode,
+                                items: const [
+                                  DropdownMenuItem(value: 'single', child: Text('Single profile')),
+                                  DropdownMenuItem(value: 'silent_intent', child: Text('Silent AI routing')),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  modeController.value = v;
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Default profile ID', style: NeyvoTextStyles.label),
+                          ),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: defaultProfileCtrl,
+                            decoration: const InputDecoration(hintText: 'profile_support'),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Intent → Profile', style: NeyvoTextStyles.label),
+                          ),
+                          const SizedBox(height: 4),
+                          _intentField('Sales', salesCtrl),
+                          _intentField('Support', supportCtrl),
+                          _intentField('Booking', bookingCtrl),
+                          _intentField('Billing', billingCtrl),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Confidence threshold', style: NeyvoTextStyles.label),
+                          ),
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: thresholdCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(hintText: '0.75'),
+                          ),
+                        ],
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setState(() => saving = true);
+                          try {
+                            final intentMap = <String, String>{};
+                            if (salesCtrl.text.trim().isNotEmpty) intentMap['sales'] = salesCtrl.text.trim();
+                            if (supportCtrl.text.trim().isNotEmpty) intentMap['support'] = supportCtrl.text.trim();
+                            if (bookingCtrl.text.trim().isNotEmpty) intentMap['booking'] = bookingCtrl.text.trim();
+                            if (billingCtrl.text.trim().isNotEmpty) intentMap['billing'] = billingCtrl.text.trim();
+                            final body = <String, dynamic>{
+                              'mode': modeController.value,
+                              'defaultProfileId': defaultProfileCtrl.text.trim(),
+                              'intentMap': intentMap,
+                            };
+                            final t = double.tryParse(thresholdCtrl.text.trim());
+                            if (t != null) body['confidenceThreshold'] = t;
+                            await RoutingApiService.updateConfig(body);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Routing updated'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          } catch (e) {
+                            setState(() {
+                              saving = false;
+                              loadError = e.toString();
+                            });
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _intentField(String label, TextEditingController ctrl) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: TextField(
+        controller: ctrl,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'profile_${label.toLowerCase()}',
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +390,15 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           Text(
             'Manage numbers for your agents.',
             style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+          ),
+          const SizedBox(height: NeyvoSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _openRoutingSettings,
+              icon: const Icon(Icons.route, size: 18),
+              label: const Text('Configure routing & answering rules'),
+            ),
           ),
           if (_accountName != null || (_accountIdDisplay != null && _accountIdDisplay!.isNotEmpty && _accountIdDisplay!.length <= 20)) ...[
             const SizedBox(height: 6),

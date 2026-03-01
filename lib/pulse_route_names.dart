@@ -37,6 +37,7 @@ abstract class PulseRouteNames {
   static const String voiceLibrary = '/pulse/voice-library';
   static const String exports = '/pulse/exports';
   static const String analytics = '/pulse/analytics';
+  static const String businessSetup = '/pulse/business-setup';
 
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';

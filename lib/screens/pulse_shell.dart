@@ -25,6 +25,7 @@ import 'callbacks_page.dart';
 import 'students_list_page.dart';
 import 'template_scripts_page.dart';
 import 'integration_page.dart';
+import 'business_setup_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../neyvo_pulse_api.dart';
@@ -64,6 +65,7 @@ class _PulseShellState extends State<PulseShell> {
   // Comms nav — main workspace items. Exposed explicitly so users can jump directly.
   static List<_NavItem> get _navComms => [
     const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
+    const _NavItem('Business Setup', Icons.domain_outlined, PulseRouteNames.businessSetup),
     const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
     const _NavItem('Voice Profiles', Icons.tune, PulseRouteNames.managedProfiles),
     const _NavItem('Contacts', Icons.people_outline, PulseRouteNames.students),
@@ -94,6 +96,7 @@ class _PulseShellState extends State<PulseShell> {
 
   List<Widget> get _pagesComms => [
     const PulseDashboardPage(),     // Home
+    const BusinessSetupPage(),     // Business Setup
     const AgentsListPage(),        // Agents
     _buildManagedProfilesContent(), // Voice Profiles (nested Navigator so detail stays in shell)
     const StudentsListPage(),      // Contacts

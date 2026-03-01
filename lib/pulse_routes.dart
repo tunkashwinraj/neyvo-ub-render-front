@@ -108,6 +108,10 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.phoneNumbers));
       case PulseRouteNames.callbacks:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.callbacks));
+      case PulseRouteNames.businessSetup:
+        return MaterialPageRoute(
+          builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.businessSetup),
+        );
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

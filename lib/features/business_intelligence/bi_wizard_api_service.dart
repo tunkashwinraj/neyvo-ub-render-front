@@ -1,5 +1,5 @@
 // lib/features/business_intelligence/bi_wizard_api_service.dart
-// API client for Business Intelligence Wizard. Uses /api/wizard/*.
+// API client for Business Intelligence wizard. Uses /api/wizard/*.
 
 import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
@@ -20,35 +20,33 @@ class BiWizardApiService {
     return SpeariaApi.postJsonMap(path, body: body);
   }
 
-  /// POST /api/wizard/suggestions - AI suggestions for category/subcategory
+  /// GET /api/wizard/status - BI setup status (missing | partial | ready)
+  static Future<Map<String, dynamic>> getStatus() async =>
+      _get('/api/wizard/status');
+
+  /// GET /api/wizard/load - load current BI data
+  static Future<Map<String, dynamic>> load() async =>
+      _get('/api/wizard/load');
+
+  /// POST /api/wizard/suggestions - get AI service suggestions by category
   static Future<Map<String, dynamic>> getSuggestions({
     required String category,
     required String subcategory,
-    Map<String, dynamic>? existingData,
   }) async =>
       _post('/api/wizard/suggestions', {
         'category': category,
         'subcategory': subcategory,
-        if (existingData != null) 'existing_data': existingData,
       });
 
-  /// POST /api/wizard/validate - validate BI object
-  static Future<Map<String, dynamic>> validate(Map<String, dynamic> bi) async =>
-      _post('/api/wizard/validate', bi);
+  /// POST /api/wizard/validate - validate BI payload
+  static Future<Map<String, dynamic>> validate(Map<String, dynamic> payload) async =>
+      _post('/api/wizard/validate', payload);
 
-  /// POST /api/wizard/simulate - simulate call scenarios
-  static Future<Map<String, dynamic>> simulate(Map<String, dynamic> bi) async =>
-      _post('/api/wizard/simulate', bi);
+  /// POST /api/wizard/simulate - simulate calls with BI payload
+  static Future<Map<String, dynamic>> simulate(Map<String, dynamic> payload) async =>
+      _post('/api/wizard/simulate', payload);
 
-  /// POST /api/wizard/save - save BI to org
+  /// POST /api/wizard/save - save BI setup
   static Future<Map<String, dynamic>> save(Map<String, dynamic> payload) async =>
       _post('/api/wizard/save', payload);
-
-  /// GET /api/wizard/status - BI status (missing|partial|ready)
-  static Future<Map<String, dynamic>> getStatus() async =>
-      _get('/api/wizard/status');
-
-  /// GET /api/wizard/load - load full BI for org
-  static Future<Map<String, dynamic>> load() async =>
-      _get('/api/wizard/load');
 }

@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
+import 'create_profile_from_bi_wizard.dart';
 import 'create_profile_wizard.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
@@ -50,6 +51,14 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
     if (created == true && mounted) _load();
   }
 
+  Future<void> _openCreateFromBiWizard() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const CreateProfileFromBiWizard(),
+    );
+    if (created == true && mounted) _load();
+  }
+
   void _openProfileDetail(String profileId) {
     // Always open detail on a separate page (inside Pulse shell when callback is set).
     final onOpen = widget.onOpenProfileDetail;
@@ -82,14 +91,28 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     color: NeyvoColors.textPrimary,
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _openCreateWizard,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create Profile'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
-                    foregroundColor: Colors.white,
-                  ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _openCreateFromBiWizard,
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text('Create from Business Setup'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: NeyvoColors.teal,
+                        side: const BorderSide(color: NeyvoColors.teal),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _openCreateWizard,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create Profile'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: NeyvoColors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
