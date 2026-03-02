@@ -180,8 +180,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
                     businessReady: _businessReady,
                     agentsCount: _agentsCount,
                     numbersCount: _numbersCount,
-                    // Treat inboundReady as “test call done” so checklist aligns with Go Live tile.
-                    testCallDone: inboundReady || _completedCallsTotal > 0,
+                    // Treat any completed call as a real test call for the checklist.
+                    testCallDone: _completedCallsTotal > 0,
                     onOpenSetupCenter: widget.onOpenSetupCenter,
                   ),
                   const SizedBox(height: 24),
