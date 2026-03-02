@@ -138,8 +138,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
           _businessReady = biReady;
           _agentsCount = profilesCount;
           _numbersCount = numbersCount;
-          // Treat inboundReady as “test call done” so checklist aligns with Go Live tile.
-          _testCallDone = inboundReady || completedCallsTotal > 0;
           _loading = false;
         });
       }
@@ -182,7 +180,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
                     businessReady: _businessReady,
                     agentsCount: _agentsCount,
                     numbersCount: _numbersCount,
-                    testCallDone: _completedCallsTotal > 0,
+                    // Treat inboundReady as “test call done” so checklist aligns with Go Live tile.
+                    testCallDone: inboundReady || _completedCallsTotal > 0,
                     onOpenSetupCenter: widget.onOpenSetupCenter,
                   ),
                   const SizedBox(height: 24),
