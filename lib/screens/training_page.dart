@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
-import '../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 
 class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});
@@ -121,12 +121,12 @@ class _TrainingPageState extends State<TrainingPage> {
         appBar: AppBar(title: const Text('Assistant Training')),
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(SpeariaSpacing.xl),
+            padding: const EdgeInsets.all(NeyvoSpacing.xl),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_error!, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.error), textAlign: TextAlign.center),
-                const SizedBox(height: SpeariaSpacing.lg),
+                Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error), textAlign: TextAlign.center),
+                const SizedBox(height: NeyvoSpacing.lg),
                 FilledButton(onPressed: _load, child: const Text('Retry')),
               ],
             ),
@@ -145,15 +145,15 @@ class _TrainingPageState extends State<TrainingPage> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.all(SpeariaSpacing.lg),
+          padding: const EdgeInsets.all(NeyvoSpacing.lg),
           children: [
             Text(
               'Train your assistant with school-specific knowledge. This is injected into every outbound call.',
-              style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+              style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textSecondary),
             ),
-            const SizedBox(height: SpeariaSpacing.xl),
+            const SizedBox(height: NeyvoSpacing.xl),
             _PolicySection(policy: _policy, onSave: _savePolicy),
-            const SizedBox(height: SpeariaSpacing.xl),
+            const SizedBox(height: NeyvoSpacing.xl),
             _FaqSection(faq: _faq, onAdd: _addFaq, onUpdate: _updateFaq, onDelete: _deleteFaq),
           ],
         ),
@@ -215,14 +215,14 @@ class _PolicySectionState extends State<_PolicySection> {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(SpeariaSpacing.lg),
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('School policy', style: SpeariaType.titleLarge),
+            Text('School policy', style: NeyvoType.titleLarge),
             const SizedBox(height: 4),
-            Text('Used by the assistant to answer policy questions.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
-            const SizedBox(height: SpeariaSpacing.md),
+            Text('Used by the assistant to answer policy questions.', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+            const SizedBox(height: NeyvoSpacing.md),
             TextField(
               controller: _paymentPolicy,
               maxLines: 2,
@@ -231,7 +231,7 @@ class _PolicySectionState extends State<_PolicySection> {
                 hintText: 'e.g. Payments due within 30 days; payment plans available.',
               ),
             ),
-            const SizedBox(height: SpeariaSpacing.md),
+            const SizedBox(height: NeyvoSpacing.md),
             TextField(
               controller: _lateFeePolicy,
               maxLines: 2,
@@ -240,7 +240,7 @@ class _PolicySectionState extends State<_PolicySection> {
                 hintText: r'e.g. $75 late fee after due date.',
               ),
             ),
-            const SizedBox(height: SpeariaSpacing.md),
+            const SizedBox(height: NeyvoSpacing.md),
             TextField(
               controller: _contactInfo,
               decoration: const InputDecoration(
@@ -248,7 +248,7 @@ class _PolicySectionState extends State<_PolicySection> {
                 hintText: 'e.g. Billing office: 555-0100',
               ),
             ),
-            const SizedBox(height: SpeariaSpacing.md),
+            const SizedBox(height: NeyvoSpacing.md),
             TextField(
               controller: _defaultDueDays,
               decoration: const InputDecoration(
@@ -256,13 +256,13 @@ class _PolicySectionState extends State<_PolicySection> {
                 hintText: 'e.g. 30',
               ),
             ),
-            const SizedBox(height: SpeariaSpacing.md),
+            const SizedBox(height: NeyvoSpacing.md),
             TextField(
               controller: _notes,
               maxLines: 2,
               decoration: const InputDecoration(labelText: 'Notes'),
             ),
-            const SizedBox(height: SpeariaSpacing.lg),
+            const SizedBox(height: NeyvoSpacing.lg),
             FilledButton.icon(
               onPressed: () => widget.onSave({
                 'payment_policy': _paymentPolicy.text,
@@ -298,7 +298,7 @@ class _FaqSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(SpeariaSpacing.lg),
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -308,9 +308,9 @@ class _FaqSection extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FAQ', style: SpeariaType.titleLarge),
+                    Text('FAQ', style: NeyvoType.titleLarge),
                     const SizedBox(height: 4),
-                    Text('Questions and answers the assistant can use.', style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary)),
+                    Text('Questions and answers the assistant can use.', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
                   ],
                 ),
                 FilledButton.icon(
@@ -320,11 +320,11 @@ class _FaqSection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: SpeariaSpacing.md),
+            const SizedBox(height: NeyvoSpacing.md),
             if (faq.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: SpeariaSpacing.lg),
-                child: Text('No FAQ entries yet. Add questions and answers for the assistant.', style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textMuted)),
+                padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.lg),
+                child: Text('No FAQ entries yet. Add questions and answers for the assistant.', style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted)),
               )
             else
               ...faq.map((e) {
@@ -332,10 +332,10 @@ class _FaqSection extends StatelessWidget {
                 final q = e['question']?.toString() ?? '';
                 final a = e['answer']?.toString() ?? '';
                 return Card(
-                  margin: const EdgeInsets.only(bottom: SpeariaSpacing.sm),
+                  margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                   child: ListTile(
-                    title: Text(q, style: SpeariaType.titleMedium),
-                    subtitle: Text(a, style: SpeariaType.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    title: Text(q, style: NeyvoType.titleMedium),
+                    subtitle: Text(a, style: NeyvoType.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -344,7 +344,7 @@ class _FaqSection extends StatelessWidget {
                           onPressed: () => _showEditFaqDialog(context, id, q, a),
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline, size: 20, color: SpeariaAura.error),
+                          icon: Icon(Icons.delete_outline, size: 20, color: NeyvoColors.error),
                           onPressed: () async {
                             final confirm = await showDialog<bool>(
                               context: context,
@@ -383,7 +383,7 @@ class _FaqSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: qC, decoration: const InputDecoration(labelText: 'Question'), maxLines: 2),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: aC, decoration: const InputDecoration(labelText: 'Answer'), maxLines: 3),
             ],
           ),
@@ -415,7 +415,7 @@ class _FaqSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: qC, decoration: const InputDecoration(labelText: 'Question'), maxLines: 2),
-              const SizedBox(height: SpeariaSpacing.md),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: aC, decoration: const InputDecoration(labelText: 'Answer'), maxLines: 3),
             ],
           ),

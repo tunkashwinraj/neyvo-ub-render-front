@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/callback_date_format.dart';
-import 'outbound_calls_page.dart';
 import 'student_detail_page.dart';
 
 class CallbacksPage extends StatefulWidget {
@@ -253,19 +253,7 @@ class _CallbacksPageState extends State<CallbacksPage> {
                                         FilledButton.tonal(
                                           onPressed: studentId.isEmpty
                                               ? null
-                                              : () {
-                                                  Navigator.of(context).push(
-                                                    MaterialPageRoute(
-                                                      builder: (_) => OutboundCallsPage(
-                                                        prefillStudent: {
-                                                          'id': studentId,
-                                                          'name': name,
-                                                          'phone': phone,
-                                                        },
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
+                                              : () => Navigator.of(context).pushNamed(PulseRouteNames.dialer),
                                           child: const Text('Call now'),
                                         ),
                                         OutlinedButton(
