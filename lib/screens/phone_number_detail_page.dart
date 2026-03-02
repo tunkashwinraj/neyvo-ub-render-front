@@ -26,6 +26,7 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
   bool _saving = false;
   String? _error;
 
+  String _routingPreset = 'simple'; // simple | custom
   String _mode = 'single'; // single | silent_intent
   String _defaultProfileId = '';
   final Map<String, String> _intentMap = {};
@@ -61,6 +62,7 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
           _intentMap['booking'] = (im['booking'] ?? '').toString();
           _intentMap['billing'] = (im['billing'] ?? '').toString();
           _confidenceThreshold = (config['confidenceThreshold'] as num?)?.toDouble() ?? 0.75;
+          _routingPreset = 'custom';
         });
       }
       final list = (profRes['profiles'] as List?)?.cast<dynamic>() ?? [];
@@ -125,6 +127,41 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
     return items;
   }
 
+  void _applySimplePreset() {
+    if (_profiles.isEmpty) return;
+    String? bookingId;
+    String? salesId;
+    String? supportId;
+
+    for (final p in _profiles) {
+      final id = (p['profile_id'] ?? '').toString();
+      final name = (p['profile_name'] ?? '').toString().toLowerCase();
+      if (id.isEmpty) continue;
+      if (bookingId == null && (name.contains('book') || name.contains('schedule'))) {
+        bookingId = id;
+      } else if (salesId == null && (name.contains('sale') || name.contains('lead'))) {
+        salesId = id;
+      } else if (supportId == null && (name.contains('support') || name.contains('reception') || name.contains('general'))) {
+        supportId = id;
+      }
+    }
+
+    // Fallbacks
+    final firstId = (_profiles.isNotEmpty ? (_profiles.first['profile_id'] ?? '').toString() : '') ;
+    supportId ??= firstId;
+    bookingId ??= supportId;
+    salesId ??= supportId;
+
+    setState(() {
+      _mode = 'silent_intent';
+      _defaultProfileId = supportId ?? '';
+      _intentMap['booking'] = bookingId ?? '';
+      _intentMap['sales'] = salesId ?? '';
+      _intentMap['support'] = supportId ?? '';
+      // Leave billing unchanged; user can configure in custom mode.
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final rawPhone = widget.number['phone_number']?.toString() ?? '';
@@ -168,6 +205,33 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
                       // Who answers this number?
                       Text('Who answers this number?', style: NeyvoTextStyles.heading),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Simple business routing'),
+                            selected: _routingPreset == 'simple',
+                            onSelected: (v) {
+                              if (!v) return;
+                              setState(() {
+                                _routingPreset = 'simple';
+                              });
+                              _applySimplePreset();
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Custom (advanced)'),
+                            selected: _routingPreset == 'custom',
+                            onSelected: (v) {
+                              if (!v) return;
+                              setState(() {
+                                _routingPreset = 'custom';
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       _radio('single', 'Single agent', 'One agent handles all calls'),
                       _radio('silent_intent', 'Smart routing (recommended)', 'Route by intent from first sentence'),
                       const SizedBox(height: 16),
@@ -177,13 +241,19 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
                       ] else ...[
                         _dropdown('Default agent', _defaultProfileId, (v) => setState(() => _defaultProfileId = v ?? '')),
                         const SizedBox(height: 12),
-                        Text('Intent mapping', style: NeyvoTextStyles.label),
-                        const SizedBox(height: 4),
-                        _intentDropdown('Sales', _intentMap['sales'] ?? '', (v) => setState(() => _intentMap['sales'] = v ?? '')),
-                        _intentDropdown('Support', _intentMap['support'] ?? '', (v) => setState(() => _intentMap['support'] = v ?? '')),
-                        _intentDropdown('Booking', _intentMap['booking'] ?? '', (v) => setState(() => _intentMap['booking'] = v ?? '')),
-                        _intentDropdown('Billing', _intentMap['billing'] ?? '', (v) => setState(() => _intentMap['billing'] = v ?? '')),
-                        const SizedBox(height: 12),
+                        if (_routingPreset == 'custom') ...[
+                          Text('Intent mapping', style: NeyvoTextStyles.label),
+                          const SizedBox(height: 4),
+                          _intentDropdown(
+                              'Sales', _intentMap['sales'] ?? '', (v) => setState(() => _intentMap['sales'] = v ?? '')),
+                          _intentDropdown(
+                              'Support', _intentMap['support'] ?? '', (v) => setState(() => _intentMap['support'] = v ?? '')),
+                          _intentDropdown('Booking',
+                              _intentMap['booking'] ?? '', (v) => setState(() => _intentMap['booking'] = v ?? '')),
+                          _intentDropdown('Billing',
+                              _intentMap['billing'] ?? '', (v) => setState(() => _intentMap['billing'] = v ?? '')),
+                          const SizedBox(height: 12),
+                        ],
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -191,9 +261,20 @@ class _PhoneNumberDetailPageState extends State<PhoneNumberDetailPage> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: NeyvoColors.borderDefault),
                           ),
-                          child: Text(
-                            'We listen to the first sentence of the call and automatically route to the right agent based on intent (Sales, Support, Booking, Billing).',
-                            style: NeyvoTextStyles.body.copyWith(fontSize: 13),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'We listen to the first sentence of the call and automatically route to the right agent based on intent (Sales, Support, Booking, Billing).',
+                                style: NeyvoTextStyles.body.copyWith(fontSize: 13),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Example: “I want to book” → Booking agent\n'
+                                'Example: “I need help with my order” → Support agent',
+                                style: NeyvoTextStyles.micro,
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),

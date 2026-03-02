@@ -657,13 +657,13 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 Icon(Icons.phone_in_talk_outlined, size: 48, color: NeyvoTheme.textMuted),
                 const SizedBox(height: 16),
                 Text(
-                  "You don't have any phone numbers yet.",
+                  'No numbers yet',
                   style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Buy a new number or link an existing one (e.g. from VAPI or a campaign).',
+                  'Get a new number in under a minute or connect your existing number.',
                   style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -677,7 +677,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 FilledButton.icon(
                   onPressed: () => _openBuyNumberFlow(context),
                   icon: const Icon(Icons.add, size: 20),
-                  label: const Text('Buy New Number'),
+                  label: const Text('Get a number (1 min)'),
                 ),
               ],
             ),
@@ -693,8 +693,11 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           child: ExpansionTile(
             initiallyExpanded: true,
             onExpansionChanged: (v) => setState(() => _linkExpanded = v),
-            title: Text('Link existing number', style: NeyvoType.titleMedium),
-            subtitle: Text('Have a number in Firestore or VAPI? Paste E.164 and Phone number ID below and click Link to show it here.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+            title: Text('Connect existing number', style: NeyvoType.titleMedium),
+            subtitle: Text(
+              'Have a number in Firestore or VAPI? Paste E.164 and Phone number ID below and click Link to show it here.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
+            ),
             children: [
               Padding(
                 padding: const EdgeInsets.all(16),

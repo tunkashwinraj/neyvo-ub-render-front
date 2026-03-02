@@ -8,6 +8,7 @@ import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 import '../features/business_intelligence/bi_wizard_api_service.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
+import '../features/setup/setup_api_service.dart';
 import 'wallet_page.dart';
 
 class PulseDashboardPage extends StatefulWidget {
@@ -96,18 +97,33 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
       bool biReady = false;
       int profilesCount = 0;
       int numbersCount = 0;
+      bool inboundReady = false;
       try {
-        final biStatus = await BiWizardApiService.getStatus();
-        biReady = biStatus['ok'] == true && biStatus['status'] is String && (biStatus['status'] as String).toLowerCase() == 'ready';
-      } catch (_) {}
-      try {
-        final profRes = await ManagedProfileApiService.listProfiles();
-        profilesCount = ((profRes['profiles'] as List?) ?? []).length;
-      } catch (_) {}
-      try {
-        final numbersRes = await NeyvoPulseApi.listNumbers();
-        numbersCount = ((numbersRes['numbers'] as List?) ?? []).length;
-      } catch (_) {}
+        final setup = await SetupStatusApiService.getStatus();
+        final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
+        final agents = Map<String, dynamic>.from(setup['agents'] as Map? ?? {});
+        final numbers = Map<String, dynamic>.from(setup['numbers'] as Map? ?? {});
+        final goLive = Map<String, dynamic>.from(setup['goLive'] as Map? ?? {});
+        biReady = (business['status'] as String? ?? '').toLowerCase() == 'ready';
+        profilesCount = (agents['count'] as num?)?.toInt() ?? 0;
+        numbersCount = (numbers['count'] as num?)?.toInt() ?? 0;
+        inboundReady = goLive['inboundReady'] == true;
+      } catch (_) {
+        // Fallback to legacy heuristic if setup status is unavailable.
+        try {
+          final biStatus = await BiWizardApiService.getStatus();
+          biReady =
+              biStatus['ok'] == true && biStatus['status'] is String && (biStatus['status'] as String).toLowerCase() == 'ready';
+        } catch (_) {}
+        try {
+          final profRes = await ManagedProfileApiService.listProfiles();
+          profilesCount = ((profRes['profiles'] as List?) ?? []).length;
+        } catch (_) {}
+        try {
+          final numbersRes = await NeyvoPulseApi.listNumbers();
+          numbersCount = ((numbersRes['numbers'] as List?) ?? []).length;
+        } catch (_) {}
+      }
 
       if (mounted) {
         setState(() {
@@ -122,6 +138,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
           _businessReady = biReady;
           _agentsCount = profilesCount;
           _numbersCount = numbersCount;
+          // Treat inboundReady as “test call done” so checklist aligns with Go Live tile.
+          _testCallDone = inboundReady || completedCallsTotal > 0;
           _loading = false;
         });
       }

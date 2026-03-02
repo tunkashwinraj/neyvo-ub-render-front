@@ -464,6 +464,10 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final tooltipStr = creditsStr != null
                             ? '$creditsStr · $durationStr${voiceTier.isNotEmpty ? ' · ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
                             : null;
+                        final routedIntentRaw = (call['routed_intent'] ?? call['primary_intent'] ?? call['analysis']?['primaryIntent']);
+                        final routedIntent = routedIntentRaw == null
+                            ? ''
+                            : routedIntentRaw.toString().trim();
                         
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
@@ -517,6 +521,21 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                         ),
                                       ),
                                     ),
+                                    if (routedIntent.isNotEmpty) ...[
+                                      const SizedBox(width: NeyvoSpacing.sm),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: NeyvoTheme.bgSurface,
+                                          borderRadius: BorderRadius.circular(999),
+                                          border: Border.all(color: NeyvoTheme.border),
+                                        ),
+                                        child: Text(
+                                          'Routed: ${routedIntent[0].toUpperCase()}${routedIntent.substring(1)}',
+                                          style: NeyvoType.bodySmall.copyWith(fontSize: 11, color: NeyvoTheme.textMuted),
+                                        ),
+                                      ),
+                                    ],
                                     if (durationStr != '—') ...[
                                       const SizedBox(width: NeyvoSpacing.sm),
                                       Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),

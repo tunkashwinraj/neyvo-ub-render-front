@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 import '../pulse_route_names.dart';
 import '../features/business_intelligence/bi_wizard_api_service.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
+import '../features/setup/setup_api_service.dart';
 import 'business_setup_page.dart';
+import 'phone_numbers_page.dart';
 
 class SetupCenterPage extends StatefulWidget {
   const SetupCenterPage({super.key, this.onSwitchToTab});
@@ -24,6 +27,9 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
   String _businessStatus = 'missing'; // missing | partial | ready
   int _agentsCount = 0;
   int _numbersCount = 0;
+  Map<String, dynamic>? _setupStatus;
+  Map<String, dynamic>? _goLive;
+  Map<String, dynamic>? _nextStep;
 
   @override
   void initState() {
@@ -37,37 +43,22 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
       _error = null;
     });
     try {
-      // Business / BI status
-      String biStatus = 'missing';
-      try {
-        final bi = await BiWizardApiService.getStatus();
-        if (bi['ok'] == true && bi['status'] is String) {
-          biStatus = (bi['status'] as String).toLowerCase();
-        }
-      } catch (_) {}
-
-      // Agents (managed profiles / voice profiles)
-      int agentsCount = 0;
-      try {
-        final res = await ManagedProfileApiService.listProfiles();
-        final list = (res['profiles'] as List?) ?? const [];
-        agentsCount = list.length;
-      } catch (_) {}
-
-      // Numbers
-      int numbersCount = 0;
-      try {
-        final res = await NeyvoPulseApi.listNumbers();
-        final list = (res['numbers'] as List?) ?? const [];
-        numbersCount = list.length;
-      } catch (_) {}
+      final res = await SetupStatusApiService.getStatus();
+      final business = Map<String, dynamic>.from(res['business'] as Map? ?? {});
+      final agents = Map<String, dynamic>.from(res['agents'] as Map? ?? {});
+      final numbers = Map<String, dynamic>.from(res['numbers'] as Map? ?? {});
+      final goLive = Map<String, dynamic>.from(res['goLive'] as Map? ?? {});
+      final nextStep = Map<String, dynamic>.from(res['nextStep'] as Map? ?? {});
 
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _businessStatus = biStatus;
-        _agentsCount = agentsCount;
-        _numbersCount = numbersCount;
+        _businessStatus = (business['status'] as String? ?? 'missing').toLowerCase();
+        _agentsCount = (agents['count'] as num?)?.toInt() ?? 0;
+        _numbersCount = (numbers['count'] as num?)?.toInt() ?? 0;
+        _setupStatus = Map<String, dynamic>.from(res);
+        _goLive = goLive;
+        _nextStep = nextStep;
       });
     } catch (e) {
       if (!mounted) return;
@@ -83,6 +74,10 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
   bool get _hasNumbers => _numbersCount > 0;
 
   String _nextActionLabel() {
+    final step = _nextStep;
+    if (step != null && step['title'] is String && (step['title'] as String).trim().isNotEmpty) {
+      return step['title'] as String;
+    }
     if (!_isBusinessReady) return 'Next: Set up your business profile';
     if (!_hasAgents) return 'Next: Create your first agent';
     if (!_hasNumbers) return 'Next: Connect a phone number';
@@ -90,6 +85,90 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
   }
 
   VoidCallback _nextActionOnPressed(BuildContext context) {
+    final step = _nextStep;
+    if (step != null && step['route'] is String && (step['route'] as String).trim().isNotEmpty) {
+      final route = step['route'] as String;
+      return () {
+        // Map setup routes to shell tabs when possible.
+        if (widget.onSwitchToTab != null) {
+          switch (route) {
+            case '/pulse/business-setup':
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (ctx) => Scaffold(
+                    appBar: AppBar(
+                      title: const Text('Business Setup'),
+                      leading: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ),
+                    body: const BusinessSetupPage(),
+                  ),
+                ),
+              );
+              return;
+            case '/pulse/agents':
+              widget.onSwitchToTab!(2);
+              return;
+            case '/pulse/phone-numbers':
+              widget.onSwitchToTab!(3);
+              return;
+            case '/pulse/call-history':
+              widget.onSwitchToTab!(4);
+              return;
+          }
+        }
+        // Fallback to named routes.
+        if (route == '/pulse/business-setup') {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (ctx) => Scaffold(
+                appBar: AppBar(
+                  title: const Text('Business Setup'),
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ),
+                body: const BusinessSetupPage(),
+              ),
+            ),
+          );
+        } else if (route == '/pulse/agents') {
+          Navigator.of(context).pushNamed(PulseRouteNames.agents);
+        } else if (route == '/pulse/phone-numbers') {
+          Navigator.of(context).pushNamed(PulseRouteNames.phoneNumbers);
+        } else if (route == '/pulse/call-history') {
+          Navigator.of(context).pushNamed(PulseRouteNames.callHistory);
+        } else {
+          // Default to existing behavior.
+          if (!_isBusinessReady) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (ctx) => Scaffold(
+                  appBar: AppBar(
+                    title: const Text('Business Setup'),
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ),
+                  body: const BusinessSetupPage(),
+                ),
+              ),
+            );
+          } else if (!_hasAgents) {
+            _navigateToShellTab(context, PulseRouteNames.agents);
+          } else if (!_hasNumbers) {
+            _navigateToShellTab(context, PulseRouteNames.phoneNumbers);
+          } else {
+            _navigateToShellTab(context, PulseRouteNames.callHistory);
+          }
+        }
+      };
+    }
+
     if (!_isBusinessReady) {
       return () => Navigator.of(context).push(
         MaterialPageRoute(
@@ -334,7 +413,7 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
     final subtitle = _numbersCount == 0
         ? 'Connect a phone number so people can call your agents.'
         : 'You can add more numbers for different lines or campaigns.';
-    final cta = _numbersCount == 0 ? 'Connect number' : 'Manage numbers';
+    final cta = _numbersCount == 0 ? 'Get a number (1 min)' : 'Manage numbers';
     return NeyvoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,10 +434,17 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
             alignment: Alignment.centerLeft,
             child: TextButton(
               onPressed: () {
-                if (widget.onSwitchToTab != null) {
-                  widget.onSwitchToTab!(3);
+                if (_numbersCount == 0) {
+                  // Open the Buy Number flow directly so the user can get a number in one click.
+                  showBuyNumberModal(context, onDone: () {
+                    _load();
+                  });
                 } else {
-                  Navigator.of(context).pushNamed(PulseRouteNames.phoneNumbers);
+                  if (widget.onSwitchToTab != null) {
+                    widget.onSwitchToTab!(3);
+                  } else {
+                    Navigator.of(context).pushNamed(PulseRouteNames.phoneNumbers);
+                  }
                 }
               },
               child: Text(cta),
@@ -370,14 +456,28 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
   }
 
   Widget _buildGoLiveTile(BuildContext context) {
-    final ready = _isBusinessReady && _hasAgents && _hasNumbers;
-    final statusLabel = ready ? 'Ready' : 'Not ready';
-    final statusColor = ready ? NeyvoColors.success : NeyvoColors.textMuted;
-    final subtitle = ready
-        ? 'You’re ready to test live calls. Try an inbound or outbound test now.'
-        : 'Finish the steps above to test your full call flow.';
+    final goLive = _goLive ?? const {};
+    final inboundReady = goLive['inboundReady'] == true;
+    final statusLabel = inboundReady ? 'Live' : 'Not live';
+    final statusColor = inboundReady ? NeyvoColors.success : NeyvoColors.textMuted;
+    final primaryNumber = (goLive['callToTest'] ?? '').toString();
+    final numbers = _setupStatus?['numbers'] as Map<String, dynamic>? ?? const {};
+    final routingModeRaw = (numbers['routingMode'] ?? 'unknown').toString();
+    final routingModeLabel = switch (routingModeRaw) {
+      'silent_intent' => 'Smart routing',
+      'single' => 'Single agent',
+      _ => 'Unknown',
+    };
+    final notes = (goLive['notes'] as List?)?.cast<String>() ?? const <String>[];
+
+    final subtitle = inboundReady
+        ? 'Inbound is live. You can call your number to test the full flow.'
+        : (notes.isNotEmpty
+            ? notes.first
+            : 'Finish the steps above to test your full call flow.');
+
     return NeyvoCard(
-      glowing: ready,
+      glowing: inboundReady,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -385,7 +485,7 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
             children: [
               Icon(Icons.call_made_outlined, color: NeyvoColors.teal),
               const SizedBox(width: 8),
-              Text('Go Live & Test', style: NeyvoTextStyles.heading),
+              Text('Go Live', style: NeyvoTextStyles.heading),
               const Spacer(),
               _statusPill(statusLabel, statusColor),
             ],
@@ -393,17 +493,32 @@ class _SetupCenterPageState extends State<SetupCenterPage> {
           const SizedBox(height: 8),
           Text(subtitle, style: NeyvoTextStyles.body),
           const SizedBox(height: 12),
+          if (primaryNumber.isNotEmpty) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Call this number to test: $primaryNumber',
+                    style: NeyvoTextStyles.body,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => Clipboard.setData(ClipboardData(text: primaryNumber)),
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
-              FilledButton(
-                onPressed: ready ? () => Navigator.of(context).pushNamed(PulseRouteNames.callHistory) : null,
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                child: const Text('Test inbound'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: ready ? () => Navigator.of(context).pushNamed(PulseRouteNames.outbound) : null,
-                child: const Text('Test outbound'),
+              Icon(Icons.alt_route, size: 16, color: NeyvoColors.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                'Routing mode: $routingModeLabel',
+                style: NeyvoTextStyles.micro,
               ),
             ],
           ),

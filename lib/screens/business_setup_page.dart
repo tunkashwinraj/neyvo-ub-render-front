@@ -279,8 +279,9 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
         TextField(
           controller: _websiteUrlCtrl,
           decoration: const InputDecoration(
-            labelText: 'Website URL (optional)',
+            labelText: 'Website URL (beta)',
             hintText: 'https://yourbusiness.com',
+            helperText: 'If we can’t extract details yet, we’ll use category-based suggestions instead.',
             prefixIcon: Icon(Icons.language_outlined),
             border: OutlineInputBorder(),
           ),
