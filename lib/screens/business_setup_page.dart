@@ -14,10 +14,13 @@ class BusinessSetupPage extends StatefulWidget {
 }
 
 class _BusinessSetupPageState extends State<BusinessSetupPage> {
+  int _step = 0; // 0: category, 1: confirm, 2: done
   bool _loading = true;
   bool _saving = false;
   String? _error;
-  String _status = 'missing'; // missing | partial | ready
+  String _status = 'missing';
+  bool _editExpanded = false;
+  final _websiteUrlCtrl = TextEditingController();
   final _businessNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
@@ -25,6 +28,17 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
   List<Map<String, dynamic>> _serviceSuggestions = [];
   final Set<int> _selectedServices = {};
   List<Map<String, dynamic>> _simulations = [];
+
+  static const List<Map<String, String>> _categories = [
+    {'id': 'healthcare', 'label': 'Healthcare'},
+    {'id': 'beauty', 'label': 'Beauty'},
+    {'id': 'legal', 'label': 'Legal'},
+    {'id': 'restaurant', 'label': 'Restaurant'},
+    {'id': 'retail', 'label': 'Retail'},
+    {'id': 'services', 'label': 'Professional Services'},
+    {'id': 'education', 'label': 'Education'},
+    {'id': 'general', 'label': 'Other'},
+  ];
 
   @override
   void initState() {
@@ -34,6 +48,7 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
 
   @override
   void dispose() {
+    _websiteUrlCtrl.dispose();
     _businessNameCtrl.dispose();
     _phoneCtrl.dispose();
     _categoryCtrl.dispose();
@@ -157,6 +172,7 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
       if (res['ok'] == true) {
         setState(() {
           _status = (res['status'] as String?) ?? _status;
+          _error = null;
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -191,154 +207,261 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
       child: ListView(
         padding: const EdgeInsets.all(NeyvoSpacing.xl),
         children: [
-          Text('Business Setup', style: NeyvoType.headlineLarge),
-          const SizedBox(height: NeyvoSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Model your business once for all voice agents.',
-                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                ),
-              ),
-              _buildStatusChip(),
-            ],
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: NeyvoSpacing.sm),
-            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
-          ],
-          const SizedBox(height: NeyvoSpacing.xl),
-          NeyvoCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Identity', style: NeyvoTextStyles.heading),
-                const SizedBox(height: NeyvoSpacing.sm),
-                _field(label: 'Business name', controller: _businessNameCtrl, hint: 'Downtown Dental'),
-                const SizedBox(height: NeyvoSpacing.sm),
-                _field(label: 'Main phone', controller: _phoneCtrl, hint: '+1 555 123 4567'),
-              ],
-            ),
-          ),
-          const SizedBox(height: NeyvoSpacing.lg),
-          NeyvoCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Category', style: NeyvoTextStyles.heading),
-                const SizedBox(height: NeyvoSpacing.sm),
-                _field(label: 'Industry category', controller: _categoryCtrl, hint: 'Healthcare, Beauty, Legal…'),
-                const SizedBox(height: NeyvoSpacing.sm),
-                _field(label: 'Subcategory', controller: _subcategoryCtrl, hint: 'Dental clinic, Hair salon…'),
-                const SizedBox(height: NeyvoSpacing.md),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _getSuggestions,
-                    icon: const Icon(Icons.auto_awesome, size: 18),
-                    label: const Text('Get AI suggestions'),
-                    style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_serviceSuggestions.isNotEmpty) ...[
-            const SizedBox(height: NeyvoSpacing.lg),
-            NeyvoCard(
-              glowing: true,
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Suggested services', style: NeyvoTextStyles.heading),
-                  const SizedBox(height: NeyvoSpacing.sm),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: List.generate(_serviceSuggestions.length, (index) {
-                      final s = _serviceSuggestions[index];
-                      final name = (s['name'] ?? '').toString();
-                      final selected = _selectedServices.contains(index);
-                      return FilterChip(
-                        label: Text(name),
-                        selected: selected,
-                        onSelected: (v) {
-                          setState(() {
-                            if (v) {
-                              _selectedServices.add(index);
-                            } else {
-                              _selectedServices.remove(index);
-                            }
-                          });
-                        },
-                      );
-                    }),
+                  Row(
+                    children: [
+                      _stepDot(0, 'Category'),
+                      _stepLine(),
+                      _stepDot(1, 'Confirm'),
+                      _stepLine(),
+                      _stepDot(2, 'Save'),
+                    ],
                   ),
+                  const SizedBox(height: NeyvoSpacing.xl),
+                  if (_error != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: NeyvoColors.error.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+                    ),
+                    const SizedBox(height: NeyvoSpacing.lg),
+                  ],
+                  if (_step == 0) _buildStepCategory(),
+                  if (_step == 1) _buildStepConfirm(),
+                  if (_step == 2) _buildStepSave(),
                 ],
               ),
             ),
-          ],
-          const SizedBox(height: NeyvoSpacing.lg),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _simulate,
-                icon: const Icon(Icons.play_circle_outline),
-                label: const Text('Simulate calls'),
-              ),
-              const SizedBox(width: NeyvoSpacing.sm),
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: const Text('Save'),
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-              ),
-            ],
           ),
-          if (_simulations.isNotEmpty) ...[
-            const SizedBox(height: NeyvoSpacing.lg),
-            Text('Simulation preview', style: NeyvoTextStyles.heading),
-            const SizedBox(height: NeyvoSpacing.sm),
-            ..._simulations.map((s) {
-              final scenario = (s['scenario'] ?? '').toString();
-              final userReq = (s['userRequest'] ?? '').toString();
-              final risk = (s['riskLevel'] ?? '').toString();
-              final missing = (s['missingData'] as List? ?? []).join(', ');
-              final warn = (s['complianceWarning'] as List? ?? []).join(', ');
-              return Padding(
-                padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                child: NeyvoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        scenario.isEmpty ? 'Scenario' : scenario,
-                        style: NeyvoTextStyles.heading.copyWith(color: NeyvoTheme.textPrimary),
-                      ),
-                      const SizedBox(height: NeyvoSpacing.xs),
-                      Text(userReq, style: NeyvoType.bodySmall),
-                      const SizedBox(height: NeyvoSpacing.xs),
-                      Text('Risk: $risk', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
-                      if (missing.isNotEmpty)
-                        Text('Missing: $missing', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                      if (warn.isNotEmpty)
-                        Text('Compliance: $warn', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
         ],
       ),
     );
+  }
+
+  Widget _stepDot(int step, String label) {
+    final active = _step == step;
+    return Column(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active ? NeyvoColors.teal : NeyvoColors.bgRaised,
+            border: Border.all(color: active ? NeyvoColors.teal : NeyvoColors.borderDefault),
+          ),
+          child: Center(child: Text('${step + 1}', style: NeyvoTextStyles.micro.copyWith(color: active ? Colors.white : NeyvoColors.textMuted))),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: NeyvoTextStyles.micro.copyWith(color: active ? NeyvoColors.teal : NeyvoColors.textMuted)),
+      ],
+    );
+  }
+
+  Widget _stepLine() => Expanded(child: Container(height: 2, margin: const EdgeInsets.only(bottom: 20), color: NeyvoColors.borderDefault));
+
+  Widget _buildStepCategory() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Where can we learn about your business?', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 8),
+        Text('Enter your website URL or choose a category to get AI-suggested services.', style: NeyvoTextStyles.body),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _websiteUrlCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Website URL (optional)',
+            hintText: 'https://yourbusiness.com',
+            prefixIcon: Icon(Icons.language_outlined),
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.url,
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 16),
+        Text('Or choose your industry', style: NeyvoTextStyles.label),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _categories.map((c) {
+            final id = c['id']!;
+            final label = c['label']!;
+            final selected = _categoryCtrl.text == id;
+            return FilterChip(
+              label: Text(label),
+              selected: selected,
+              onSelected: (_) {
+                setState(() {
+                  _categoryCtrl.text = id;
+                  _subcategoryCtrl.text = id;
+                  _getSuggestions();
+                });
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        _field(label: 'Business name (optional)', controller: _businessNameCtrl, hint: 'e.g. Downtown Dental'),
+        const SizedBox(height: 12),
+        _field(label: 'Main phone (optional)', controller: _phoneCtrl, hint: '+1 555 123 4567'),
+        const SizedBox(height: 24),
+        if (_serviceSuggestions.isNotEmpty) ...[
+          Text('Select services you offer', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(_serviceSuggestions.length, (index) {
+              final s = _serviceSuggestions[index];
+              final name = (s['name'] ?? '').toString();
+              final selected = _selectedServices.contains(index);
+              return FilterChip(
+                label: Text(name),
+                selected: selected,
+                onSelected: (v) {
+                  setState(() {
+                    if (v) _selectedServices.add(index);
+                    else _selectedServices.remove(index);
+                  });
+                },
+              );
+            }),
+          ),
+          const SizedBox(height: 24),
+        ],
+        FilledButton(
+          onPressed: () {
+            if (_categoryCtrl.text.isEmpty) {
+              setState(() => _categoryCtrl.text = 'general');
+              _getSuggestions();
+            }
+            setState(() => _step = 1);
+          },
+          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+          child: const Text('Continue'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepConfirm() {
+    final servicesStr = _selectedServices.map((i) => i < _serviceSuggestions.length ? (_serviceSuggestions[i]['name'] ?? '').toString() : '').where((s) => s.isNotEmpty).join(', ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Confirm your business profile', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 16),
+        NeyvoCard(
+          glowing: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_businessNameCtrl.text.trim().isNotEmpty)
+                _previewRow('Name', _businessNameCtrl.text.trim()),
+              _previewRow('Category', _categoryCtrl.text.isEmpty ? '—' : _categoryCtrl.text),
+              if (_phoneCtrl.text.trim().isNotEmpty)
+                _previewRow('Phone', _phoneCtrl.text.trim()),
+              if (servicesStr.isNotEmpty)
+                _previewRow('Services', servicesStr),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            OutlinedButton(
+              onPressed: () => setState(() => _editExpanded = !_editExpanded),
+              child: Text(_editExpanded ? 'Hide details' : 'Edit details'),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: () => setState(() => _step = 2),
+              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+              child: const Text('Looks good'),
+            ),
+          ],
+        ),
+        if (_editExpanded) ...[
+          const SizedBox(height: 24),
+          _field(label: 'Business name', controller: _businessNameCtrl, hint: 'Downtown Dental'),
+          const SizedBox(height: 12),
+          _field(label: 'Main phone', controller: _phoneCtrl, hint: '+1 555 123 4567'),
+          const SizedBox(height: 12),
+          _field(label: 'Subcategory', controller: _subcategoryCtrl, hint: 'Dental clinic, Hair salon…'),
+        ],
+      ],
+    );
+  }
+
+  Widget _previewRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 80, child: Text('$label:', style: NeyvoTextStyles.label)),
+          Expanded(child: Text(value, style: NeyvoTextStyles.body)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepSave() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Save & finish', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 8),
+        Text('Save your business profile to enable AI agents.', style: NeyvoTextStyles.body),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: _simulate,
+              icon: const Icon(Icons.play_circle_outline, size: 18),
+              label: const Text('Preview & test'),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _saving ? null : _saveAndPop,
+              icon: _saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: const Text('Save'),
+              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+            ),
+          ],
+        ),
+        if (_simulations.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          ..._simulations.take(2).map((s) {
+            final scenario = (s['scenario'] ?? '').toString();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: NeyvoCard(
+                padding: const EdgeInsets.all(12),
+                child: Text(scenario.isEmpty ? 'Preview' : scenario, style: NeyvoTextStyles.body),
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _saveAndPop() async {
+    await _save();
+    if (mounted && _error == null) Navigator.of(context).pop();
   }
 
   Widget _field({

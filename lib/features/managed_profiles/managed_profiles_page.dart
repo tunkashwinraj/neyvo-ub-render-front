@@ -3,8 +3,9 @@
 
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
-import 'create_profile_from_bi_wizard.dart';
-import 'create_profile_wizard.dart';
+import '../../pulse_route_names.dart';
+import '../business_intelligence/bi_wizard_api_service.dart';
+import '../agents/create_agent_wizard.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
 
@@ -43,18 +44,29 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
     }
   }
 
-  Future<void> _openCreateWizard() async {
+  Future<void> _openCreateAgent() async {
+    // Check BI status first
+    try {
+      final res = await BiWizardApiService.getStatus();
+      if (!mounted) return;
+      final status = (res['status'] as String?)?.toLowerCase() ?? 'missing';
+      if (status != 'ready') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Set up your business profile first in Setup Center.'),
+            action: SnackBarAction(
+              label: 'Go',
+              onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.setupCenter),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    } catch (_) {}
     final created = await showDialog<bool>(
       context: context,
-      builder: (ctx) => const CreateProfileWizard(),
-    );
-    if (created == true && mounted) _load();
-  }
-
-  Future<void> _openCreateFromBiWizard() async {
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => const CreateProfileFromBiWizard(),
+      builder: (ctx) => const CreateAgentWizard(),
     );
     if (created == true && mounted) _load();
   }
@@ -85,34 +97,20 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Voice Profiles',
+                  'Agents',
                   style: NeyvoTextStyles.title.copyWith(
                     fontWeight: FontWeight.w700,
                     color: NeyvoColors.textPrimary,
                   ),
                 ),
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _openCreateFromBiWizard,
-                      icon: const Icon(Icons.auto_awesome, size: 18),
-                      label: const Text('Create from Business Setup'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: NeyvoColors.teal,
-                        side: const BorderSide(color: NeyvoColors.teal),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _openCreateWizard,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create Profile'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: NeyvoColors.teal,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
+                ElevatedButton.icon(
+                  onPressed: _openCreateAgent,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create Agent'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -146,11 +144,21 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
           children: [
             Icon(Icons.record_voice_over_outlined, size: 48, color: NeyvoColors.textMuted),
             const SizedBox(height: 16),
-            Text('No voice profiles yet', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+            Text('No agents yet', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
             const SizedBox(height: 8),
             Text(
-              'Create your first managed voice profile in under 2 minutes.',
+              'Create your first agent in under 2 minutes.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _openCreateAgent,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Create Agent'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NeyvoColors.teal,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),

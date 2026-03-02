@@ -12,6 +12,7 @@ import '../theme/neyvo_theme.dart';
 import '../features/business_intelligence/routing_api_service.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
+import 'phone_number_detail_page.dart';
 
 const String _kLinkedNumbersKey = 'neyvo_pulse_linked_numbers';
 
@@ -444,13 +445,9 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
           ),
           const SizedBox(height: NeyvoSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _openRoutingSettings,
-              icon: const Icon(Icons.route, size: 18),
-              label: const Text('Configure routing & answering rules'),
-            ),
+          Text(
+            'Click a number to configure who answers it.',
+            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
           ),
           if (_accountName != null || (_accountIdDisplay != null && _accountIdDisplay!.isNotEmpty && _accountIdDisplay!.length <= 20)) ...[
             const SizedBox(height: 6),
@@ -484,6 +481,14 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                           number: n,
                           onUpdated: _load,
                           formatPhone: _formatPhone,
+                          onOpenDetail: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PhoneNumberDetailPage(
+                                numberId: numberId,
+                                number: n,
+                              ),
+                            ),
+                          ),
                         ),
                         if (numberId.isNotEmpty) _CapacityBar(numberId: numberId),
                       ],
@@ -938,8 +943,14 @@ class _NumberCard extends StatefulWidget {
   final Map<String, dynamic> number;
   final VoidCallback onUpdated;
   final String Function(String?) formatPhone;
+  final VoidCallback? onOpenDetail;
 
-  const _NumberCard({required this.number, required this.onUpdated, required this.formatPhone});
+  const _NumberCard({
+    required this.number,
+    required this.onUpdated,
+    required this.formatPhone,
+    this.onOpenDetail,
+  });
 
   @override
   State<_NumberCard> createState() => _NumberCardState();
@@ -989,9 +1000,12 @@ class _NumberCardState extends State<_NumberCard> {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: NeyvoTheme.border),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.lg),
-        child: Column(
+      child: InkWell(
+        onTap: widget.onOpenDetail,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(NeyvoSpacing.lg),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -1177,6 +1191,7 @@ class _NumberCardState extends State<_NumberCard> {
           ],
         ),
       ),
+    ),
     );
   }
 

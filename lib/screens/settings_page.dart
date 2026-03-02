@@ -5,9 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../neyvo_pulse_api.dart';
-import '../pulse_route_names.dart';
 import '../utils/payment_result_dialog.dart';
 import 'billing_tab_content.dart';
+import 'integration_page.dart';
 import '../theme/neyvo_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
@@ -61,7 +61,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _load();
     _checkPaymentResultAndSwitchToBilling();
     final initial = widget.initialBillingTabIndex;
@@ -438,6 +438,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             Tab(text: 'Organization'),
             Tab(text: 'Team'),
             Tab(text: 'Billing'),
+            Tab(text: 'Integrations'),
             Tab(text: 'API Keys'),
             Tab(text: 'Security'),
           ],
@@ -449,6 +450,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
               _buildOrganizationTab(user),
               _buildTeamTab(),
               _buildBillingTab(),
+              const IntegrationPage(),
               _buildApiKeysTab(),
               _buildSecurityTab(user),
             ],
@@ -745,7 +747,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
         
         const SizedBox(height: NeyvoSpacing.lg),
         
-        // Data integration (link to dedicated page)
+        // Data integration (link to Integrations tab)
         Card(
           color: NeyvoTheme.bgCard,
           child: ListTile(
@@ -753,7 +755,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             title: Text('Data integration', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
             subtitle: Text('Connect your data: webhook, CSV upload, API pull', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.integration),
+            onTap: () => _tabController.animateTo(3),
           ),
         ),
         const SizedBox(height: NeyvoSpacing.md),

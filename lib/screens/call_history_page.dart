@@ -25,6 +25,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   String? _error;
   final _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, completed, failed, pending
+  String _filterOutcome = 'all'; // all, callback, booked, handoff, missed, completed
   String _filterDirection = 'all'; // all, inbound, outbound
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
@@ -124,9 +125,15 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
             contactName.contains(query) ||
             phone.contains(query);
         if (!matchesSearch) return false;
-        if (_filterStatus == 'all') return true;
-        final status = (c['status']?.toString() ?? '').toLowerCase();
-        return status == _filterStatus;
+        if (_filterStatus != 'all') {
+          final status = (c['status']?.toString() ?? '').toLowerCase();
+          if (status != _filterStatus) return false;
+        }
+        if (_filterOutcome != 'all') {
+          final outcome = (c['outcome'] ?? c['status'] ?? '').toString().toLowerCase();
+          if (outcome != _filterOutcome) return false;
+        }
+        return true;
       }).toList();
       // Sort
       list = List.from(list);
@@ -341,6 +348,28 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
+                          width: 140,
+                          child: DropdownButtonFormField<String>(
+                            value: _filterOutcome,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Outcome',
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'callback', child: Text('Callback', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'booked', child: Text('Booked', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'handoff', child: Text('Handoff', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'missed', child: Text('Missed', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: 'completed', child: Text('Completed', overflow: TextOverflow.ellipsis)),
+                            ],
+                            onChanged: (v) { setState(() { _filterOutcome = v ?? 'all'; _filterCalls(); }); },
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        SizedBox(
                           width: 190,
                           child: DropdownButtonFormField<_CallSort>(
                             value: _sortBy,
@@ -404,7 +433,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                   TextButton(
                                     onPressed: () {
                                       _searchController.clear();
-                                      setState(() => _filterStatus = 'all');
+                                      setState(() { _filterStatus = 'all'; _filterOutcome = 'all'; });
                                       _filterCalls();
                                     },
                                     child: const Text('Clear filters'),
@@ -415,8 +444,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         }
                         final call = _filteredCalls[i - 1] as Map<String, dynamic>;
                         final status = call['status']?.toString() ?? 'unknown';
-                        final studentName = call['student_name']?.toString() ?? 'Unknown';
-                        final studentPhone = call['student_phone']?.toString() ?? '';
+                        final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? 'Unknown').toString();
+                        final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '').toString();
+                        final agentName = (call['profile_name'] ?? call['agent_name'] ?? call['managed_profile_name'] ?? '').toString();
+                        final numberCalled = (call['number_called'] ?? call['from'] ?? call['phone_number_id'] ?? '').toString();
+                        final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '').toString();
                         final date = (call['created_at_display'] ?? call['created_at'] ?? call['date'] ?? '').toString();
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
@@ -464,7 +496,10 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (studentPhone.isNotEmpty) Text(studentPhone, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (studentPhone.isNotEmpty) Text('Caller: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (agentName.isNotEmpty) Text('Agent: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (numberCalled.isNotEmpty) Text('Number: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (outcome.isNotEmpty && outcome != 'unknown') Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (date.isNotEmpty) Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 Row(
                                   children: [

@@ -20,6 +20,7 @@ import 'screens/integration_page.dart';
 import 'screens/campaigns_page.dart';
 import 'screens/template_scripts_page.dart';
 import 'screens/plan_selector_page.dart';
+import 'screens/setup_center_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'screens/projects_list_page.dart';
@@ -57,6 +58,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.exports));
       case PulseRouteNames.analytics:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+      case PulseRouteNames.setupCenter:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.setupCenter));
       case PulseRouteNames.projectDetail:
         final projectId = settings.arguments as String? ?? '';
         return MaterialPageRoute(builder: (_) => ProjectDetailPage(projectId: projectId));
@@ -110,7 +113,7 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.callbacks));
       case PulseRouteNames.businessSetup:
         return MaterialPageRoute(
-          builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.businessSetup),
+          builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.setupCenter),
         );
       default:
         return MaterialPageRoute(

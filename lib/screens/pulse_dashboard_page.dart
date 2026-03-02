@@ -6,10 +6,15 @@ import 'package:flutter/material.dart';
 import '../pulse_route_names.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../features/business_intelligence/bi_wizard_api_service.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
 import 'wallet_page.dart';
 
 class PulseDashboardPage extends StatefulWidget {
-  const PulseDashboardPage({super.key});
+  const PulseDashboardPage({super.key, this.onOpenSetupCenter});
+
+  /// When set (e.g. by PulseShell), opens Setup Center by switching to that tab instead of pushing a route.
+  final VoidCallback? onOpenSetupCenter;
 
   @override
   State<PulseDashboardPage> createState() => _PulseDashboardPageState();
@@ -25,6 +30,9 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
   bool _loading = true;
   bool _onboardingBillingShown = false;
   int _completedCallsTotal = 0;
+  bool _businessReady = false;
+  int _agentsCount = 0;
+  int _numbersCount = 0;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -85,6 +93,22 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
       }).length;
       final onboardingBillingShown = accountRes['onboarding_billing_shown'] == true;
 
+      bool biReady = false;
+      int profilesCount = 0;
+      int numbersCount = 0;
+      try {
+        final biStatus = await BiWizardApiService.getStatus();
+        biReady = biStatus['ok'] == true && biStatus['status'] is String && (biStatus['status'] as String).toLowerCase() == 'ready';
+      } catch (_) {}
+      try {
+        final profRes = await ManagedProfileApiService.listProfiles();
+        profilesCount = ((profRes['profiles'] as List?) ?? []).length;
+      } catch (_) {}
+      try {
+        final numbersRes = await NeyvoPulseApi.listNumbers();
+        numbersCount = ((numbersRes['numbers'] as List?) ?? []).length;
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _activeAgents = activeAgentsList.isEmpty ? agents.length : activeAgentsList.length;
@@ -95,6 +119,9 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
           _recentAgents = recentAgents;
           _completedCallsTotal = completedCallsTotal;
           _onboardingBillingShown = onboardingBillingShown;
+          _businessReady = biReady;
+          _agentsCount = profilesCount;
+          _numbersCount = numbersCount;
           _loading = false;
         });
       }
@@ -126,8 +153,19 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
                   Text('Home', style: NeyvoTextStyles.title),
                   const SizedBox(height: 4),
                   Text(
-                    'Overview of your AI voice agents and call activity.',
+                    'Overview of your AI voice agents, setup, and call activity.',
                     style: NeyvoTextStyles.body,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Setup progress card – always visible until core setup is complete.
+                  _SetupProgressCard(
+                    loading: _loading,
+                    businessReady: _businessReady,
+                    agentsCount: _agentsCount,
+                    numbersCount: _numbersCount,
+                    testCallDone: _completedCallsTotal > 0,
+                    onOpenSetupCenter: widget.onOpenSetupCenter,
                   ),
                   const SizedBox(height: 24),
 
@@ -314,6 +352,103 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SetupProgressCard extends StatelessWidget {
+  final bool loading;
+  final bool businessReady;
+  final int agentsCount;
+  final int numbersCount;
+  final bool testCallDone;
+  final VoidCallback? onOpenSetupCenter;
+
+  const _SetupProgressCard({
+    required this.loading,
+    required this.businessReady,
+    required this.agentsCount,
+    required this.numbersCount,
+    required this.testCallDone,
+    this.onOpenSetupCenter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isComplete = businessReady && agentsCount > 0 && numbersCount > 0 && testCallDone;
+
+    return NeyvoCard(
+      padding: const EdgeInsets.all(NeyvoSpacing.lg),
+      glowing: !isComplete,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isComplete ? Icons.check_circle_outline : Icons.flag_outlined,
+                color: NeyvoColors.teal,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Setup Progress',
+                style: NeyvoTextStyles.heading,
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: onOpenSetupCenter ?? () => Navigator.of(context).pushNamed(PulseRouteNames.setupCenter),
+                child: const Text('Open Setup Center'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isComplete
+                ? 'You’re live. Use Setup Center to adjust business, agents, or numbers.'
+                : 'Follow a simple checklist to go from zero to live in minutes.',
+            style: NeyvoTextStyles.body,
+          ),
+          const SizedBox(height: 12),
+          if (loading)
+            const LinearProgressIndicator(
+              minHeight: 3,
+              color: NeyvoColors.teal,
+              backgroundColor: NeyvoColors.bgBase,
+            )
+          else
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _checkItem('Business profile', businessReady),
+                _checkItem('Agent created', agentsCount > 0),
+                _checkItem('Number connected', numbersCount > 0),
+                _checkItem('Test call', testCallDone),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _checkItem(String label, bool done) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          done ? Icons.check_circle : Icons.radio_button_unchecked,
+          size: 18,
+          color: done ? NeyvoColors.success : NeyvoColors.textMuted,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: NeyvoTextStyles.label.copyWith(
+            color: done ? NeyvoColors.textPrimary : NeyvoColors.textMuted,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -105,12 +105,41 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
     // Build line chart spots from overview or placeholder
     final List<FlSpot> creditsSpots = _creditsBurnedSpots(d);
 
+    final bookingsCreated = (d['bookings_created'] ?? d['bookings'] ?? 0) as num;
+    final leadsCaptured = (d['leads_captured'] ?? d['leads'] ?? 0) as num;
+    final handoffRate = (d['handoff_rate'] ?? d['handoff_rate_pct'] ?? 0) as num;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: stat cards (responsive)
+          Text('Outcomes', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              int cols = 4;
+              if (w < 980) cols = 2;
+              if (w < 520) cols = 1;
+              final spacing = 16.0;
+              final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
+              final kpiCards = <Widget>[
+                _OverviewStatCard(label: 'Total Calls', value: totalCalls.toInt().toString()),
+                _OverviewStatCard(label: 'Bookings Created', value: bookingsCreated.toInt().toString()),
+                _OverviewStatCard(label: 'Leads Captured', value: leadsCaptured.toInt().toString()),
+                _OverviewStatCard(label: 'Handoff Rate', value: '${handoffRate.toStringAsFixed(1)}%'),
+              ];
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: kpiCards.map((c) => SizedBox(width: cardW, child: c)).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text('Usage', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, constraints) {
               final w = constraints.maxWidth;
@@ -119,14 +148,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
               if (w < 520) cols = 1;
               final spacing = 24.0;
               final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
-
               final cards = <Widget>[
                 _OverviewStatCard(label: 'Credits Consumed', value: creditsConsumed.toInt().toString()),
-                _OverviewStatCard(label: 'Total Calls', value: totalCalls.toInt().toString()),
                 _OverviewStatCard(label: 'TTS Minutes', value: ttsMinutes.toStringAsFixed(0)),
                 _OverviewStatCard(label: 'Wallet Balance', value: walletCredits.toInt().toString()),
               ];
-
               return Wrap(
                 spacing: spacing,
                 runSpacing: spacing,

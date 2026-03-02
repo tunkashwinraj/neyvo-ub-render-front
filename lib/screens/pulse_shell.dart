@@ -21,6 +21,7 @@ import 'voice_library_page.dart';
 import 'exports_page.dart';
 import 'call_history_page.dart';
 import 'analytics_page.dart';
+import 'setup_center_page.dart';
 import 'callbacks_page.dart';
 import 'students_list_page.dart';
 import 'template_scripts_page.dart';
@@ -62,20 +63,14 @@ class _PulseShellState extends State<PulseShell> {
   String _activeSurface = 'comms';
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
 
-  // Comms nav — main workspace items. Exposed explicitly so users can jump directly.
+  // Comms nav — simplified, workflow-driven.
   static List<_NavItem> get _navComms => [
     const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
-    const _NavItem('Business Setup', Icons.domain_outlined, PulseRouteNames.businessSetup),
+    const _NavItem('Setup', Icons.checklist_rtl, PulseRouteNames.setupCenter),
     const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
-    const _NavItem('Voice Profiles', Icons.tune, PulseRouteNames.managedProfiles),
-    const _NavItem('Contacts', Icons.people_outline, PulseRouteNames.students),
-    const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.callHistory),
-    const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
-    const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
-    const _NavItem('Callbacks', Icons.schedule_outlined, PulseRouteNames.callbacks),
     const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
-    const _NavItem('Integration', Icons.integration_instructions_outlined, PulseRouteNames.integration),
-    const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.wallet),
+    const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.callHistory),
+    const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
     const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
   ];
 
@@ -95,20 +90,18 @@ class _PulseShellState extends State<PulseShell> {
   static const String _managedProfileDetailRoute = 'detail';
 
   List<Widget> get _pagesComms => [
-    const PulseDashboardPage(),     // Home
-    const BusinessSetupPage(),     // Business Setup
-    const AgentsListPage(),        // Agents
-    _buildManagedProfilesContent(), // Voice Profiles (nested Navigator so detail stays in shell)
-    const StudentsListPage(),      // Contacts
-    const CallHistoryPage(),       // Calls
-    const CampaignsPage(),         // Campaigns
-    const AnalyticsPage(),         // Analytics
-    const CallbacksPage(),         // Callbacks / Scheduler
+    PulseDashboardPage(onOpenSetupCenter: _goToSetupCenter),  // Home
+    SetupCenterPage(onSwitchToTab: (idx) => setState(() => _selectedIndex = idx)),  // Setup (guided journey)
+    _buildManagedProfilesContent(), // Agents (voice profiles)
     const PhoneNumbersPage(),      // Numbers
-    const IntegrationPage(),       // Integration (data sync & webhooks)
-    const WalletPage(),            // Billing (Wallet summary)
-    const PulseSettingsPage(),     // Settings
+    const CallHistoryPage(),       // Calls (includes callbacks via filters)
+    const AnalyticsPage(),         // Analytics
+    const PulseSettingsPage(),     // Settings (Billing, Integrations, Advanced)
   ];
+
+  void _goToSetupCenter() {
+    setState(() => _selectedIndex = 1);
+  }
 
   List<Widget> get _pagesStudio => [
     const PulseDashboardPage(),
@@ -566,11 +559,12 @@ class _PulseShellState extends State<PulseShell> {
                         ),
                       ),
                       if (_walletCredits != null)
-                        Material(
+                          Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              final idx = _currentNav.indexWhere((n) => n.route == PulseRouteNames.wallet);
+                              var idx = _currentNav.indexWhere((n) => n.route == PulseRouteNames.wallet);
+                              if (idx < 0) idx = _currentNav.indexWhere((n) => n.route == PulseRouteNames.settings);
                               if (idx >= 0) setState(() => _selectedIndex = idx);
                             },
                             borderRadius: BorderRadius.circular(100),
