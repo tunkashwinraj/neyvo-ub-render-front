@@ -1,160 +1,130 @@
-// lib/screens/pulse_dashboard_page.dart
-// Neyvo – enterprise home: stats, AI status bar, recent calls, agents.
+// Voice OS Home – Voice Command Center (not a SaaS dashboard).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../pulse_route_names.dart';
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
-import '../features/business_intelligence/bi_wizard_api_service.dart';
+import '../ui/components/ai_orb/neyvo_ai_orb.dart';
+import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
-import 'wallet_page.dart';
 
 class PulseDashboardPage extends StatefulWidget {
-  const PulseDashboardPage({super.key, this.onOpenSetupCenter});
-
-  /// When set (e.g. by PulseShell), opens Setup Center by switching to that tab instead of pushing a route.
-  final VoidCallback? onOpenSetupCenter;
+  const PulseDashboardPage({super.key});
 
   @override
   State<PulseDashboardPage> createState() => _PulseDashboardPageState();
 }
 
-class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTickerProviderStateMixin {
-  int? _activeAgents;
-  int? _callsThisMonth;
-  int? _creditsUsed;
-  double? _resolutionRatePct;
-  List<Map<String, dynamic>> _recentCalls = [];
-  List<Map<String, dynamic>> _recentAgents = [];
+class _PulseDashboardPageState extends State<PulseDashboardPage> {
   bool _loading = true;
-  bool _onboardingBillingShown = false;
-  int _completedCallsTotal = 0;
-  bool _businessReady = false;
-  int _agentsCount = 0;
-  int _numbersCount = 0;
+  String? _error;
 
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+  bool _businessConfigured = false;
+  bool _agentAttached = false;
+  bool _numberLive = false;
+  bool _firstCallCompleted = false;
+
+  String? _trainingNumber;
+  List<Map<String, dynamic>> _recentCalls = const [];
+  Map<String, dynamic>? _perf;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
     _load();
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final agentsRes = await NeyvoPulseApi.listAgents();
-      final overviewRes = await NeyvoPulseApi.getAnalyticsOverview();
-      final callsRes = await NeyvoPulseApi.listCalls();
-      final accountRes = await NeyvoPulseApi.getAccountInfo();
+      final results = await Future.wait([
+        SetupStatusApiService.getStatus(),
+        ManagedProfileApiService.listProfiles(),
+        NeyvoPulseApi.listNumbers(),
+        NeyvoPulseApi.listCalls(),
+        NeyvoPulseApi.getAnalyticsOverview(),
+        NeyvoPulseApi.getAccountInfo(),
+      ]);
 
-      final agents = (agentsRes['agents'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final overview = overviewRes;
+      final setup = results[0] as Map<String, dynamic>;
+      final profiles = results[1] as Map<String, dynamic>;
+      final numbersRes = results[2] as Map<String, dynamic>;
+      final callsRes = results[3] as Map<String, dynamic>;
+      final perf = results[4] as Map<String, dynamic>;
+      final account = results[5] as Map<String, dynamic>;
 
-      final now = DateTime.now();
-      final monthStart = DateTime(now.year, now.month, 1);
-      final callsThisMonth = calls.where((c) {
-        final t = c['ended_at'] ?? c['created_at'];
-        if (t == null) return false;
-        final dt = t is DateTime ? t : DateTime.tryParse(t.toString());
-        return dt != null && !dt.isBefore(monthStart);
-      }).length;
+      final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
+      final numbers = (numbersRes['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final profList = (profiles['profiles'] as List?)?.cast<dynamic>() ?? const [];
 
-      final creditsUsed = (overview['credits_consumed'] as num?)?.toInt() ??
-          (overview['credits_used'] as num?)?.toInt();
-      final resolutionRate = (overview['resolution_rate'] as num?)?.toDouble() ??
-          (overview['resolution_rate_pct'] as num?)?.toDouble();
-
-      final recentCalls = calls.take(10).toList();
-      final activeAgentsList = agents.where((a) => (a['status'] as String?)?.toLowerCase() == 'active').toList();
-      final recentAgents = agents.take(3).toList();
-      final completedCallsTotal = calls.where((c) {
-        final st = (c['status'] as String?)?.toLowerCase();
-        if (st == 'completed') return true;
+      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final firstCallCompleted = calls.any((c) {
+        final status = (c['status'] as String?)?.toLowerCase();
+        if (status == 'completed' || status == 'success') return true;
         final endedAt = c['ended_at'];
-        return endedAt != null && st != 'failed';
-      }).length;
-      final onboardingBillingShown = accountRes['onboarding_billing_shown'] == true;
+        return endedAt != null && status != 'failed';
+      });
 
-      bool biReady = false;
-      int profilesCount = 0;
-      int numbersCount = 0;
-      bool inboundReady = false;
-      try {
-        final setup = await SetupStatusApiService.getStatus();
-        final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
-        final agents = Map<String, dynamic>.from(setup['agents'] as Map? ?? {});
-        final numbers = Map<String, dynamic>.from(setup['numbers'] as Map? ?? {});
-        final goLive = Map<String, dynamic>.from(setup['goLive'] as Map? ?? {});
-        biReady = (business['status'] as String? ?? '').toLowerCase() == 'ready';
-        profilesCount = (agents['count'] as num?)?.toInt() ?? 0;
-        numbersCount = (numbers['count'] as num?)?.toInt() ?? 0;
-        inboundReady = goLive['inboundReady'] == true;
-      } catch (_) {
-        // Fallback to legacy heuristic if setup status is unavailable.
-        try {
-          final biStatus = await BiWizardApiService.getStatus();
-          biReady =
-              biStatus['ok'] == true && biStatus['status'] is String && (biStatus['status'] as String).toLowerCase() == 'ready';
-        } catch (_) {}
-        try {
-          final profRes = await ManagedProfileApiService.listProfiles();
-          profilesCount = ((profRes['profiles'] as List?) ?? []).length;
-        } catch (_) {}
-        try {
-          final numbersRes = await NeyvoPulseApi.listNumbers();
-          numbersCount = ((numbersRes['numbers'] as List?) ?? []).length;
-        } catch (_) {}
-      }
+      final businessConfigured =
+          (business['status'] as String? ?? '').toLowerCase() == 'ready';
 
-      if (mounted) {
-        setState(() {
-          _activeAgents = activeAgentsList.isEmpty ? agents.length : activeAgentsList.length;
-          _callsThisMonth = callsThisMonth;
-          _creditsUsed = creditsUsed ?? 0;
-          _resolutionRatePct = resolutionRate ?? 0.0;
-          _recentCalls = recentCalls;
-          _recentAgents = recentAgents;
-          _completedCallsTotal = completedCallsTotal;
-          _onboardingBillingShown = onboardingBillingShown;
-          _businessReady = biReady;
-          _agentsCount = profilesCount;
-          _numbersCount = numbersCount;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      final numberLive = numbers.isNotEmpty ||
+          ((account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim().isNotEmpty == true);
+
+      final attached = profList.any((p) {
+        final m = Map<String, dynamic>.from(p as Map);
+        return (m['attached_phone_number_id']?.toString().trim().isNotEmpty == true) ||
+            (m['attached_vapi_phone_number_id']?.toString().trim().isNotEmpty == true);
+      });
+
+      final trainingNumber = (account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim();
+
+      if (!mounted) return;
+      setState(() {
+        _businessConfigured = businessConfigured;
+        _agentAttached = attached;
+        _numberLive = numberLive;
+        _firstCallCompleted = firstCallCompleted;
+        _trainingNumber = trainingNumber != null && trainingNumber.isNotEmpty ? trainingNumber : null;
+        _recentCalls = calls.take(8).toList();
+        _perf = perf;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
-  }
-
-  Future<void> _dismissBillingHowItWorks() async {
-    setState(() => _onboardingBillingShown = true);
-    try {
-      await NeyvoPulseApi.updateAccountInfo({'onboarding_billing_shown': true});
-    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            const SizedBox(height: 16),
+            TextButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    final orbState = _firstCallCompleted ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -164,205 +134,131 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1200),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Home', style: NeyvoTextStyles.title),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
+                  Center(child: NeyvoAIOrb(state: orbState, size: 180)),
+                  const SizedBox(height: 14),
                   Text(
-                    'Overview of your AI voice agents, setup, and call activity.',
+                    'Your Voice AI is Online',
+                    style: NeyvoTextStyles.title.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _firstCallCompleted
+                        ? 'System live. Scale confidently.'
+                        : 'Complete Launch to go live on real calls.',
                     style: NeyvoTextStyles.body,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: NeyvoGlassPanel(
+                          glowing: !_firstCallCompleted,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.verified_outlined, color: NeyvoColors.teal),
+                                  const SizedBox(width: 10),
+                                  Text('System status', style: NeyvoTextStyles.heading),
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    onPressed: _load,
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    label: const Text('Refresh'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              _statusRow('Business Configured', _businessConfigured),
+                              _statusRow('Agent Attached', _agentAttached),
+                              _statusRow('Number Live', _numberLive),
+                              _statusRow('First Call Completed', _firstCallCompleted),
+                              if (!_firstCallCompleted) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton(
+                                    onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.launch),
+                                    style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                                    child: const Text('Open Launch Wizard'),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 6,
+                        child: NeyvoGlassPanel(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.bolt_outlined, color: NeyvoColors.teal),
+                                  const SizedBox(width: 10),
+                                  Text('Quick actions', style: NeyvoTextStyles.heading),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  _actionButton(
+                                    icon: Icons.phone_in_talk_outlined,
+                                    label: 'Call My AI',
+                                    onTap: _showCallMyAi,
+                                  ),
+                                  _actionButton(
+                                    icon: Icons.call_made_outlined,
+                                    label: 'Start Outbound',
+                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                                  ),
+                                  _actionButton(
+                                    icon: Icons.smart_toy_outlined,
+                                    label: 'Edit Agent',
+                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
+                                  ),
+                                  _actionButton(
+                                    icon: Icons.account_balance_wallet_outlined,
+                                    label: 'Add Credits',
+                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-
-                  // Setup progress card – always visible until core setup is complete.
-                  _SetupProgressCard(
-                    loading: _loading,
-                    businessReady: _businessReady,
-                    agentsCount: _agentsCount,
-                    numbersCount: _numbersCount,
-                    // Treat any completed call as a real test call for the checklist.
-                    testCallDone: _completedCallsTotal > 0,
-                    onOpenSetupCenter: widget.onOpenSetupCenter,
-                  ),
-                  const SizedBox(height: 24),
-
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.all(48),
-                      child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
-                    )
-                  else ...[
-                    // Section 1: Stats row (4 cards)
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final w = constraints.maxWidth;
-                        int cols = 4;
-                        if (w < 980) cols = 2;
-                        if (w < 520) cols = 1;
-                        final spacing = 24.0;
-                        final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
-
-                        final cards = <Widget>[
-                          _DashboardStatCard(
-                            label: 'Active Agents',
-                            value: '${_activeAgents ?? 0}',
-                            icon: Icons.smart_toy_outlined,
-                            color: NeyvoColors.teal,
-                          ),
-                          _DashboardStatCard(
-                            label: 'Calls This Month',
-                            value: '${_callsThisMonth ?? 0}',
-                            icon: Icons.call_outlined,
-                            color: NeyvoColors.info,
-                          ),
-                          InkWell(
-                            onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
-                            borderRadius: BorderRadius.circular(NeyvoRadius.lg),
-                            child: _DashboardStatCard(
-                              label: 'Credits Used',
-                              value: '${_creditsUsed ?? 0}',
-                              icon: Icons.bolt_outlined,
-                              color: NeyvoColors.coral,
-                            ),
-                          ),
-                          _DashboardStatCard(
-                            label: 'Resolution Rate',
-                            value: '${(_resolutionRatePct ?? 0).toStringAsFixed(1)}%',
-                            icon: Icons.check_circle_outline,
-                            color: NeyvoColors.success,
-                          ),
-                        ];
-
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: spacing,
-                          children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    // How Neyvo billing works (show when no completed calls yet)
-                    if (!_onboardingBillingShown && _completedCallsTotal == 0) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'How Neyvo billing works',
-                              style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _dismissBillingHowItWorks,
-                            child: const Text('Dismiss'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Pay only for what you use. No monthly voice fees.',
-                        style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-                      ),
-                      const SizedBox(height: 16),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final w = constraints.maxWidth;
-                          int cols = 3;
-                          if (w < 980) cols = 1;
-                          final spacing = 16.0;
-                          final cardW = cols == 1 ? w : (w - spacing * (cols - 1)) / cols;
-
-                          final cards = <Widget>[
-                            NeyvoCard(
-                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(Icons.workspace_premium_outlined, color: NeyvoColors.teal, size: 28),
-                                  const SizedBox(height: 12),
-                                  Text('Plan', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
-                                  const SizedBox(height: 4),
-                                  Text('Free, Pro, or Business. Unlock voice tiers and credit bonus.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
-                                  const SizedBox(height: 12),
-                                  TextButton(
-                                    onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
-                                    child: const Text('Billing → Plan'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            NeyvoCard(
-                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(Icons.account_balance_wallet_outlined, color: NeyvoColors.teal, size: 28),
-                                  const SizedBox(height: 12),
-                                  Text('Wallet', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
-                                  const SizedBox(height: 4),
-                                  Text('Buy credits in packs. Used per minute of call time.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
-                                  const SizedBox(height: 12),
-                                  TextButton(
-                                    onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
-                                    child: const Text('Add Credits'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            NeyvoCard(
-                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(Icons.record_voice_over_outlined, color: NeyvoColors.teal, size: 28),
-                                  const SizedBox(height: 12),
-                                  Text('Voice Quality', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
-                                  const SizedBox(height: 4),
-                                  Text('Neutral, Natural, or Ultra. Set default in Billing.', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13)),
-                                  const SizedBox(height: 12),
-                                  TextButton(
-                                    onPressed: () => Navigator.pushNamed(context, PulseRouteNames.settings),
-                                    child: const Text('Billing → Voice Tier'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ];
-
-                          return Wrap(
-                            spacing: spacing,
-                            runSpacing: spacing,
-                            children: cards.map((c) => SizedBox(width: cardW, child: c)).toList(),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Section 2: Glowing AI status bar
-                    _AiStatusBar(pulseAnimation: _pulseAnimation),
-                    const SizedBox(height: 24),
-
-                    // Section 3: Two-column (60/40)
+                  if (_firstCallCompleted) ...[
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          flex: 60,
-                          child: _RecentCallsSection(calls: _recentCalls),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 40,
-                          child: _YourAgentsSection(
-                            agents: _recentAgents,
-                            onCreateAgent: () => Navigator.of(context).pushNamed(PulseRouteNames.agents),
-                            onAddCredits: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                          child: NeyvoGlassPanel(
+                            child: _performanceSnapshot(),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
                   ],
+                  NeyvoGlassPanel(
+                    child: _recentCallsTable(),
+                  ),
                 ],
               ),
             ),
@@ -371,489 +267,209 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> with SingleTick
       ),
     );
   }
-}
 
-class _SetupProgressCard extends StatelessWidget {
-  final bool loading;
-  final bool businessReady;
-  final int agentsCount;
-  final int numbersCount;
-  final bool testCallDone;
-  final VoidCallback? onOpenSetupCenter;
+  Widget _performanceSnapshot() {
+    final calls = (_perf?['calls_total'] as num?)?.toInt();
+    final resolution = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
+        (_perf?['resolution_rate'] as num?)?.toDouble();
+    final credits = (_perf?['credits_consumed'] as num?)?.toInt() ??
+        (_perf?['credits_used'] as num?)?.toInt();
 
-  const _SetupProgressCard({
-    required this.loading,
-    required this.businessReady,
-    required this.agentsCount,
-    required this.numbersCount,
-    required this.testCallDone,
-    this.onOpenSetupCenter,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isComplete = businessReady && agentsCount > 0 && numbersCount > 0 && testCallDone;
-
-    return NeyvoCard(
-      padding: const EdgeInsets.all(NeyvoSpacing.lg),
-      glowing: !isComplete,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isComplete ? Icons.check_circle_outline : Icons.flag_outlined,
-                color: NeyvoColors.teal,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Setup Progress',
-                style: NeyvoTextStyles.heading,
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: onOpenSetupCenter ?? () => Navigator.of(context).pushNamed(PulseRouteNames.setupCenter),
-                child: const Text('Open Setup Center'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isComplete
-                ? 'You’re live. Use Setup Center to adjust business, agents, or numbers.'
-                : 'Follow a simple checklist to go from zero to live in minutes.',
-            style: NeyvoTextStyles.body,
-          ),
-          const SizedBox(height: 12),
-          if (loading)
-            const LinearProgressIndicator(
-              minHeight: 3,
-              color: NeyvoColors.teal,
-              backgroundColor: NeyvoColors.bgBase,
-            )
-          else
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _checkItem('Business profile', businessReady),
-                _checkItem('Agent created', agentsCount > 0),
-                _checkItem('Number connected', numbersCount > 0),
-                _checkItem('Test call', testCallDone),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _checkItem(String label, bool done) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          done ? Icons.check_circle : Icons.radio_button_unchecked,
-          size: 18,
-          color: done ? NeyvoColors.success : NeyvoColors.textMuted,
+        Row(
+          children: [
+            const Icon(Icons.auto_graph_outlined, color: NeyvoColors.teal),
+            const SizedBox(width: 10),
+            Text('Performance snapshot', style: NeyvoTextStyles.heading),
+          ],
         ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: NeyvoTextStyles.label.copyWith(
-            color: done ? NeyvoColors.textPrimary : NeyvoColors.textMuted,
-          ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _metricChip('Total calls', calls?.toString() ?? '—'),
+            _metricChip('Resolution', resolution == null ? '—' : '${resolution.toStringAsFixed(1)}%'),
+            _metricChip('Credits used', credits?.toString() ?? '—'),
+          ],
         ),
       ],
     );
   }
-}
 
-class _DashboardStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _DashboardStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return NeyvoCard(
-      padding: const EdgeInsets.all(20),
+  Widget _metricChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: NeyvoColors.bgRaised.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NeyvoColors.borderSubtle),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(label, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.textPrimary, fontSize: 28),
-          ),
+          Text(value, style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+          const SizedBox(height: 2),
+          Text(label, style: NeyvoTextStyles.micro),
         ],
       ),
     );
   }
-}
 
-class _AiStatusBar extends StatelessWidget {
-  final Animation<double> pulseAnimation;
+  Widget _recentCallsTable() {
+    if (_recentCalls.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.history, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Recent calls', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('No calls yet.', style: NeyvoTextStyles.body),
+        ],
+      );
+    }
 
-  const _AiStatusBar({required this.pulseAnimation});
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.history, color: NeyvoColors.teal),
+            const SizedBox(width: 10),
+            Text('Recent calls', style: NeyvoTextStyles.heading),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.calls),
+              child: const Text('View all'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ..._recentCalls.map((c) {
+          final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
+          final status = (c['status'] as String?)?.toLowerCase() ?? '—';
+          final name = (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '—').toString();
+          final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString();
+          final dur = (c['duration_seconds'] as num?)?.toInt() ?? 0;
+          final durLabel = dur <= 0 ? '—' : '${dur}s';
+          final ok = status == 'completed' || status == 'success';
+          final badgeColor = ok ? NeyvoColors.success : NeyvoColors.warning;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: NeyvoColors.borderSubtle),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: badgeColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: NeyvoTextStyles.bodyPrimary),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${dir == 'inbound' ? 'Inbound' : 'Outbound'} · $phone',
+                          style: NeyvoTextStyles.micro,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(durLabel, style: NeyvoTextStyles.micro),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return NeyvoCard(
-      glowing: true,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+  Widget _statusRow(String label, bool ok) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          AnimatedBuilder(
-            animation: pulseAnimation,
-            builder: (context, child) {
-              return Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: NeyvoColors.teal.withOpacity(pulseAnimation.value),
-                  boxShadow: [
-                    BoxShadow(
-                      color: NeyvoColors.teal.withOpacity(0.5),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+          Icon(ok ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 18, color: ok ? NeyvoColors.success : NeyvoColors.textMuted),
           const SizedBox(width: 10),
-          Text(
-            'NEYVO AI ACTIVE',
-            style: NeyvoTextStyles.label.copyWith(
-              color: NeyvoColors.teal,
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'All systems operational',
-              style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary, fontSize: 12),
-            ),
-          ),
-          Text(
-            'Uptime: 99.9%',
-            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+            child: Text(label, style: NeyvoTextStyles.bodyPrimary),
           ),
         ],
       ),
     );
   }
-}
 
-class _RecentCallsSection extends StatelessWidget {
-  final List<Map<String, dynamic>> calls;
-
-  const _RecentCallsSection({required this.calls});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Recent Calls', style: NeyvoTextStyles.heading),
-        const SizedBox(height: 12),
-        NeyvoCard(
-          padding: EdgeInsets.zero,
-          child: calls.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.phone_in_talk_outlined, size: 48, color: NeyvoColors.textMuted),
-                        const SizedBox(height: 12),
-                        Text('No calls yet', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textSecondary)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Assign a phone number to an agent to start receiving calls.',
-                          style: NeyvoTextStyles.body,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header row
-                    Container(
-                      height: 44,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NeyvoColors.borderSubtle))),
-                      child: Row(
-                        children: [
-                          Expanded(flex: 2, child: _tableHeader('Agent')),
-                          Expanded(flex: 1, child: _tableHeader('Direction')),
-                          Expanded(flex: 1, child: _tableHeader('Duration')),
-                          Expanded(flex: 1, child: _tableHeader('Outcome')),
-                          Expanded(flex: 1, child: _tableHeader('Time')),
-                        ],
-                      ),
-                    ),
-                    ...calls.asMap().entries.map((e) => _callRowWidget(context, e.value)),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  static Widget _tableHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Text(
-        text.toUpperCase(),
-        style: NeyvoTextStyles.label.copyWith(
-          color: NeyvoColors.textMuted,
-          fontSize: 12,
-          letterSpacing: 0.5,
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: 220,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NeyvoColors.textPrimary,
+          side: const BorderSide(color: NeyvoColors.borderDefault),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+          alignment: Alignment.centerLeft,
         ),
       ),
     );
   }
 
-  static Widget _callRowWidget(BuildContext context, Map<String, dynamic> c) {
-    final agentName = c['agent_name'] ?? c['agent_id'] ?? '—';
-    final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
-    final duration = (c['duration_seconds'] as num?)?.toInt() ?? 0;
-    final outcome = (c['outcome'] as String?)?.toLowerCase() ?? '—';
-    final ended = c['ended_at'] ?? c['created_at'];
-    final timeStr = ended != null
-        ? (ended is DateTime
-            ? '${ended.month}/${ended.day} ${ended.hour}:${ended.minute.toString().padLeft(2, '0')}'
-            : ended.toString().length > 16
-                ? ended.toString().substring(0, 16)
-                : ended.toString())
-        : '—';
-
-    final isResolved = outcome.contains('resolved') || outcome == 'completed';
-    final outcomeColor = isResolved ? NeyvoColors.success : NeyvoColors.error;
-    final dirBg = dir == 'inbound' ? NeyvoColors.info.withOpacity(0.1) : NeyvoColors.teal.withOpacity(0.1);
-    final dirColor = dir == 'inbound' ? NeyvoColors.info : NeyvoColors.teal;
-    final dirLabel = dir == 'inbound' ? '← Inbound' : '→ Outbound';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.callHistory),
-        hoverColor: NeyvoColors.bgHover,
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NeyvoColors.borderSubtle))),
-          child: Row(
-            children: [
-              Expanded(flex: 2, child: _cell(agentName.toString(), primary: true)),
-              Expanded(
-                flex: 1,
-                child: _cell(
-                  '',
-                  custom: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: dirBg,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: dirColor.withOpacity(0.2)),
-                    ),
-                    child: Text(dirLabel, style: NeyvoTextStyles.micro.copyWith(color: dirColor)),
-                  ),
-                ),
-              ),
-              Expanded(flex: 1, child: _cell('${duration}s')),
-              Expanded(
-                flex: 1,
-                child: _cell(
-                  '',
-                  custom: Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: outcomeColor),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(outcome.isEmpty ? '—' : outcome, style: NeyvoTextStyles.micro.copyWith(color: outcomeColor)),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(flex: 1, child: _cell(timeStr)),
-            ],
-          ),
+  void _showCallMyAi() {
+    final number = (_trainingNumber ?? '').trim();
+    if (number.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No training number yet. Connect a number in Numbers Hub.')),
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NeyvoColors.bgBase,
+        title: const Text('Call My AI'),
+        content: Text(
+          'Call this number now:\n\n$number',
+          style: NeyvoTextStyles.bodyPrimary,
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
+          FilledButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: number));
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied')));
+            },
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+            child: const Text('Copy number'),
+          ),
+        ],
       ),
-    );
-  }
-
-  static Widget _cell(String text, {bool primary = false, Widget? custom}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: custom ??
-          Text(
-            text,
-            style: primary
-                ? NeyvoTextStyles.bodyPrimary
-                : NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-            overflow: TextOverflow.ellipsis,
-          ),
-    );
-  }
-}
-
-class _YourAgentsSection extends StatelessWidget {
-  final List<Map<String, dynamic>> agents;
-  final VoidCallback onCreateAgent;
-  final VoidCallback onAddCredits;
-
-  const _YourAgentsSection({
-    required this.agents,
-    required this.onCreateAgent,
-    required this.onAddCredits,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Your Agents', style: NeyvoTextStyles.heading),
-        const SizedBox(height: 12),
-        NeyvoCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (agents.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    'No agents yet. Create one to get started.',
-                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-                  ),
-                )
-              else
-                ...agents.map((a) {
-                  final name = a['name'] as String? ?? 'Unnamed';
-                  final status = (a['status'] as String?)?.toLowerCase() ?? 'draft';
-                  final industry = (a['industry'] as String?) ?? '';
-                  final id = a['id'] as String?;
-                  final dotColor = status == 'active'
-                      ? NeyvoColors.success
-                      : status == 'inactive'
-                          ? NeyvoColors.textMuted
-                          : NeyvoColors.warning;
-                  return InkWell(
-                    onTap: id != null
-                        ? () => Navigator.of(context).pushNamed(PulseRouteNames.agentDetail, arguments: id)
-                        : null,
-                    hoverColor: NeyvoColors.bgHover.withOpacity(0.5),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: dotColor,
-                              boxShadow: status == 'active'
-                                  ? [BoxShadow(color: NeyvoColors.success.withOpacity(0.6), blurRadius: 6)]
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(name, style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w500)),
-                                if (industry.isNotEmpty)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 4),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: NeyvoColors.borderSubtle.withOpacity(0.5),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      industry,
-                                      style: NeyvoTextStyles.micro,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Icon(Icons.arrow_forward_ios, size: 12, color: NeyvoColors.textMuted),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: onCreateAgent,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: NeyvoColors.teal,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                      ),
-                      child: const Text('+ Create Agent'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onAddCredits,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: NeyvoColors.textSecondary,
-                        side: const BorderSide(color: NeyvoColors.borderDefault),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                      ),
-                      child: const Text('+ Add Credits'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

@@ -100,7 +100,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
 
   Future<void> _create() async {
     if (_biStatus != 'ready') {
-      setState(() => _error = 'Set up your business profile first in Setup Center.');
+      setState(() => _error = 'Set up your business profile first in Launch Wizard.');
       return;
     }
     final goal = _selectedGoals.isNotEmpty
@@ -163,7 +163,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
             FilledButton(
               onPressed: () => Navigator.of(context).pop(false),
               style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-              child: const Text('Go to Setup Center'),
+              child: const Text('Go to Launch Wizard'),
             ),
           ],
         ),

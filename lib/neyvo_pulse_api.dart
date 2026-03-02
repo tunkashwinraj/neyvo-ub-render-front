@@ -34,6 +34,11 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> health() async =>
       SpeariaApi.getJsonMap('/api/pulse/health');
 
+  /// Inbound health check: validate Twilio webhook and Vapi endpoint wiring.
+  /// GET /api/pulse/health/inbound
+  static Future<Map<String, dynamic>> getInboundHealthCheck() async =>
+      _get('/api/pulse/health/inbound');
+
   /// GET /api/pulse/account – account_id (short 6–8 digit, for display and API), account_name, onboarding_completed,
   /// surfaces_enabled, active_surface, wallet_credits. Optional: org_doc_id or business_doc_id (Firestore doc id for
   /// real-time listener), org_collection; primary_phone_e164, primary_phone_number_id (for Phone Numbers page).

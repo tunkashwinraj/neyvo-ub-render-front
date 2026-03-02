@@ -14,36 +14,39 @@ import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
 import 'phone_numbers_page.dart';
-import 'wallet_page.dart';
-import 'agents_list_page.dart';
-import 'projects_list_page.dart';
-import 'voice_library_page.dart';
-import 'exports_page.dart';
 import 'call_history_page.dart';
 import 'analytics_page.dart';
-import 'setup_center_page.dart';
 import 'callbacks_page.dart';
-import 'students_list_page.dart';
-import 'template_scripts_page.dart';
-import 'integration_page.dart';
-import 'business_setup_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../ui/screens/launch/launch_page.dart';
+import '../ui/screens/calls/calls_page.dart';
+import '../ui/screens/billing/billing_page.dart';
+import '../ui/screens/integrations/integrations_page.dart';
+import '../ui/screens/voice_studio/voice_studio_page.dart';
+import '../ui/components/calls/incoming_call_overlay.dart';
+import '../ui/screens/agency/agency_overview_page.dart';
 
 class PulseShell extends StatefulWidget {
-  const PulseShell({super.key, this.initialRouteName, this.initialProfileId});
+  const PulseShell({
+    super.key,
+    this.initialRouteName,
+    this.initialProfileId,
+    this.initialCallsSection,
+  });
 
   final String? initialRouteName;
   /// When set with initialRouteName == managedProfiles, open Voice Profiles and show this profile's detail (inside shell).
   final String? initialProfileId;
+  final CallsSection? initialCallsSection;
 
   @override
   State<PulseShell> createState() => _PulseShellState();
 }
 
-class _PulseShellState extends State<PulseShell> {
+class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   int? _walletCredits;
   final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
@@ -59,61 +62,46 @@ class _PulseShellState extends State<PulseShell> {
   String? _accountIdDisplay;
   String _orgCollection = '';
   String? _orgDocId; // Firestore document ID for real-time listener (backend returns this; we only show short account_id in UI)
-  List<String> _surfacesEnabled = [];
-  String _activeSurface = 'comms';
+  bool _hasFirstCompletedCall = false;
+  bool _voiceStudioEnabled = false;
+  bool _agencyMode = false;
+  Map<String, dynamic>? _incomingCall;
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
+  late final AnimationController _livePulseCtrl;
+  late final Animation<double> _livePulse;
 
-  // Comms nav — simplified, workflow-driven.
-  static List<_NavItem> get _navComms => [
-    const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
-    const _NavItem('Setup', Icons.checklist_rtl, PulseRouteNames.setupCenter),
-    const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
-    const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
-    const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.callHistory),
-    const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
-    const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
-  ];
+  /// Unified Voice OS navigation – no surfaces exposed to the user.
+  List<_NavItem> get _navItems {
+    final items = <_NavItem>[
+      const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
+      if (_agencyMode) const _NavItem('Agency', Icons.apartment_outlined, PulseRouteNames.agency),
+      const _NavItem('Launch', Icons.rocket_launch_outlined, PulseRouteNames.launch),
+      const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
+      const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
+      const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.calls),
+      const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
+      const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
+      const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
+      const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
+    ];
 
-  // Studio nav — 7 items when org has studio surface
-  static List<_NavItem> get _navStudio => [
-    const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
-    const _NavItem('Studio', Icons.folder_outlined, PulseRouteNames.projects),
-    const _NavItem('Voice Library', Icons.record_voice_over_outlined, PulseRouteNames.voiceLibrary),
-    const _NavItem('Exports', Icons.download_outlined, PulseRouteNames.exports),
-    const _NavItem('Analytics', Icons.analytics_outlined, PulseRouteNames.analytics),
-    const _NavItem('Wallet', Icons.account_balance_wallet_outlined, PulseRouteNames.wallet),
-    const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
-  ];
+    // Voice Studio – secondary entry, visible only when studio enabled or system live.
+    if (_voiceStudioEnabled || _hasFirstCompletedCall) {
+      items.add(const _NavItem('Voice Studio', Icons.mic_outlined, PulseRouteNames.voiceStudio));
+    }
 
-  List<_NavItem> get _currentNav => _activeSurface == 'studio' ? _navStudio : _navComms;
+    // Launch needed only until first successful call.
+    if (_hasFirstCompletedCall) {
+      items.removeWhere((n) => n.route == PulseRouteNames.launch);
+    }
 
-  static const String _managedProfileDetailRoute = 'detail';
-
-  List<Widget> get _pagesComms => [
-    PulseDashboardPage(onOpenSetupCenter: _goToSetupCenter),  // Home
-    SetupCenterPage(onSwitchToTab: (idx) => setState(() => _selectedIndex = idx)),  // Setup (guided journey)
-    _buildManagedProfilesContent(), // Agents (voice profiles)
-    const PhoneNumbersPage(),      // Numbers
-    const CallHistoryPage(),       // Calls (includes callbacks via filters)
-    const AnalyticsPage(),         // Analytics
-    const PulseSettingsPage(),     // Settings (Billing, Integrations, Advanced)
-  ];
-
-  void _goToSetupCenter() {
-    setState(() => _selectedIndex = 1);
+    if (_selectedIndex >= items.length) {
+      _selectedIndex = 0;
+    }
+    return items;
   }
 
-  List<Widget> get _pagesStudio => [
-    const PulseDashboardPage(),
-    const ProjectsListPage(),
-    const VoiceLibraryPage(),
-    const ExportsPage(),
-    const AnalyticsPage(),
-    const WalletPage(),
-    const PulseSettingsPage(),
-  ];
-
-  List<Widget> get _currentPages => _activeSurface == 'studio' ? _pagesStudio : _pagesComms;
+  static const String _managedProfileDetailRoute = 'detail';
 
   Widget _buildManagedProfilesContent() {
     return Navigator(
@@ -145,10 +133,18 @@ class _PulseShellState extends State<PulseShell> {
   void initState() {
     super.initState();
     if (kIsWeb) debugPrint('PulseShell initialized');
+    _livePulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _livePulse = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _livePulseCtrl, curve: Curves.easeInOut),
+    );
     _resolveAccountThenLoad();
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
-      final idx = _currentNav.indexWhere((n) => n.route == name);
+      final items = _navItems;
+      final idx = items.indexWhere((n) => n.route == name);
       if (idx >= 0) _selectedIndex = idx;
     }
     // When deep-linked to a profile detail, push it after the nested Navigator is built.
@@ -171,6 +167,7 @@ class _PulseShellState extends State<PulseShell> {
     _loadWalletCredits();
     _loadNumbersSummary();
     _loadUsageSummary();
+    await _loadFirstCallStatus();
     // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
     // Otherwise Firestore rules typically deny access and we get permission-denied. Wallet
     // data still loads via _loadWalletCredits() (API) above.
@@ -188,10 +185,15 @@ class _PulseShellState extends State<PulseShell> {
           final credits = (data?['wallet_credits'] as num?)?.toInt();
           final status = (data?['status'] as String?)?.toLowerCase();
           final subStatus = (data?['subscription_status'] as String?)?.toLowerCase();
+          final incoming = data?['incoming_call'];
+          Map<String, dynamic>? incomingMap;
+          if (incoming is Map) incomingMap = Map<String, dynamic>.from(incoming as Map);
+          final incomingActive = _isIncomingActive(incomingMap, data);
           setState(() {
             if (credits != null) _walletCredits = credits;
             if (status != null) _orgStatus = status;
             if (subStatus != null) _subscriptionStatus = subStatus;
+            _incomingCall = incomingActive ? incomingMap : null;
           });
         },
         onError: (error) {
@@ -207,6 +209,7 @@ class _PulseShellState extends State<PulseShell> {
   @override
   void dispose() {
     _walletSubscription?.cancel();
+    _livePulseCtrl.dispose();
     super.dispose();
   }
 
@@ -242,23 +245,12 @@ class _PulseShellState extends State<PulseShell> {
       final orgDocId = (res['org_doc_id'] ?? res['business_doc_id'])?.toString().trim();
       if (orgDocId != null && orgDocId.isNotEmpty) _orgDocId = orgDocId;
       if (mounted && res['ok'] == true) {
-        final raw = res['surfaces_enabled'];
-        final surfaces = raw is List ? raw.map((e) => e.toString()).toList() : <String>[];
-        final active = (res['active_surface'] as String?)?.trim().toLowerCase();
         setState(() {
           _accountIdDisplay = res['account_id']?.toString();
           _accountName = (res['account_name'] as String?)?.trim();
           if (_accountName != null && _accountName!.isEmpty) _accountName = null;
-          _surfacesEnabled = surfaces;
-          if (active == 'studio' || active == 'comms') _activeSurface = active!;
-          final name = widget.initialRouteName;
-          if (name != null && name.isNotEmpty) {
-            const studioRoutes = [PulseRouteNames.projects, PulseRouteNames.voiceLibrary, PulseRouteNames.exports];
-            if (studioRoutes.contains(name)) _activeSurface = 'studio';
-            final nav = _activeSurface == 'studio' ? _navStudio : _navComms;
-            final idx = nav.indexWhere((n) => n.route == name);
-            if (idx >= 0) _selectedIndex = idx;
-          }
+          _voiceStudioEnabled = (res['studio_enabled'] == true);
+          _agencyMode = (res['agency_mode'] == true) || (res['is_agency'] == true);
         });
       }
     } catch (_) {}
@@ -290,6 +282,28 @@ class _PulseShellState extends State<PulseShell> {
         });
       }
     } catch (_) {}
+  }
+
+  /// Determine if this org has at least one completed call; used to decide when
+  /// the system is considered "live" and whether Launch should remain visible.
+  Future<void> _loadFirstCallStatus() async {
+    try {
+      final res = await NeyvoPulseApi.listCalls();
+      final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final hasCompleted = calls.any((c) {
+        final status = (c['status'] as String?)?.toLowerCase();
+        if (status == 'completed' || status == 'success') return true;
+        final endedAt = c['ended_at'];
+        return endedAt != null && status != 'failed';
+      });
+      if (mounted) {
+        setState(() {
+          _hasFirstCompletedCall = hasCompleted;
+        });
+      }
+    } catch (_) {
+      // Non-fatal; defaults to false until we can confirm a call.
+    }
   }
 
   @override
@@ -346,69 +360,13 @@ class _PulseShellState extends State<PulseShell> {
                     ),
                   ),
                 ),
-                if (_surfacesEnabled.length > 1) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: SegmentedButton<String>(
-                            style: ButtonStyle(
-                              visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-                              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                                if (states.contains(WidgetState.selected)) return NeyvoColors.sidebarSelected;
-                                return Colors.transparent;
-                              }),
-                              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                                if (states.contains(WidgetState.selected)) return NeyvoColors.textPrimary;
-                                return NeyvoColors.textSecondary;
-                              }),
-                              textStyle: WidgetStateProperty.all(
-                                NeyvoTextStyles.label.copyWith(fontSize: 11),
-                              ),
-                            ),
-                            segments: const [
-                              ButtonSegment(
-                                value: 'comms',
-                                label: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text('Comms', softWrap: false),
-                                ),
-                                icon: Icon(Icons.phone_in_talk_outlined, size: 18),
-                              ),
-                              ButtonSegment(
-                                value: 'studio',
-                                label: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text('Studio', softWrap: false),
-                                ),
-                                icon: Icon(Icons.mic_outlined, size: 18),
-                              ),
-                            ],
-                            selected: {_activeSurface},
-                            onSelectionChanged: (Set<String> v) async {
-                              final s = v.first;
-                              if (s == _activeSurface) return;
-                              try {
-                                await NeyvoPulseApi.updateAccountInfo({'active_surface': s});
-                                if (mounted) setState(() { _activeSurface = s; _selectedIndex = 0; });
-                              } catch (_) {}
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
                 const SizedBox(height: 8),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    itemCount: _currentNav.length,
+                    itemCount: _navItems.length,
                     itemBuilder: (context, i) {
-                      final item = _currentNav[i];
+                      final item = _navItems[i];
                       final selected = _selectedIndex == i;
                       return _SidebarNavItem(
                         icon: item.icon,
@@ -416,7 +374,7 @@ class _PulseShellState extends State<PulseShell> {
                         isActive: selected,
                         onTap: () {
                           setState(() => _selectedIndex = i);
-                          if (item.label == 'Wallet') _loadWalletCredits();
+                          if (item.label == 'Billing') _loadWalletCredits();
                           if (item.label == 'Numbers') _loadNumbersSummary();
                         },
                       );
@@ -514,7 +472,10 @@ class _PulseShellState extends State<PulseShell> {
                           Icon(Icons.payment, color: NeyvoColors.warning, size: 22),
                           const SizedBox(width: 12),
                           Expanded(child: Text('Subscription past due. Update payment to avoid service interruption.', style: NeyvoTextStyles.bodyPrimary)),
-                          TextButton(onPressed: () => setState(() { final idx = _currentNav.indexWhere((n) => n.label == 'Settings'); if (idx >= 0) _selectedIndex = idx; }), child: const Text('Update payment')),
+                          TextButton(
+                            onPressed: () => _navigateToRoute(PulseRouteNames.billing),
+                            child: const Text('Update billing'),
+                          ),
                         ],
                       ),
                     ),
@@ -535,7 +496,7 @@ class _PulseShellState extends State<PulseShell> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () => setState(() { final idx = _currentNav.indexWhere((n) => n.label == 'Wallet'); if (idx >= 0) _selectedIndex = idx; }),
+                            onPressed: () => _navigateToRoute(PulseRouteNames.billing),
                             child: const Text('Top up'),
                           ),
                         ],
@@ -554,17 +515,41 @@ class _PulseShellState extends State<PulseShell> {
                     children: [
                       Expanded(
                         child: Text(
-                          _selectedIndex < _currentNav.length ? _currentNav[_selectedIndex].label : 'Home',
+                          _selectedIndex < _navItems.length ? _navItems[_selectedIndex].label : 'Home',
                           style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
                         ),
+                      ),
+                      // Live status dot (animated)
+                      AnimatedBuilder(
+                        animation: _livePulse,
+                        builder: (context, _) {
+                          final live = _hasFirstCompletedCall;
+                          final color = live ? NeyvoColors.success : NeyvoColors.warning;
+                          return Container(
+                            width: 10,
+                            height: 10,
+                            margin: const EdgeInsets.only(right: 12),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: color.withOpacity(live ? _livePulse.value : 0.45),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: color.withOpacity(0.35),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                       if (_walletCredits != null)
                           Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              var idx = _currentNav.indexWhere((n) => n.route == PulseRouteNames.wallet);
-                              if (idx < 0) idx = _currentNav.indexWhere((n) => n.route == PulseRouteNames.settings);
+                              final items = _navItems;
+                              var idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
+                              if (idx < 0) idx = items.indexWhere((n) => n.route == PulseRouteNames.settings);
                               if (idx >= 0) setState(() => _selectedIndex = idx);
                             },
                             borderRadius: BorderRadius.circular(100),
@@ -638,12 +623,16 @@ class _PulseShellState extends State<PulseShell> {
                                 ],
                               ),
                             ),
+                          const PopupMenuItem(value: 'switch_org', child: Row(children: [Icon(Icons.swap_horiz, size: 20), SizedBox(width: 12), Text('Switch org')])),
                           const PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.settings_outlined, size: 20), SizedBox(width: 12), Text('Settings')])),
                           const PopupMenuItem(value: 'signout', child: Row(children: [Icon(Icons.logout, size: 20), SizedBox(width: 12), Text('Sign out')])),
                         ],
                         onSelected: (value) {
-                          if (value == 'settings') {
-                            final idx = _currentNav.indexWhere((n) => n.label == 'Settings');
+                          if (value == 'switch_org') {
+                            _showOrgSwitchDialog();
+                          } else if (value == 'settings') {
+                            final items = _navItems;
+                            final idx = items.indexWhere((n) => n.label == 'Settings');
                             if (idx >= 0) setState(() => _selectedIndex = idx);
                           } else if (value == 'signout') {
                             FirebaseAuth.instance.signOut();
@@ -654,9 +643,21 @@ class _PulseShellState extends State<PulseShell> {
                   ),
                 ),
                 Expanded(
-                  child: _selectedIndex < _currentPages.length
-                      ? _currentPages[_selectedIndex]
-                      : const PulseDashboardPage(),
+                  child: Stack(
+                    children: [
+                      _buildCurrentPage(),
+                      if (_incomingCall != null)
+                        IncomingCallOverlay(
+                          agentName: (_incomingCall?['agent_name'] ?? _incomingCall?['agent'] ?? '').toString(),
+                          fromNumber: (_incomingCall?['from'] ?? _incomingCall?['caller'] ?? '').toString(),
+                          onDismiss: () => setState(() => _incomingCall = null),
+                          onViewLive: () {
+                            setState(() => _incomingCall = null);
+                            _navigateToRoute(PulseRouteNames.voiceStudio);
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -664,6 +665,133 @@ class _PulseShellState extends State<PulseShell> {
         ],
       ),
     );
+  }
+}
+
+extension on _PulseShellState {
+  bool _isIncomingActive(Map<String, dynamic>? incoming, Map<String, dynamic>? data) {
+    final activeFlag = data?['incoming_call_active'] == true;
+    final active = incoming?['active'] == true || activeFlag;
+    final state = (incoming?['state'] ?? incoming?['status'] ?? '').toString().toLowerCase();
+    return active || state == 'ringing' || state == 'inbound' || state == 'answering';
+  }
+
+  void _navigateToRoute(String route) {
+    final items = _navItems;
+    final idx = items.indexWhere((n) => n.route == route);
+    if (idx >= 0) setState(() => _selectedIndex = idx);
+  }
+
+  Future<void> _showOrgSwitchDialog() async {
+    final controller = TextEditingController();
+    bool working = false;
+    String? err;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setInner) => AlertDialog(
+            backgroundColor: NeyvoColors.bgBase,
+            title: const Text('Switch org'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Enter an Account ID to switch organizations.', style: NeyvoTextStyles.body),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      labelText: 'Account ID',
+                      hintText: 'e.g. 12345678',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  if (err != null) ...[
+                    const SizedBox(height: 10),
+                    Text(err!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: working ? null : () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: working
+                    ? null
+                    : () async {
+                        final id = controller.text.trim();
+                        if (id.isEmpty) {
+                          setInner(() => err = 'Enter an account id.');
+                          return;
+                        }
+                        setInner(() {
+                          working = true;
+                          err = null;
+                        });
+                        try {
+                          await NeyvoPulseApi.linkUserToAccount(id);
+                          NeyvoPulseApi.setDefaultAccountId(id);
+                          if (!mounted) return;
+                          await _resolveAccountThenLoad();
+                          if (ctx.mounted) Navigator.of(ctx).pop();
+                        } catch (e) {
+                          setInner(() {
+                            working = false;
+                            err = e.toString();
+                          });
+                        }
+                      },
+                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                child: working
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Switch'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+  }
+
+  /// Map the currently selected nav route to the active page widget.
+  Widget _buildCurrentPage() {
+    final items = _navItems;
+    if (_selectedIndex < 0 || _selectedIndex >= items.length) {
+      return const PulseDashboardPage();
+    }
+    final route = items[_selectedIndex].route;
+    switch (route) {
+      case PulseRouteNames.dashboard:
+        return const PulseDashboardPage();
+      case PulseRouteNames.launch:
+        // Launch wizard page (implemented as separate screen/route).
+        return const LaunchPage();
+      case PulseRouteNames.agents:
+        return _buildManagedProfilesContent();
+      case PulseRouteNames.phoneNumbers:
+        return const PhoneNumbersPage();
+      case PulseRouteNames.calls:
+        // Calls shell – default to call history for now; sub-nav handled inside.
+        return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.inbound);
+      case PulseRouteNames.analytics:
+        return const AnalyticsPage();
+      case PulseRouteNames.integrations:
+        return const IntegrationsPage();
+      case PulseRouteNames.billing:
+        return const BillingPage();
+      case PulseRouteNames.settings:
+        return const PulseSettingsPage();
+      case PulseRouteNames.agency:
+        return const AgencyOverviewPage();
+      case PulseRouteNames.voiceStudio:
+        return const VoiceStudioPage();
+      default:
+        return const PulseDashboardPage();
+    }
   }
 }
 

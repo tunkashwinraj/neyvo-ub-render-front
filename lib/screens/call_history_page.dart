@@ -12,7 +12,12 @@ import 'call_detail_page.dart';
 enum _CallSort { dateNewest, dateOldest, durationLongest, durationShortest }
 
 class CallHistoryPage extends StatefulWidget {
-  const CallHistoryPage({super.key});
+  const CallHistoryPage({
+    super.key,
+    this.initialDirection = 'all', // all | inbound | outbound
+  });
+
+  final String initialDirection;
 
   @override
   State<CallHistoryPage> createState() => _CallHistoryPageState();
@@ -33,6 +38,10 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   @override
   void initState() {
     super.initState();
+    _filterDirection = (widget.initialDirection).toLowerCase().trim();
+    if (_filterDirection != 'inbound' && _filterDirection != 'outbound') {
+      _filterDirection = 'all';
+    }
     _searchController.addListener(_filterCalls);
     _load();
   }

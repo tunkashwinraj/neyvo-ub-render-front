@@ -53,10 +53,10 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
       if (status != 'ready') {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Set up your business profile first in Setup Center.'),
+            content: const Text('Set up your business profile first in Launch Wizard.'),
             action: SnackBarAction(
               label: 'Go',
-              onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.setupCenter),
+              onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.launch),
             ),
             behavior: SnackBarBehavior.floating,
           ),

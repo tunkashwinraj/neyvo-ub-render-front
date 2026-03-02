@@ -6,14 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/payment_result_dialog.dart';
-import 'billing_tab_content.dart';
-import 'integration_page.dart';
+import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
-  const PulseSettingsPage({super.key, this.initialBillingTabIndex});
-
-  final int? initialBillingTabIndex;
+  const PulseSettingsPage({super.key});
 
   @override
   State<PulseSettingsPage> createState() => _PulseSettingsPageState();
@@ -61,33 +58,20 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _load();
-    _checkPaymentResultAndSwitchToBilling();
-    final initial = widget.initialBillingTabIndex;
-    if (initial != null && initial >= 0 && initial < _tabController.length) {
-      _tabController.index = initial;
-    }
-    // Also honor Navigator arguments: if caller passed {'tab': 'billing'}, jump to Billing tab.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final route = ModalRoute.of(context);
-      final args = route?.settings.arguments;
-      if (args is Map && (args['tab'] as String?) == 'billing') {
-        if (_tabController.index != 2) {
-          _tabController.index = 2; // 0: Plan, 1: Wallet, 2: Voice Tier (Billing)
-        }
-      }
-    });
+    _maybeShowPaymentResult();
   }
 
-  void _checkPaymentResultAndSwitchToBilling() {
+  void _maybeShowPaymentResult() {
     try {
       final payment = Uri.base.queryParameters['payment'];
       if (payment == null || payment.isEmpty) return;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
-        _tabController.animateTo(2); // Billing tab
         await showPaymentResultDialogIfNeeded(context, payment);
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing);
       });
     } catch (_) {}
   }
@@ -437,10 +421,8 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
           tabs: const [
             Tab(text: 'Organization'),
             Tab(text: 'Team'),
-            Tab(text: 'Billing'),
-            Tab(text: 'Integrations'),
-            Tab(text: 'API Keys'),
             Tab(text: 'Security'),
+            Tab(text: 'Telephony'),
           ],
         ),
         Expanded(
@@ -449,10 +431,8 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             children: [
               _buildOrganizationTab(user),
               _buildTeamTab(),
-              _buildBillingTab(),
-              const IntegrationPage(),
-              _buildApiKeysTab(),
               _buildSecurityTab(user),
+              _buildApiKeysTab(),
             ],
           ),
         ),
@@ -469,6 +449,56 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
         Text(
           'Configure your organization and preferences',
           style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+        ),
+        const SizedBox(height: NeyvoSpacing.lg),
+        Card(
+          color: NeyvoTheme.bgCard,
+          child: Padding(
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Billing', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                      const SizedBox(height: 4),
+                      Text('Wallet, subscription, numbers cost, add-ons.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                  child: const Text('Open'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: NeyvoSpacing.sm),
+        Card(
+          color: NeyvoTheme.bgCard,
+          child: Padding(
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Integrations', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                      const SizedBox(height: 4),
+                      Text('Inbound health check and data sync.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.integrations),
+                  child: const Text('Open'),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: NeyvoSpacing.xl),
         Text('Account', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
@@ -1023,7 +1053,28 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   }
 
   Widget _buildBillingTab() {
-    return const BillingTabContent();
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Billing moved', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: 8),
+            Text(
+              'Billing is now a dedicated section in the Voice OS navigation.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+              child: const Text('Open Billing'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildBillingTabDeveloperSection() {
