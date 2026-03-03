@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../pulse_route_names.dart';
+import '../../ui/activation/activation_service.dart';
 import '../business_intelligence/bi_wizard_api_service.dart';
 import '../agents/create_agent_wizard.dart';
 import 'managed_profile_api_service.dart';
@@ -68,7 +69,11 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
       context: context,
       builder: (ctx) => const CreateAgentWizard(),
     );
-    if (created == true && mounted) _load();
+    if (created == true && mounted) {
+      _load();
+      // Refresh activation snapshot so ActivationDock / Home reflect agentsCreated.
+      activationService.refresh();
+    }
   }
 
   void _openProfileDetail(String profileId) {
@@ -89,34 +94,103 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Agents',
-                  style: NeyvoTextStyles.title.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: NeyvoColors.textPrimary,
+      body: AnimatedBuilder(
+        animation: activationService,
+        builder: (context, _) {
+          final act = activationService.status;
+          final inActivation = act != null && act.stage != ActivationStage.live;
+          final agentsCreated = act?.agentsCreated ?? _profiles.isNotEmpty;
+          final needsAgents = inActivation && !agentsCreated;
+
+          Widget? banner;
+          if (needsAgents) {
+            banner = Container(
+              margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: NeyvoColors.teal.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.flag_outlined, color: NeyvoColors.teal),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Step 2 of 4: Create at least one agent to continue activation.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                    ),
                   ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _openCreateAgent,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create Agent'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
-                    foregroundColor: Colors.white,
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    onPressed: _openCreateAgent,
+                    style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                    child: const Text('Create agent'),
                   ),
+                ],
+              ),
+            );
+          } else if (inActivation && agentsCreated) {
+            banner = Container(
+              margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: NeyvoColors.borderSubtle),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: NeyvoColors.success),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Agents step complete · Next: Connect a phone number.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers),
+                    child: const Text('Go to Numbers'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Column(
+            children: [
+              if (banner != null) banner,
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Agents',
+                      style: NeyvoTextStyles.title.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: NeyvoColors.textPrimary,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _openCreateAgent,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create Agent'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: NeyvoColors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          Expanded(child: _body()),
-        ],
+              ),
+              Expanded(child: _body()),
+            ],
+          );
+        },
       ),
     );
   }

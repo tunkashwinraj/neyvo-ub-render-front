@@ -10,6 +10,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../ui/activation/activation_service.dart';
 
 class PhoneNumbersPage extends StatefulWidget {
   const PhoneNumbersPage({super.key});
@@ -172,7 +173,67 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                     style: NeyvoTextStyles.body,
                   ),
                   const SizedBox(height: 16),
-
+                  AnimatedBuilder(
+                    animation: activationService,
+                    builder: (context, _) {
+                      final act = activationService.status;
+                      final inActivation = act != null && act.stage != ActivationStage.live;
+                      if (!inActivation) return const SizedBox.shrink();
+                      final hasNumber = act?.numberConnected ?? _numbers.isNotEmpty;
+                      if (!hasNumber) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.bgRaised.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: NeyvoColors.teal.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.flag_outlined, color: NeyvoColors.teal),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Step 3 of 4: Connect at least one phone number. You can buy or attach an existing line.',
+                                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final hasAgent = act?.agentsCreated ?? false;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: NeyvoColors.bgRaised.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: NeyvoColors.borderSubtle),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle_outline, color: NeyvoColors.success),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                hasAgent
+                                    ? 'Numbers step complete · You can now make a test call to go live.'
+                                    : 'Numbers connected · Attach an agent and then place a test call.',
+                                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            TextButton(
+                              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                              child: const Text('Test call'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   _trainingHero(),
                   const SizedBox(height: 16),
 
@@ -438,6 +499,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
       if (!mounted) return;
       setState(() => _attaching[numberId] = false);
       _load();
+      activationService.refresh();
     }
   }
 
@@ -660,6 +722,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number purchased')));
         _load();
+        activationService.refresh();
       } catch (e) {
         setInner(() {
           purchasing = false;

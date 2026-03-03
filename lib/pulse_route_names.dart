@@ -48,6 +48,7 @@ abstract class PulseRouteNames {
   static const String businessSetup = '/pulse/business-setup';
   static const String setupCenter = '/pulse/setup';
   static const String voiceStudio = '/pulse/voice-studio';
+  static const String testCall = '/pulse/test-call';
 
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';

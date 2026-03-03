@@ -10,6 +10,7 @@ import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
+import '../ui/activation/activation_service.dart';
 
 class PulseDashboardPage extends StatefulWidget {
   const PulseDashboardPage({super.key});
@@ -107,164 +108,182 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
-    }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
-            const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ],
-        ),
-      );
-    }
+    return AnimatedBuilder(
+      animation: activationService,
+      builder: (context, _) {
+        final act = activationService.status;
+        final inActivation = act != null && act.stage != ActivationStage.live;
+        final businessOk = act?.businessModelReady ?? _businessConfigured;
+        final numberOk = act?.numberConnected ?? _numberLive;
+        final callOk = act?.firstCallCompleted ?? _firstCallCompleted;
 
-    final orbState = _firstCallCompleted ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
+        if (_loading) {
+          return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+        }
+        if (_error != null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+                const SizedBox(height: 16),
+                TextButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
+          );
+        }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                children: [
-                  const SizedBox(height: 8),
-                  Center(child: NeyvoAIOrb(state: orbState, size: 180)),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Your Voice AI is Online',
-                    style: NeyvoTextStyles.title.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _firstCallCompleted
-                        ? 'System live. Scale confidently.'
-                        : 'Complete Launch to go live on real calls.',
-                    style: NeyvoTextStyles.body,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
+        final title = inActivation ? 'You’re almost live' : 'Your Voice AI is Online';
+        final subtitle = inActivation
+            ? 'Complete activation to go live on real calls.'
+            : 'System live. Scale confidently.';
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _load();
+            await activationService.refresh();
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Column(
                     children: [
-                      Expanded(
-                        flex: 6,
-                        child: NeyvoGlassPanel(
-                          glowing: !_firstCallCompleted,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.verified_outlined, color: NeyvoColors.teal),
-                                  const SizedBox(width: 10),
-                                  Text('System status', style: NeyvoTextStyles.heading),
-                                  const Spacer(),
-                                  TextButton.icon(
-                                    onPressed: _load,
-                                    icon: const Icon(Icons.refresh, size: 18),
-                                    label: const Text('Refresh'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              _statusRow('Business Configured', _businessConfigured),
-                              _statusRow('Agent Attached', _agentAttached),
-                              _statusRow('Number Live', _numberLive),
-                              _statusRow('First Call Completed', _firstCallCompleted),
-                              if (!_firstCallCompleted) ...[
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.launch),
-                                    style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                                    child: const Text('Open Launch Wizard'),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+                      const SizedBox(height: 8),
+                      Center(child: NeyvoAIOrb(state: orbState, size: 180)),
+                      const SizedBox(height: 14),
+                      Text(
+                        title,
+                        style: NeyvoTextStyles.title.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 6,
-                        child: NeyvoGlassPanel(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: NeyvoTextStyles.body,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 6,
+                            child: NeyvoGlassPanel(
+                              glowing: !callOk,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.bolt_outlined, color: NeyvoColors.teal),
-                                  const SizedBox(width: 10),
-                                  Text('Quick actions', style: NeyvoTextStyles.heading),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.verified_outlined, color: NeyvoColors.teal),
+                                      const SizedBox(width: 10),
+                                      Text('System status', style: NeyvoTextStyles.heading),
+                                      const Spacer(),
+                                      TextButton.icon(
+                                        onPressed: _load,
+                                        icon: const Icon(Icons.refresh, size: 18),
+                                        label: const Text('Refresh'),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _statusRow('Business Configured', businessOk),
+                                  _statusRow('Agent Attached', _agentAttached),
+                                  _statusRow('Number Live', numberOk),
+                                  _statusRow('First Call Completed', callOk),
+                                  if (!callOk) ...[
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton(
+                                        onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(
+                                          inActivation ? PulseRouteNames.testCall : PulseRouteNames.launch,
+                                        ),
+                                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                                        child: Text(inActivation ? 'Make a test call' : 'Open Launch Wizard'),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  _actionButton(
-                                    icon: Icons.phone_in_talk_outlined,
-                                    label: 'Call My AI',
-                                    onTap: _showCallMyAi,
-                                  ),
-                                  _actionButton(
-                                    icon: Icons.call_made_outlined,
-                                    label: 'Start Outbound',
-                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
-                                  ),
-                                  _actionButton(
-                                    icon: Icons.smart_toy_outlined,
-                                    label: 'Edit Agent',
-                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
-                                  ),
-                                  _actionButton(
-                                    icon: Icons.account_balance_wallet_outlined,
-                                    label: 'Add Credits',
-                                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 6,
+                            child: NeyvoGlassPanel(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.bolt_outlined, color: NeyvoColors.teal),
+                                      const SizedBox(width: 10),
+                                      Text('Quick actions', style: NeyvoTextStyles.heading),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    children: [
+                                      _actionButton(
+                                        icon: Icons.phone_in_talk_outlined,
+                                        label: 'Call My AI',
+                                        onTap: _showCallMyAi,
+                                      ),
+                                      _actionButton(
+                                        icon: Icons.call_made_outlined,
+                                        label: 'Start Outbound',
+                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                                      ),
+                                      _actionButton(
+                                        icon: Icons.smart_toy_outlined,
+                                        label: 'Edit Agent',
+                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
+                                      ),
+                                      _actionButton(
+                                        icon: Icons.account_balance_wallet_outlined,
+                                        label: 'Add Credits',
+                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (callOk) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: NeyvoGlassPanel(
+                                child: _performanceSnapshot(),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 16),
+                      ],
+                      NeyvoGlassPanel(
+                        child: _recentCallsTable(),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  if (_firstCallCompleted) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: NeyvoGlassPanel(
-                            child: _performanceSnapshot(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  NeyvoGlassPanel(
-                    child: _recentCallsTable(),
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

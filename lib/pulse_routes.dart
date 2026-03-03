@@ -9,6 +9,7 @@ import 'screens/audit_log_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'ui/screens/calls/calls_page.dart';
+import 'ui/screens/calls/test_call_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -88,6 +89,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.agency));
       case PulseRouteNames.voiceStudio:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceStudio));
+      case PulseRouteNames.testCall:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.testCall));
       case PulseRouteNames.dashboard:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
       default:

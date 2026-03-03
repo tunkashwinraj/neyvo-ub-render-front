@@ -50,6 +50,11 @@ class NeyvoPulseApi {
     return _patch('/api/pulse/account', body);
   }
 
+  /// GET /api/pulse/activation – single source of truth for activation state.
+  /// Returns: { ok, stage, checklist, counts, nextAction }
+  static Future<Map<String, dynamic>> getActivationStatus() async =>
+      _get('/api/pulse/activation');
+
   /// POST /api/pulse/account/link – link current user (X-User-Id) to an account. Body: { account_id }.
   /// Does not use _post so we send only the new account_id (backend uses X-User-Id).
   static Future<Map<String, dynamic>> linkUserToAccount(String accountId) async {
