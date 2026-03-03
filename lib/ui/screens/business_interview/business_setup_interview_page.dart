@@ -7,7 +7,7 @@ import '../../../features/business_intelligence/bi_wizard_api_service.dart';
 import '../../../features/business_intelligence/business_model_completeness.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../screens/business_setup_page.dart';
-import '../../../neyvo_pulse_api.dart';
+import '../../../features/managed_profiles/managed_profile_api_service.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import 'ai_log_event.dart';
@@ -178,11 +178,47 @@ class _BusinessSetupInterviewPageState
     for (final role in selectedRoles) {
       addEvent(AiLogLevel.progress, 'Generating prompt for $role…');
       addEvent(AiLogLevel.info, 'Applying business policies…');
-      final prompt = _buildAgentPrompt(name: name, category: category, services: servicesStr, role: role);
+      final mappedRole = switch (role) {
+        'Front Desk Agent' => 'support',
+        'Booking Agent' => 'booking',
+        'Billing Agent' => 'billing',
+        'Support Agent' => 'support',
+        _ => 'support',
+      };
+      final goal = switch (mappedRole) {
+        'booking' => 'Book, reschedule, and cancel appointments.',
+        'billing' => 'Help with billing questions and payment options.',
+        _ => 'Help callers with questions and route them correctly.',
+      };
+      final allowed = switch (mappedRole) {
+        'booking' => <String>[
+            'answer_questions',
+            'create_booking',
+            'check_availability',
+            'reschedule_booking',
+            'cancel_booking',
+            'create_callback',
+            'handoff',
+          ],
+        'billing' => <String>[
+            'answer_questions',
+            'create_callback',
+            'handoff',
+          ],
+        _ => <String>[
+            'answer_questions',
+            'create_callback',
+            'create_lead',
+            'handoff',
+          ],
+      };
       try {
-        await NeyvoPulseApi.createAgent(
-          name: role,
-          systemPrompt: prompt,
+        await ManagedProfileApiService.createProfileFromBi(
+          role: mappedRole,
+          goal: goal,
+          allowedActions: allowed,
+          profileName: role,
+          tone: 'warm_friendly',
           direction: 'inbound',
         );
         addEvent(AiLogLevel.success, 'Agent ready.');
