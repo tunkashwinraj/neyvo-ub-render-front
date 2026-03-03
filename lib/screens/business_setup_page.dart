@@ -1,6 +1,8 @@
 // lib/screens/business_setup_page.dart
 // Business Intelligence Setup — model your business once for all voice agents.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -9,11 +11,15 @@ import '../features/business_intelligence/bi_wizard_api_service.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
+enum SaveState { idleSaved, saving, failed }
+
 class BusinessSetupPage extends StatefulWidget {
   const BusinessSetupPage({
     super.key,
     this.initialBi,
     this.initialSuggestions,
+    this.saveStateNotifier,
+    this.onBiSnapshot,
   });
 
   /// Optional BI object returned from /api/wizard/extract-model.
@@ -21,6 +27,12 @@ class BusinessSetupPage extends StatefulWidget {
 
   /// Optional service suggestions returned alongside BI extraction.
   final List<Map<String, dynamic>>? initialSuggestions;
+
+  /// If provided, wizard updates this with current save state (for parent to show indicator).
+  final ValueNotifier<SaveState>? saveStateNotifier;
+
+  /// Called when BI snapshot changes (e.g. after debounced edit) so parent can compute completeness.
+  final void Function(Map<String, dynamic>)? onBiSnapshot;
 
   @override
   State<BusinessSetupPage> createState() => _BusinessSetupPageState();
@@ -42,6 +54,10 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
   final Set<int> _selectedServices = {};
   List<Map<String, dynamic>> _simulations = [];
 
+  final ValueNotifier<SaveState> _saveState = ValueNotifier<SaveState>(SaveState.idleSaved);
+  Timer? _debounce;
+  bool _listenersAttached = false;
+
   static const List<Map<String, String>> _categories = [
     {'id': 'healthcare', 'label': 'Healthcare'},
     {'id': 'beauty', 'label': 'Beauty'},
@@ -59,14 +75,60 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
     _loadInitial();
   }
 
+  void _attachListeners() {
+    if (_listenersAttached) return;
+    _listenersAttached = true;
+    _businessNameCtrl.addListener(_onUserChange);
+    _phoneCtrl.addListener(_onUserChange);
+    _categoryCtrl.addListener(_onUserChange);
+    _subcategoryCtrl.addListener(_onUserChange);
+    _websiteUrlCtrl.addListener(_onUserChange);
+  }
+
   @override
   void dispose() {
+    _debounce?.cancel();
+    if (_listenersAttached) {
+      _businessNameCtrl.removeListener(_onUserChange);
+      _phoneCtrl.removeListener(_onUserChange);
+      _categoryCtrl.removeListener(_onUserChange);
+      _subcategoryCtrl.removeListener(_onUserChange);
+      _websiteUrlCtrl.removeListener(_onUserChange);
+    }
     _websiteUrlCtrl.dispose();
     _businessNameCtrl.dispose();
     _phoneCtrl.dispose();
     _categoryCtrl.dispose();
     _subcategoryCtrl.dispose();
     super.dispose();
+  }
+
+  void _onUserChange() {
+    widget.saveStateNotifier?.value = SaveState.idleSaved;
+    _saveState.value = SaveState.idleSaved;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 800), () async {
+      widget.saveStateNotifier?.value = SaveState.saving;
+      _saveState.value = SaveState.saving;
+      widget.onBiSnapshot?.call(_buildBiPayload());
+      try {
+        final payload = _buildBiPayload();
+        final res = await BiWizardApiService.save(payload);
+        if (mounted && (res['ok'] == true)) {
+          _status = (res['status'] as String?) ?? _status;
+          widget.saveStateNotifier?.value = SaveState.idleSaved;
+          _saveState.value = SaveState.idleSaved;
+        } else {
+          widget.saveStateNotifier?.value = SaveState.failed;
+          _saveState.value = SaveState.failed;
+        }
+      } catch (_) {
+        if (mounted) {
+          widget.saveStateNotifier?.value = SaveState.failed;
+          _saveState.value = SaveState.failed;
+        }
+      }
+    });
   }
 
   Future<void> _loadInitial() async {
@@ -114,6 +176,29 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
         setState(() {
           _loading = false;
         });
+        _attachListeners();
+        widget.onBiSnapshot?.call(_buildBiPayload());
+      }
+    }
+  }
+
+  Future<void> _retrySave() async {
+    widget.saveStateNotifier?.value = SaveState.saving;
+    _saveState.value = SaveState.saving;
+    try {
+      final res = await BiWizardApiService.save(_buildBiPayload());
+      if (mounted && (res['ok'] == true)) {
+        _status = (res['status'] as String?) ?? _status;
+        widget.saveStateNotifier?.value = SaveState.idleSaved;
+        _saveState.value = SaveState.idleSaved;
+      } else {
+        widget.saveStateNotifier?.value = SaveState.failed;
+        _saveState.value = SaveState.failed;
+      }
+    } catch (_) {
+      if (mounted) {
+        widget.saveStateNotifier?.value = SaveState.failed;
+        _saveState.value = SaveState.failed;
       }
     }
   }
@@ -204,6 +289,8 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
           _status = (res['status'] as String?) ?? _status;
           _error = null;
         });
+        _saveState.value = SaveState.idleSaved;
+        widget.saveStateNotifier?.value = SaveState.idleSaved;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Business setup saved'), behavior: SnackBarBehavior.floating),
@@ -270,6 +357,8 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
                             ],
                           ),
                         ),
+                        const SizedBox(width: NeyvoSpacing.md),
+                        _buildSaveStateIndicator(),
                         const SizedBox(width: NeyvoSpacing.md),
                         _buildStatusChip(),
                       ],
@@ -370,6 +459,7 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
                   _subcategoryCtrl.text = id;
                   _getSuggestions();
                 });
+                _onUserChange();
               },
             );
           }).toList(),
@@ -400,6 +490,7 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
                       _selectedServices.remove(index);
                     }
                   });
+                  _onUserChange();
                 },
               )
                   .animate()
@@ -557,6 +648,55 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSaveStateIndicator() {
+    return ValueListenableBuilder<SaveState>(
+      valueListenable: _saveState,
+      builder: (context, state, _) {
+        switch (state) {
+          case SaveState.idleSaved:
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle_outline, size: 16, color: NeyvoColors.success),
+                const SizedBox(width: 6),
+                Text('All changes saved', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.success)),
+              ],
+            );
+          case SaveState.saving:
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal),
+                ),
+                const SizedBox(width: 6),
+                Text('Saving...', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+              ],
+            );
+          case SaveState.failed:
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 16, color: NeyvoColors.error),
+                const SizedBox(width: 6),
+                TextButton(
+                  onPressed: _retrySave,
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('Save failed (Retry)', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+                ),
+              ],
+            );
+        }
+      },
     );
   }
 
