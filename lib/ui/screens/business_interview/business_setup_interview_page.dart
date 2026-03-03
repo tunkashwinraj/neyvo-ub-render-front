@@ -8,7 +8,6 @@ import '../../../features/business_intelligence/business_model_completeness.dart
 import '../../../theme/neyvo_theme.dart';
 import '../../../screens/business_setup_page.dart';
 import '../../../neyvo_pulse_api.dart';
-import '../../../neyvo_pulse/pulse_route_names.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import 'ai_log_event.dart';
@@ -454,14 +453,14 @@ class _BusinessSetupInterviewPageState
                       Row(
                         children: [
                           FilledButton.icon(
-                            onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.agents),
+                            onPressed: () => Navigator.of(context).pushReplacementNamed('/pulse/agents'),
                             icon: const Icon(Icons.smart_toy_outlined, size: 18),
                             label: const Text('Go to Agents'),
                             style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                           ),
                           const SizedBox(width: 12),
                           OutlinedButton.icon(
-                            onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.phoneNumbers),
+                            onPressed: () => Navigator.of(context).pushReplacementNamed('/pulse/phone-numbers'),
                             icon: const Icon(Icons.phone_outlined, size: 18),
                             label: const Text('Configure Numbers'),
                           ),
