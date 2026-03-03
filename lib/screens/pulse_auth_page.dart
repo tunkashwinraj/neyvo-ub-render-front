@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
+import '../ui/components/ai_orb/neyvo_ai_orb.dart';
+import '../ui/components/backgrounds/neyvo_neural_background.dart';
+import '../ui/components/glass/neyvo_glass_panel.dart';
 
 class PulseAuthPage extends StatefulWidget {
   const PulseAuthPage({super.key});
@@ -17,7 +20,6 @@ class PulseAuthPage extends StatefulWidget {
 class _PulseAuthPageState extends State<PulseAuthPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _orgName = TextEditingController();
   bool _isSignUp = false;
   bool _loading = false;
   String? _error;
@@ -26,7 +28,6 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   void dispose() {
     _email.dispose();
     _password.dispose();
-    _orgName.dispose();
     super.dispose();
   }
 
@@ -49,10 +50,6 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
       setState(() => _error = 'Password must be at least 6 characters');
       return false;
     }
-    if (_isSignUp && _orgName.text.trim().isEmpty) {
-      setState(() => _error = 'Please enter your organization name');
-      return false;
-    }
     return true;
   }
 
@@ -67,21 +64,12 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     }
     final email = _email.text.trim();
     final password = _password.text;
-    final orgName = _orgName.text.trim();
     try {
       if (_isSignUp) {
         await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
-        // After creating the user, store the organization/account name via backend.
-        try {
-          if (orgName.isNotEmpty) {
-            await NeyvoPulseApi.updateAccountInfo({'account_name': orgName});
-          }
-        } catch (_) {
-          // Non-fatal; onboarding/settings will still allow editing later.
-        }
       } else {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email,
@@ -106,109 +94,123 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [NeyvoTheme.teal, NeyvoTheme.tealLight],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xxl),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Neyvo',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: NeyvoSpacing.section),
-                  const SizedBox(height: NeyvoSpacing.section),
-                  Container(
-                    padding: const EdgeInsets.all(NeyvoSpacing.xl),
-                    decoration: BoxDecoration(
-                      color: NeyvoTheme.bgCard,
-                      borderRadius: BorderRadius.circular(NeyvoRadius.lg),
-                      border: Border.all(color: NeyvoTheme.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          _isSignUp ? 'Create account' : 'Sign in',
-                          style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
-                        ),
-                        const SizedBox(height: NeyvoSpacing.lg),
-                        TextField(
-                          controller: _email,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Email',
-                            hintText: 'you@company.com',
-                          ),
-                        ),
-                        const SizedBox(height: NeyvoSpacing.md),
-                        if (_isSignUp) ...[
-                          TextField(
-                            controller: _orgName,
-                            decoration: const InputDecoration(
-                              labelText: 'Organization name',
-                              hintText: 'e.g. Riverside Academy',
-                            ),
-                          ),
-                          const SizedBox(height: NeyvoSpacing.md),
-                        ],
-                        TextField(
-                          controller: _password,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                          ),
-                        ),
-                        if (_error != null) ...[
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Text(
-                            _error!,
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
-                          ),
-                        ],
-                        const SizedBox(height: NeyvoSpacing.xl),
-                        FilledButton(
-                          onPressed: _loading ? null : _submit,
-                          child: _loading
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Text(_isSignUp ? 'Create account' : 'Sign in'),
-                        ),
-                        const SizedBox(height: NeyvoSpacing.md),
-                        TextButton(
-                          onPressed: () => setState(() {
-                            _isSignUp = !_isSignUp;
-                            _error = null;
-                          }),
-                          child: Text(_isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      backgroundColor: NeyvoColors.bgVoid,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: NeyvoNeuralBackground()),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.3),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.6),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xxl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: NeyvoSpacing.lg),
+                      const NeyvoAIOrb(
+                        state: NeyvoAIOrbState.idle,
+                        size: 140,
+                      ),
+                      const SizedBox(height: NeyvoSpacing.lg),
+                      Text(
+                        'Neyvo Voice OS',
+                        style: NeyvoType.displayLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: NeyvoSpacing.sm),
+                      Text(
+                        'Enter your autonomous voice intelligence environment.',
+                        style: NeyvoType.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: NeyvoSpacing.section),
+                      NeyvoGlassPanel(
+                        glowing: true,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              _isSignUp ? 'Create account' : 'Sign in',
+                              style: NeyvoType.headlineMedium.copyWith(
+                                color: NeyvoTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: NeyvoSpacing.lg),
+                            TextField(
+                              controller: _email,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                hintText: 'you@company.com',
+                              ),
+                            ),
+                            const SizedBox(height: NeyvoSpacing.md),
+                            TextField(
+                              controller: _password,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                              ),
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: NeyvoSpacing.md),
+                              Text(
+                                _error!,
+                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                              ),
+                            ],
+                            const SizedBox(height: NeyvoSpacing.xl),
+                            FilledButton(
+                              onPressed: _loading ? null : _submit,
+                              child: _loading
+                                  ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Text(_isSignUp ? 'Create account' : 'Sign in'),
+                            ),
+                            const SizedBox(height: NeyvoSpacing.md),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => setState(() {
+                                        _isSignUp = !_isSignUp;
+                                        _error = null;
+                                      }),
+                              child: Text(
+                                _isSignUp
+                                    ? 'Already have an account? Sign in'
+                                    : 'Need an account? Sign up',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: NeyvoSpacing.section),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

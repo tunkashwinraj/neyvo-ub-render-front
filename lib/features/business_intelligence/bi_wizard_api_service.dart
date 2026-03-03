@@ -49,4 +49,28 @@ class BiWizardApiService {
   /// POST /api/wizard/save - save BI setup
   static Future<Map<String, dynamic>> save(Map<String, dynamic> payload) async =>
       _post('/api/wizard/save', payload);
+
+  /// POST /api/wizard/extract-model - high-level extraction of BI model
+  /// from a short description/website + optional category.
+  static Future<Map<String, dynamic>> extractModel({
+    String? description,
+    String? website,
+    String? category,
+    String? subcategory,
+    String? businessName,
+  }) async {
+    final body = <String, dynamic>{
+      if (description != null && description.trim().isNotEmpty)
+        'description': description.trim(),
+      if (website != null && website.trim().isNotEmpty)
+        'website': website.trim(),
+      if (category != null && category.trim().isNotEmpty)
+        'category': category.trim(),
+      if (subcategory != null && subcategory.trim().isNotEmpty)
+        'subcategory': subcategory.trim(),
+      if (businessName != null && businessName.trim().isNotEmpty)
+        'business_name': businessName.trim(),
+    };
+    return _post('/api/wizard/extract-model', body);
+  }
 }

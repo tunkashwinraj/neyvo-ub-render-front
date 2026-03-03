@@ -2,12 +2,25 @@
 // Business Intelligence Setup — model your business once for all voice agents.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../features/business_intelligence/bi_wizard_api_service.dart';
+import '../ui/components/ai_orb/neyvo_ai_orb.dart';
+import '../ui/components/glass/neyvo_glass_panel.dart';
 
 class BusinessSetupPage extends StatefulWidget {
-  const BusinessSetupPage({super.key});
+  const BusinessSetupPage({
+    super.key,
+    this.initialBi,
+    this.initialSuggestions,
+  });
+
+  /// Optional BI object returned from /api/wizard/extract-model.
+  final Map<String, dynamic>? initialBi;
+
+  /// Optional service suggestions returned alongside BI extraction.
+  final List<Map<String, dynamic>>? initialSuggestions;
 
   @override
   State<BusinessSetupPage> createState() => _BusinessSetupPageState();
@@ -66,9 +79,16 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
       if (statusRes['ok'] == true && statusRes['status'] is String) {
         _status = statusRes['status'] as String;
       }
-      final biRes = await BiWizardApiService.load();
-      if (biRes['ok'] == true && biRes['bi'] != null) {
-        final bi = Map<String, dynamic>.from(biRes['bi'] as Map);
+      Map<String, dynamic>? bi;
+      if (widget.initialBi != null) {
+        bi = Map<String, dynamic>.from(widget.initialBi!);
+      } else {
+        final biRes = await BiWizardApiService.load();
+        if (biRes['ok'] == true && biRes['bi'] != null) {
+          bi = Map<String, dynamic>.from(biRes['bi'] as Map);
+        }
+      }
+      if (bi != null) {
         final core = Map<String, dynamic>.from(bi['core'] as Map? ?? {});
         final knowledge = Map<String, dynamic>.from(bi['knowledge'] as Map? ?? {});
         final contact = Map<String, dynamic>.from(knowledge['contact'] as Map? ?? {});
@@ -76,6 +96,16 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
         _categoryCtrl.text = (core['category'] ?? '').toString();
         _subcategoryCtrl.text = (core['subcategory'] ?? '').toString();
         _phoneCtrl.text = (contact['main_phone'] ?? contact['mainPhone'] ?? '').toString();
+      }
+      // If we received initial suggestions from extract-model, seed them.
+      if (widget.initialSuggestions != null &&
+          widget.initialSuggestions!.isNotEmpty) {
+        _serviceSuggestions = widget.initialSuggestions!
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        _selectedServices
+          ..clear()
+          ..addAll(List<int>.generate(_serviceSuggestions.length, (i) => i));
       }
     } catch (e) {
       _error = e.toString();
@@ -209,35 +239,68 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
         children: [
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      _stepDot(0, 'Category'),
-                      _stepLine(),
-                      _stepDot(1, 'Confirm'),
-                      _stepLine(),
-                      _stepDot(2, 'Save'),
-                    ],
-                  ),
-                  const SizedBox(height: NeyvoSpacing.xl),
-                  if (_error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: NeyvoColors.error.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: NeyvoGlassPanel(
+                glowing: _status == 'ready',
+                padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const NeyvoAIOrb(
+                          state: NeyvoAIOrbState.processing,
+                          size: 64,
+                        ),
+                        const SizedBox(width: NeyvoSpacing.lg),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Business Intelligence',
+                                style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Model your business once so every agent behaves correctly.',
+                                style: NeyvoTextStyles.body,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.md),
+                        _buildStatusChip(),
+                      ],
                     ),
-                    const SizedBox(height: NeyvoSpacing.lg),
+                    const SizedBox(height: NeyvoSpacing.xl),
+                    Row(
+                      children: [
+                        _stepDot(0, 'Category'),
+                        _stepLine(),
+                        _stepDot(1, 'Confirm'),
+                        _stepLine(),
+                        _stepDot(2, 'Save'),
+                      ],
+                    ),
+                    const SizedBox(height: NeyvoSpacing.xl),
+                    if (_error != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: NeyvoColors.error.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+                      ),
+                      const SizedBox(height: NeyvoSpacing.lg),
+                    ],
+                    if (_step == 0) _buildStepCategory(),
+                    if (_step == 1) _buildStepConfirm(),
+                    if (_step == 2) _buildStepSave(),
                   ],
-                  if (_step == 0) _buildStepCategory(),
-                  if (_step == 1) _buildStepConfirm(),
-                  if (_step == 2) _buildStepSave(),
-                ],
+                ),
               ),
             ),
           ),
@@ -331,11 +394,17 @@ class _BusinessSetupPageState extends State<BusinessSetupPage> {
                 selected: selected,
                 onSelected: (v) {
                   setState(() {
-                    if (v) _selectedServices.add(index);
-                    else _selectedServices.remove(index);
+                    if (v) {
+                      _selectedServices.add(index);
+                    } else {
+                      _selectedServices.remove(index);
+                    }
                   });
                 },
-              );
+              )
+                  .animate()
+                  .fadeIn(duration: 250.ms, delay: (index * 60).ms)
+                  .slideY(begin: 0.1, curve: Curves.easeOut);
             }),
           ),
           const SizedBox(height: 24),
