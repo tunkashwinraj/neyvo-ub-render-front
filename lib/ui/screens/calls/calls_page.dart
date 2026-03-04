@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_history_page.dart';
-import '../../../screens/campaigns_page.dart';
 import '../../../screens/callbacks_page.dart';
 import 'dialer_page.dart';
 
-enum CallsSection { inbound, outbound, dialer, campaigns, callbacks }
+enum CallsSection { inbound, outbound, dialer, callbacks }
 
 class CallsPage extends StatefulWidget {
   const CallsPage({super.key, this.initialSection = CallsSection.inbound});
@@ -41,8 +40,6 @@ class _CallsPageState extends State<CallsPage> {
                 _pill('Outbound', CallsSection.outbound),
                 const SizedBox(width: 8),
                 _pill('Dialer', CallsSection.dialer),
-                const SizedBox(width: 8),
-                _pill('Campaigns', CallsSection.campaigns),
                 const SizedBox(width: 8),
                 _pill('Callbacks', CallsSection.callbacks),
               ],
@@ -88,8 +85,6 @@ class _CallsPageState extends State<CallsPage> {
         return const CallHistoryPage(initialDirection: 'outbound');
       case CallsSection.dialer:
         return const DialerPage();
-      case CallsSection.campaigns:
-        return const CampaignsPage();
       case CallsSection.callbacks:
         return const CallbacksPage();
     }

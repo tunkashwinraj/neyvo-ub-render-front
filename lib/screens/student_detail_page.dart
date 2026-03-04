@@ -6,6 +6,7 @@ import '../neyvo_pulse_api.dart';
 import '../../api/spearia_api.dart' show ApiException;
 import '../theme/neyvo_theme.dart';
 import '../utils/callback_date_format.dart';
+import 'call_detail_page.dart';
 
 class StudentDetailPage extends StatefulWidget {
   final String studentId;
@@ -218,7 +219,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete contact?'),
+        title: const Text('Delete student?'),
         content: const Text('This contact and their payment and reach history will be removed. This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
@@ -313,7 +314,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Contact')),
+        appBar: AppBar(title: const Text('Student profile')),
         body: Center(child: Text(_error!, style: TextStyle(color: NeyvoColors.error))),
       );
     }
@@ -327,7 +328,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(_student?['name']?.toString() ?? 'Contact'),
+        title: Text(_student?['name']?.toString() ?? 'Student profile'),
         actions: [
           IconButton(
             icon: _calling 
@@ -342,23 +343,23 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               if (value == 'delete') _confirmDeleteStudent();
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete contact'))),
+              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete student'))),
             ],
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Details', icon: Icon(Icons.person_outline)),
+            Tab(text: 'Overview', icon: Icon(Icons.person_outline)),
             Tab(text: 'Payments', icon: Icon(Icons.payment_outlined)),
-            Tab(text: 'Calls', icon: Icon(Icons.phone_outlined)),
+            Tab(text: 'Call Logs', icon: Icon(Icons.phone_outlined)),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Details Tab
+          // Overview Tab
           ListView(
             padding: const EdgeInsets.all(NeyvoSpacing.lg),
             children: [
@@ -555,14 +556,14 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ],
                 ),
           
-          // Calls Tab (Call History + Past Calls Summary)
+          // Call Logs Tab
           ListView(
             padding: const EdgeInsets.all(NeyvoSpacing.lg),
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Call History', style: NeyvoType.titleLarge),
+                  Text('Call Logs', style: NeyvoType.titleLarge),
                   FilledButton.icon(
                     onPressed: _call,
                     icon: const Icon(Icons.phone, size: 18),
@@ -593,45 +594,67 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 )
               else
                 ..._calls.map((c) {
-                  final status = c['status']?.toString() ?? c['outcome']?.toString() ?? 'unknown';
-                  final date = c['date']?.toString() ?? c['created_at']?.toString() ?? '';
-                  final duration = c['duration_seconds']?.toString() ?? c['duration']?.toString() ?? '';
-                  final outcome = c['outcome']?.toString() ?? status;
-                  final agentName = c['agent_name']?.toString() ?? '';
-                  final credits = c['credits_charged']?.toString() ?? '';
-                  final transcript = c['transcript']?.toString() ?? '';
+                  final callMap = Map<String, dynamic>.from(c as Map);
+                  final status = callMap['status']?.toString() ?? callMap['outcome']?.toString() ?? 'unknown';
+                  final date = callMap['date']?.toString() ?? callMap['created_at']?.toString() ?? '';
+                  final duration = callMap['duration_seconds']?.toString() ?? callMap['duration']?.toString() ?? '';
+                  final outcome = callMap['outcome']?.toString() ?? status;
+                  final agentName = callMap['agent_name']?.toString() ?? '';
+                  final direction = (callMap['direction']?.toString() ?? '').toLowerCase();
+                  final hasRecording = (callMap['recording_url']?.toString().isNotEmpty ?? false) ||
+                      (callMap['recording']?.toString().isNotEmpty ?? false);
                   return Card(
                     margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                    child: ExpansionTile(
-                      leading: CircleAvatar(
-                        backgroundColor: _getStatusColor(outcome).withOpacity(0.1),
-                        child: Icon(Icons.phone, color: _getStatusColor(outcome)),
-                      ),
-                      title: Text(outcome.isNotEmpty ? outcome : 'Call', style: NeyvoType.titleMedium),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (date.isNotEmpty) Text('Date: $date'),
-                          if (duration.isNotEmpty) Text('Duration: ${duration}s'),
-                          if (agentName.isNotEmpty) Text('Operator: $agentName'),
-                          if (credits.isNotEmpty) Text('Credits: $credits'),
-                        ],
-                      ),
-                      children: [
-                        if (transcript.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(NeyvoSpacing.md),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(NeyvoSpacing.md),
-                              decoration: BoxDecoration(
-                                color: NeyvoColors.bgRaised,
-                                borderRadius: BorderRadius.circular(NeyvoRadius.sm),
-                              ),
-                              child: Text(transcript, style: NeyvoType.bodySmall),
-                            ),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CallDetailPage(call: callMap),
                           ),
-                      ],
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(NeyvoRadius.sm),
+                      child: Padding(
+                        padding: const EdgeInsets.all(NeyvoSpacing.md),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: _getStatusColor(outcome).withOpacity(0.1),
+                              child: Icon(Icons.phone, color: _getStatusColor(outcome)),
+                            ),
+                            const SizedBox(width: NeyvoSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(outcome.isNotEmpty ? outcome : 'Call', style: NeyvoType.titleMedium),
+                                  if (date.isNotEmpty) Text('$date', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                                  if (agentName.isNotEmpty) Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted)),
+                                ],
+                              ),
+                            ),
+                            if (duration.isNotEmpty)
+                              Text('${duration}s', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                            if (direction.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Chip(
+                                  label: Text(direction == 'inbound' ? 'In' : 'Out', style: NeyvoType.labelSmall),
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            if (hasRecording)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(Icons.record_voice_over, size: 18, color: NeyvoColors.textMuted),
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right, color: NeyvoColors.textMuted),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 }),
