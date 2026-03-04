@@ -510,7 +510,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (studentPhone.isNotEmpty) Text('Caller: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (agentName.isNotEmpty) Text('Agent: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (agentName.isNotEmpty) Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (numberCalled.isNotEmpty) Text('Number: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (outcome.isNotEmpty && outcome != 'unknown') Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (date.isNotEmpty) Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),

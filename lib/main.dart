@@ -11,8 +11,8 @@
   import 'neyvo_pulse_api.dart';
   import 'pulse_route_names.dart';
   import 'pulse_routes.dart';
-  import 'screens/onboarding_page.dart';
   import 'screens/pulse_auth_page.dart';
+  import 'ui/screens/ub/ub_onboarding_page.dart';
   import 'screens/pulse_shell.dart';
   import 'theme/neyvo_theme.dart';
 
@@ -71,7 +71,7 @@
     }
   }
 
-  /// After login: load account; if onboarding not completed show OnboardingPage else PulseShell.
+  /// After login: load account; if UB intro not completed show UbOnboardingPage else PulseShell.
   class _PostAuthGate extends StatefulWidget {
     const _PostAuthGate();
 
@@ -123,7 +123,7 @@
         );
       }
       if (!_onboardingCompleted) {
-        return const OnboardingPage();
+        return const UbOnboardingPage();
       }
       // After Stripe redirect, land on wallet or settings when URL path matches (web).
       final path = kIsWeb ? Uri.base.path : null;

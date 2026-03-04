@@ -126,7 +126,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                   FilledButton(
                     onPressed: _openCreateAgent,
                     style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                    child: const Text('Create agent'),
+                    child: const Text('Create operator'),
                   ),
                 ],
               ),
@@ -146,7 +146,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Agents step complete · Next: Connect a phone number.',
+                      'Operators step complete · Next: Connect a phone number.',
                       style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
                     ),
                   ),
@@ -169,7 +169,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Agents',
+                      'Operators',
                       style: NeyvoTextStyles.title.copyWith(
                         fontWeight: FontWeight.w700,
                         color: NeyvoColors.textPrimary,
@@ -178,7 +178,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     ElevatedButton.icon(
                       onPressed: _openCreateAgent,
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create Agent'),
+                      label: const Text('Create Operator'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: NeyvoColors.teal,
                         foregroundColor: Colors.white,
@@ -218,17 +218,17 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
           children: [
             Icon(Icons.record_voice_over_outlined, size: 48, color: NeyvoColors.textMuted),
             const SizedBox(height: 16),
-            Text('No agents yet', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+            Text('No operators yet', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
             const SizedBox(height: 8),
             Text(
-              'Create your first agent in under 2 minutes.',
+              'Create your first operator in under 2 minutes.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _openCreateAgent,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Create Agent'),
+              label: const Text('Create Operator'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: NeyvoColors.teal,
                 foregroundColor: Colors.white,

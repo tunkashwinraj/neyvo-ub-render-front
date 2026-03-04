@@ -1750,7 +1750,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
             DropdownButtonFormField<String>(
               value: _selectedAgentId ?? (_agents.isNotEmpty ? null : null),
               decoration: const InputDecoration(
-                labelText: 'Agent',
+                labelText: 'Operator',
                 hintText: 'Select an agent (recommended)',
               ),
               items: [
@@ -1767,7 +1767,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Use script template (optional)'),
               subtitle: Text(
-                'When enabled, calls will also use a structured script template for labeling and messaging. Without it, the agent\'s own script is used.',
+                'When enabled, calls will also use a structured script template for labeling and messaging. Without it, the operator\'s own script is used.',
                 style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
               ),
               value: _useTemplate,
@@ -1885,7 +1885,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               trailing: Text(_isEducationOrg && _audienceMode == 'filters' ? '$count students (smart filter)' : '$count contacts'),
             ),
             ListTile(
-              title: const Text('Agent'),
+              title: const Text('Operator'),
               trailing: Text(
                 () {
                   if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty) {

@@ -218,10 +218,10 @@ class _LaunchPageState extends State<LaunchPage> {
         onPrimary: () => _openSettings(context),
       ),
       _LaunchStep(
-        title: 'Create agent',
+        title: 'Create operator',
         subtitle: 'Create your first agent (personality + prompt + voice).',
         complete: _agentsCount > 0,
-        primaryLabel: _agentsCount > 0 ? 'Agent created' : 'Create agent',
+        primaryLabel: _agentsCount > 0 ? 'Operator created' : 'Create operator',
         onPrimary: () => _openAgents(context),
       ),
       _LaunchStep(

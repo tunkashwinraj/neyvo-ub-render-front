@@ -55,6 +55,15 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getActivationStatus() async =>
       _get('/api/pulse/activation');
 
+  /// POST /api/ub/initialize – start UB Voice OS extraction from website. Body: { website }.
+  /// Returns: { ok, status: "building"|"ready"|"error", error? }
+  static Future<Map<String, dynamic>> initializeUb({required String website}) async {
+    return _post('/api/ub/initialize', {'website': website.trim()});
+  }
+
+  /// GET /api/ub/status – UB model status. Returns: { ok, status, summary, departments, faqTopics, error? }
+  static Future<Map<String, dynamic>> getUbStatus() async => _get('/api/ub/status');
+
   /// POST /api/pulse/account/link – link current user (X-User-Id) to an account. Body: { account_id }.
   /// Does not use _post so we send only the new account_id (backend uses X-User-Id).
   static Future<Map<String, dynamic>> linkUserToAccount(String accountId) async {

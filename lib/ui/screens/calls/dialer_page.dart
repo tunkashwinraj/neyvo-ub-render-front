@@ -315,7 +315,7 @@ class _DialerPageState extends State<DialerPage> {
                           items: _agents
                               .map((a) {
                                 final id = (a['profile_id'] ?? '').toString();
-                                final name = (a['profile_name'] ?? 'Agent').toString();
+                                final name = (a['profile_name'] ?? 'Operator').toString();
                                 if (id.isEmpty) return null;
                                 return DropdownMenuItem(value: id, child: Text(name));
                               })

@@ -162,7 +162,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
             children: [
               Row(
                 children: [
-                  Text('Create agent', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+                  Text('Create operator', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
                   const Spacer(),
                   IconButton(icon: Icon(Icons.close, color: NeyvoColors.textSecondary), onPressed: () => Navigator.pop(context)),
                 ],
@@ -221,7 +221,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Which surface is this agent for?', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+        Text('Which surface is this operator for?', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
         const SizedBox(height: NeyvoSpacing.sm),
         ...['comms', 'studio'].map((s) => RadioListTile<String>(
           title: Text(s == 'comms' ? 'Handle calls (Comms)' : 'Create voice content (Studio)', style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textPrimary)),
@@ -242,7 +242,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('What will this agent do?', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
+        Text('What will this operator do?', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary)),
         const SizedBox(height: 16),
         ...options.map((t) {
           final (value, label, subtitle, icon) = t;

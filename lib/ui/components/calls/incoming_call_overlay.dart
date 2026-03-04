@@ -68,7 +68,7 @@ class IncomingCallOverlay extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 [
-                                  if (agentName.trim().isNotEmpty) 'Agent: $agentName',
+                                  if (agentName.trim().isNotEmpty) 'Operator: $agentName',
                                   if ((fromNumber ?? '').trim().isNotEmpty) 'From: $fromNumber',
                                 ].join(' · '),
                                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),

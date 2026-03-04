@@ -10,6 +10,7 @@ import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'ui/screens/calls/calls_page.dart';
 import 'ui/screens/calls/test_call_page.dart';
+import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';
 
 class PulseRouter {
@@ -92,6 +93,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceStudio));
       case PulseRouteNames.testCall:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.testCall));
+      case PulseRouteNames.ubModelOverview:
+        return MaterialPageRoute(builder: (_) => const UbModelOverviewPage());
       case PulseRouteNames.dashboard:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
       default:

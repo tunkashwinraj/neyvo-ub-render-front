@@ -782,7 +782,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: selectedAgentId,
-                    decoration: const InputDecoration(labelText: 'Agent'),
+                    decoration: const InputDecoration(labelText: 'Operator'),
                     items: agents.isEmpty ? [const DropdownMenuItem(value: null, child: Text('No education agents'))] : agents.map((a) => DropdownMenuItem(value: a['id']?.toString(), child: Text(a['name']?.toString() ?? '—'))).toList(),
                     onChanged: (v) => setDialogState(() => selectedAgentId = v),
                   ),

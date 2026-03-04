@@ -221,7 +221,7 @@ class _BusinessSetupInterviewPageState
           tone: 'warm_friendly',
           direction: 'inbound',
         );
-        addEvent(AiLogLevel.success, 'Agent ready.');
+        addEvent(AiLogLevel.success, 'Operator ready.');
       } catch (e) {
         addEvent(AiLogLevel.error, 'Failed to create $role: $e');
       }

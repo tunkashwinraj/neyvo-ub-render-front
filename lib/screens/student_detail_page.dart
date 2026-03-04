@@ -613,7 +613,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                         children: [
                           if (date.isNotEmpty) Text('Date: $date'),
                           if (duration.isNotEmpty) Text('Duration: ${duration}s'),
-                          if (agentName.isNotEmpty) Text('Agent: $agentName'),
+                          if (agentName.isNotEmpty) Text('Operator: $agentName'),
                           if (credits.isNotEmpty) Text('Credits: $credits'),
                         ],
                       ),

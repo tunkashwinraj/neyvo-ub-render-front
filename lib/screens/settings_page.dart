@@ -651,7 +651,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
               children: [
                 Text('Templates & voice profiles', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                 const SizedBox(height: NeyvoSpacing.sm),
-                Text('If the agent wizard shows no use-case options, seed the template library once.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                Text('If the operator wizard shows no use-case options, seed the template library once.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                 const SizedBox(height: NeyvoSpacing.sm),
                 Row(
                   children: [

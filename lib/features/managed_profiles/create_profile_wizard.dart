@@ -760,7 +760,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
         const SizedBox(height: 12),
         _field('Website (optional)', _website, hint: 'https://example.com', keyboard: TextInputType.url),
         const SizedBox(height: 16),
-        Text('Agent name', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        Text('Operator name', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -951,7 +951,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
           hint: isEducation ? 'Student Financial Services — University of Bridgeport' : 'Downtown Salon & Spa',
         ),
         const SizedBox(height: 12),
-        Text('What should the agent introduce itself as?', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
+        Text('What should the operator introduce itself as?', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary)),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -972,7 +972,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
         if (_agentName.text.trim().isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: _field('Agent name', _agentName, hint: 'e.g. Alex'),
+            child: _field('Operator name', _agentName, hint: 'e.g. Alex'),
           ),
         const SizedBox(height: 12),
         _field(

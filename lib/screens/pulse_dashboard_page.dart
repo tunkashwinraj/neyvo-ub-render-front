@@ -27,10 +27,21 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   bool _agentAttached = false;
   bool _numberLive = false;
   bool _firstCallCompleted = false;
+  String _ubStatus = 'missing';
+  int _operatorCount = 0;
 
   String? _trainingNumber;
   List<Map<String, dynamic>> _recentCalls = const [];
   Map<String, dynamic>? _perf;
+
+  static const List<String> _recommendedOperators = [
+    'Admissions Operator',
+    'Student Financial Services Operator',
+    'Registrar Operator',
+    'Housing Operator',
+    'IT Help Desk Operator',
+    'General Front Desk Operator',
+  ];
 
   @override
   void initState() {
@@ -51,6 +62,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         NeyvoPulseApi.listCalls(),
         NeyvoPulseApi.getAnalyticsOverview(),
         NeyvoPulseApi.getAccountInfo(),
+        NeyvoPulseApi.getUbStatus(),
       ]);
 
       final setup = results[0] as Map<String, dynamic>;
@@ -59,10 +71,12 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       final callsRes = results[3] as Map<String, dynamic>;
       final perf = results[4] as Map<String, dynamic>;
       final account = results[5] as Map<String, dynamic>;
+      final ubRes = results[6] as Map<String, dynamic>;
 
       final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
       final numbers = (numbersRes['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       final profList = (profiles['profiles'] as List?)?.cast<dynamic>() ?? const [];
+      final ubStatus = (ubRes['status'] as String?)?.toLowerCase() ?? 'missing';
 
       final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       final firstCallCompleted = calls.any((c) {
@@ -92,6 +106,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         _agentAttached = attached;
         _numberLive = numberLive;
         _firstCallCompleted = firstCallCompleted;
+        _ubStatus = ubStatus;
+        _operatorCount = profList.length;
         _trainingNumber = trainingNumber != null && trainingNumber.isNotEmpty ? trainingNumber : null;
         _recentCalls = calls.take(8).toList();
         _perf = perf;
@@ -128,6 +144,78 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                 Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
                 const SizedBox(height: 16),
                 TextButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
+          );
+        }
+
+        final ubReady = _ubStatus == 'ready';
+        final showCreateFirstOperator = ubReady && _operatorCount == 0;
+
+        if (showCreateFirstOperator) {
+          return RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 24),
+                        const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Create your first Operator',
+                          style: NeyvoTextStyles.title.copyWith(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: NeyvoColors.textPrimary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Choose a department to create a voice operator. You can add more later.',
+                          style: NeyvoTextStyles.body,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        NeyvoGlassPanel(
+                          glowing: true,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < _recommendedOperators.length; i++) ...[
+                                if (i > 0) const SizedBox(height: 10),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(context, rootNavigator: true)
+                                      .pushNamed(PulseRouteNames.managedProfiles),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: i == 0 ? NeyvoColors.teal : NeyvoColors.bgRaised,
+                                    foregroundColor: i == 0 ? Colors.white : NeyvoColors.textPrimary,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                  child: Text(
+                                    i == 0 ? 'Create ${_recommendedOperators[i]}' : _recommendedOperators[i],
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              TextButton(
+                                onPressed: () => Navigator.of(context, rootNavigator: true)
+                                    .pushNamed(PulseRouteNames.managedProfiles),
+                                child: const Text('Choose another department'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           );
@@ -192,7 +280,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                   ),
                                   const SizedBox(height: 12),
                                   _statusRow('Business Configured', businessOk),
-                                  _statusRow('Agent Attached', _agentAttached),
+                                  _statusRow('Operator Attached', _agentAttached),
                                   _statusRow('Number Live', numberOk),
                                   _statusRow('First Call Completed', callOk),
                                   if (!callOk) ...[
@@ -243,7 +331,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                       ),
                                       _actionButton(
                                         icon: Icons.smart_toy_outlined,
-                                        label: 'Edit Agent',
+                                        label: 'Edit Operator',
                                         onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
                                       ),
                                       _actionButton(

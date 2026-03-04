@@ -334,7 +334,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
               child: callsPerDay.isEmpty
                   ? Center(
                       child: Text(
-                        'Create agents and make calls to see data.',
+                        'Create operators and make calls to see data.',
                         style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
                       ),
                     )
@@ -351,7 +351,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
                     padding: const EdgeInsets.all(32),
                     child: Center(
                       child: Text(
-                        'Create agents and make calls to see performance data.',
+                        'Create operators and make calls to see performance data.',
                         style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
                       ),
                     ),

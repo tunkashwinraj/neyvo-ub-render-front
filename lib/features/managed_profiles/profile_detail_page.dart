@@ -220,7 +220,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final title = _nameCtrl.text.trim().isEmpty ? 'Agent' : _nameCtrl.text.trim();
+    final title = _nameCtrl.text.trim().isEmpty ? 'Operator' : _nameCtrl.text.trim();
 
     final inner = _loading
         ? const Center(child: CircularProgressIndicator(color: NeyvoColors.teal))
@@ -393,7 +393,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               TextField(
                 controller: _goalCtrl,
                 maxLines: 3,
-                decoration: const InputDecoration(hintText: 'What is this agent trying to accomplish?'),
+                decoration: const InputDecoration(hintText: 'What is this operator trying to accomplish?'),
               ),
             ],
           ),
@@ -416,7 +416,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 controller: _promptCtrl,
                 maxLines: 18,
                 decoration: const InputDecoration(
-                  hintText: 'Define the agent’s instructions, style, constraints, and tools.',
+                  hintText: 'Define the operator\'s instructions, style, constraints, and tools.',
                 ),
               ),
               const SizedBox(height: 12),
@@ -503,7 +503,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 value: _interruptEnabled,
                 onChanged: (v) => setState(() => _interruptEnabled = v),
                 title: Text('Interrupt enabled', style: NeyvoTextStyles.bodyPrimary),
-                subtitle: Text('Allow callers to interrupt the agent mid-sentence.', style: NeyvoTextStyles.micro),
+                subtitle: Text('Allow callers to interrupt the operator mid-sentence.', style: NeyvoTextStyles.micro),
               ),
             ],
           ),

@@ -582,7 +582,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
         backgroundColor: NeyvoTheme.bgPrimary,
         appBar: AppBar(
           backgroundColor: NeyvoTheme.bgSurface,
-          title: const Text('Agent'),
+          title: const Text('Operator'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.maybePop(context),
@@ -626,7 +626,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
         children: [
           _sectionCard(
             'Basics',
-            'Name, status, and metadata for this agent.',
+            'Name, status, and metadata for this operator.',
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -645,7 +645,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                       child: TextField(
                         controller: _nameController,
                         decoration: const InputDecoration(
-                          labelText: 'Agent name',
+                          labelText: 'Operator name',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -697,7 +697,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   maxLines: 6,
                   decoration: const InputDecoration(
                     labelText: 'System prompt',
-                    hintText: 'Instructions for how the agent should behave...',
+                    hintText: 'Instructions for how the operator should behave...',
                     alignLabelWithHint: true,
                     border: OutlineInputBorder(),
                   ),
@@ -724,7 +724,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   maxLines: 3,
                   decoration: const InputDecoration(
                     labelText: 'Opening message (first message)',
-                    hintText: 'First thing the agent says when a call starts...',
+                    hintText: 'First thing the operator says when a call starts...',
                     alignLabelWithHint: true,
                     border: OutlineInputBorder(),
                   ),
@@ -786,7 +786,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
           _sectionCard(
             'Voice',
             _allowPerAgentVoiceTier
-                ? 'Use account default or set a custom voice for this agent.'
+                ? 'Use account default or set a custom voice for this operator.'
                 : 'This agent uses your account default voice. Change it in Settings → Billing → Voice Tier.',
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -805,7 +805,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                 if (_allowPerAgentVoiceTier) ...[
                   RadioListTile<bool>(
                     title: const Text('Custom override'),
-                    subtitle: const Text('Choose a tier and voice for this agent only'),
+                    subtitle: const Text('Choose a tier and voice for this operator only'),
                     value: false,
                     groupValue: _useAccountDefault,
                     onChanged: _saving ? null : (v) => _setUseAccountDefault(false),

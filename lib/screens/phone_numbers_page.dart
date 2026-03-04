@@ -435,7 +435,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text('Agent attached', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+          Text('Operator attached', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             value: _profiles.any((p) => _safeStr(p['profile_id']) == attachedProfileId) ? attachedProfileId : '',

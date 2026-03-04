@@ -75,28 +75,17 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   /// Unified Voice OS navigation – no surfaces exposed to the user.
   List<_NavItem> get _navItems {
+    // UB-only nav: no Launch; Voice Studio and Agency hidden for UB.
     final items = <_NavItem>[
       const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
-      if (_agencyMode) const _NavItem('Agency', Icons.apartment_outlined, PulseRouteNames.agency),
-      const _NavItem('Launch', Icons.rocket_launch_outlined, PulseRouteNames.launch),
-      const _NavItem('Agents', Icons.smart_toy_outlined, PulseRouteNames.agents),
-      const _NavItem('Numbers', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
+      const _NavItem('Operators', Icons.smart_toy_outlined, PulseRouteNames.agents),
+      const _NavItem('Lines', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
       const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.calls),
       const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
       const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
       const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
       const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
     ];
-
-    // Voice Studio – secondary entry, visible only when studio enabled or system live.
-    if (_voiceStudioEnabled || _hasFirstCompletedCall) {
-      items.add(const _NavItem('Voice Studio', Icons.mic_outlined, PulseRouteNames.voiceStudio));
-    }
-
-    // Launch needed only until first successful call.
-    if (_hasFirstCompletedCall) {
-      items.removeWhere((n) => n.route == PulseRouteNames.launch);
-    }
 
     if (_selectedIndex >= items.length) {
       _selectedIndex = 0;

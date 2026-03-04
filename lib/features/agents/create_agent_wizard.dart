@@ -147,7 +147,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     }
     if (_biStatus != 'ready') {
       return AlertDialog(
-        title: const Text('Create Agent'),
+        title: const Text('Create Operator'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -217,7 +217,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                       child: _saving
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text('Create Agent'),
+                          : const Text('Create Operator'),
                     ),
                 ],
               ),
