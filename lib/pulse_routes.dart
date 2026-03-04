@@ -10,6 +10,7 @@ import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'ui/screens/calls/calls_page.dart';
 import 'ui/screens/calls/test_call_page.dart';
+import 'screens/developer_console_page.dart';
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -70,7 +71,7 @@ class PulseRouter {
         // Billing is unified in one page for Voice OS.
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
       case PulseRouteNames.developerConsole:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+        return MaterialPageRoute(builder: (_) => const DeveloperConsolePage());
       case PulseRouteNames.settings:
         // Settings must stay inside PulseShell so the drawer remains visible.
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.settings));
