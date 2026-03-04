@@ -94,32 +94,31 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
       body: Column(
         children: [
           Padding(
-                padding: const EdgeInsets.all(24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Operators',
-                      style: NeyvoTextStyles.title.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: NeyvoColors.textPrimary,
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _openCreateAgent,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create Operator'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: NeyvoColors.teal,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Operators',
+                  style: NeyvoTextStyles.title.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: NeyvoColors.textPrimary,
+                  ),
                 ),
-              ),
-              Expanded(child: _body()),
-            ],
+                ElevatedButton.icon(
+                  onPressed: _openCreateAgent,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create Operator'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
+          Expanded(child: _body()),
+        ],
       ),
     );
   }

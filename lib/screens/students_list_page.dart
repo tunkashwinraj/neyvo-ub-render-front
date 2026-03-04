@@ -963,16 +963,21 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add contact'),
+        title: const Text('Add student'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name *')),
+              TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name *', hintText: 'Full name')),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: phoneC, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone *')),
+              TextField(controller: phoneC, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone *', hintText: 'Number to call')),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)')),
+              TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)', hintText: 'Email address')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student / Contact ID (optional)', hintText: 'Internal ID or reference')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(controller: notesC, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)', hintText: 'Reason for call, follow-up notes...')),
               if (_isEducationOrg) ...[
                 const SizedBox(height: NeyvoSpacing.md),
                 TextField(controller: balanceC, decoration: const InputDecoration(labelText: 'Balance (optional)', hintText: '\$1,000')),
@@ -980,10 +985,6 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 TextField(controller: dueDateC, decoration: const InputDecoration(labelText: 'Due Date (optional)', hintText: '2026-02-25')),
                 const SizedBox(height: NeyvoSpacing.md),
                 TextField(controller: lateFeeC, decoration: const InputDecoration(labelText: 'Late Fee (optional)', hintText: '\$75')),
-                const SizedBox(height: NeyvoSpacing.md),
-                TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student ID (optional)', hintText: 'School internal ID')),
-                const SizedBox(height: NeyvoSpacing.md),
-                TextField(controller: notesC, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)', hintText: 'Additional notes')),
               ],
             ],
           ),

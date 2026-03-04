@@ -355,8 +355,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
             ],
           ),
         );
-      },
-    );
   }
 
   Widget _performanceSnapshot() {

@@ -29,6 +29,7 @@ import '../ui/screens/integrations/integrations_page.dart';
 import '../ui/screens/voice_studio/voice_studio_page.dart';
 import '../ui/components/calls/incoming_call_overlay.dart';
 import '../ui/screens/agency/agency_overview_page.dart';
+import 'students_list_page.dart';
 
 class PulseShell extends StatefulWidget {
   const PulseShell({
@@ -79,6 +80,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       const _NavItem('Operators', Icons.smart_toy_outlined, PulseRouteNames.agents),
       const _NavItem('Lines', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
       const _NavItem('Calls', Icons.call_outlined, PulseRouteNames.calls),
+      const _NavItem('Students', Icons.school_outlined, PulseRouteNames.students),
       const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
       const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
       const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
@@ -628,7 +630,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                             ),
                           ),
                         ],
-              ],
             ),
           ),
         ],
@@ -746,6 +747,8 @@ extension on _PulseShellState {
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
         return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.inbound);
+      case PulseRouteNames.students:
+        return const StudentsListPage();
       case PulseRouteNames.testCall:
         return const TestCallPage();
       case PulseRouteNames.analytics:
