@@ -346,35 +346,13 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   height: 52,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Neyvo',
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: NeyvoColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: NeyvoColors.teal.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: NeyvoColors.teal.withOpacity(0.2)),
-                          ),
-                          child: Text(
-                            'BETA',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                              color: NeyvoColors.teal,
-                            ),
-                          ),
-                        ),
-                      ],
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Image.asset(
+                        'assets/ub_logo/ub_logo_horizontal_white.png',
+                        fit: BoxFit.contain,
+                        height: 40,
+                      ),
                     ),
                   ),
                 ),

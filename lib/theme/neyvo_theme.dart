@@ -21,11 +21,17 @@ class NeyvoColors {
   static const Color borderDefault = Color(0x1AFFFFFF); // 10%
   static const Color borderStrong = Color(0x29FFFFFF);  // 16%
 
-  // Brand
-  static const Color teal = Color(0xFF0D9488);
-  static const Color tealGlow = Color(0x260D9488);  // 15% opacity
-  static const Color tealLight = Color(0xFF14B8A6);
-  static const Color coral = Color(0xFFEA580C);
+  // Brand — University of Bridgeport mapping
+  // Primary UB purple and secondary light blue, plus legacy aliases
+  static const Color ubPurple = Color(0xFF592C82);
+  static const Color ubPurpleSoft = Color(0xFF7B45B0);
+  static const Color ubBlue = Color(0xFF00A7E0);
+
+  // Legacy aliases kept for backwards compatibility inside the app
+  static const Color teal = ubPurple;
+  static const Color tealGlow = Color(0x26592C82);  // 15% opacity UB purple
+  static const Color tealLight = ubPurpleSoft;
+  static const Color coral = ubBlue;
 
   // Text
   static const Color textPrimary = Color(0xFFF0F0F5);
@@ -46,31 +52,31 @@ class NeyvoColors {
 
 /// Typography scale — Inter, precise weights.
 class NeyvoTextStyles {
-  static TextStyle get display => GoogleFonts.inter(
+  static TextStyle get display => GoogleFonts.raleway(
     fontSize: 28, fontWeight: FontWeight.w700,
     letterSpacing: -0.5, color: NeyvoColors.textPrimary,
   );
-  static TextStyle get title => GoogleFonts.inter(
+  static TextStyle get title => GoogleFonts.raleway(
     fontSize: 20, fontWeight: FontWeight.w600,
     letterSpacing: -0.3, color: NeyvoColors.textPrimary,
   );
-  static TextStyle get heading => GoogleFonts.inter(
+  static TextStyle get heading => GoogleFonts.raleway(
     fontSize: 16, fontWeight: FontWeight.w600,
     letterSpacing: -0.2, color: NeyvoColors.textPrimary,
   );
-  static TextStyle get body => GoogleFonts.inter(
+  static TextStyle get body => GoogleFonts.openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoColors.textSecondary,
   );
-  static TextStyle get bodyPrimary => GoogleFonts.inter(
+  static TextStyle get bodyPrimary => GoogleFonts.openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoColors.textPrimary,
   );
-  static TextStyle get label => GoogleFonts.inter(
+  static TextStyle get label => GoogleFonts.openSans(
     fontSize: 12, fontWeight: FontWeight.w500,
     letterSpacing: 0.3, color: NeyvoColors.textSecondary,
   );
-  static TextStyle get micro => GoogleFonts.inter(
+  static TextStyle get micro => GoogleFonts.openSans(
     fontSize: 11, fontWeight: FontWeight.w500,
     letterSpacing: 0.5, color: NeyvoColors.textMuted,
   );
@@ -166,53 +172,53 @@ class NeyvoRadius {
 
 /// Typography — Inter.
 class NeyvoType {
-  static TextStyle get displayLarge => GoogleFonts.inter(
+  static TextStyle get displayLarge => GoogleFonts.raleway(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.5,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get headlineLarge => GoogleFonts.inter(
+  static TextStyle get headlineLarge => GoogleFonts.raleway(
         fontSize: 24,
         fontWeight: FontWeight.w600,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get headlineMedium => GoogleFonts.inter(
+  static TextStyle get headlineMedium => GoogleFonts.raleway(
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get titleLarge => GoogleFonts.inter(
+  static TextStyle get titleLarge => GoogleFonts.raleway(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get titleMedium => GoogleFonts.inter(
+  static TextStyle get titleMedium => GoogleFonts.raleway(
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get bodyLarge => GoogleFonts.inter(
+  static TextStyle get bodyLarge => GoogleFonts.openSans(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get bodyMedium => GoogleFonts.inter(
+  static TextStyle get bodyMedium => GoogleFonts.openSans(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get bodySmall => GoogleFonts.inter(
+  static TextStyle get bodySmall => GoogleFonts.openSans(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: NeyvoTheme.textSecondary,
       );
-  static TextStyle get labelLarge => GoogleFonts.inter(
+  static TextStyle get labelLarge => GoogleFonts.openSans(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: NeyvoTheme.textPrimary,
       );
-  static TextStyle get labelSmall => GoogleFonts.inter(
+  static TextStyle get labelSmall => GoogleFonts.openSans(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         color: NeyvoTheme.textTertiary,
@@ -226,8 +232,8 @@ class NeyvoType {
 class NeyvoThemeData {
   static ThemeData dark() {
     final colorScheme = ColorScheme.dark(
-      primary: NeyvoColors.teal,
-      secondary: NeyvoColors.coral,
+      primary: NeyvoColors.ubPurple,
+      secondary: NeyvoColors.ubBlue,
       surface: NeyvoColors.bgRaised,
       background: NeyvoColors.bgBase,
       error: NeyvoColors.error,
@@ -253,7 +259,7 @@ class NeyvoThemeData {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: NeyvoColors.bgVoid,
       colorScheme: colorScheme,
-      fontFamily: 'Inter',
+      fontFamily: 'Open Sans',
       textTheme: textTheme,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
@@ -275,7 +281,7 @@ class NeyvoThemeData {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: NeyvoColors.teal,
+          backgroundColor: NeyvoColors.ubPurple,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 36),
           padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xl, vertical: NeyvoSpacing.md),
@@ -284,7 +290,7 @@ class NeyvoThemeData {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: NeyvoColors.teal,
+          foregroundColor: NeyvoColors.ubPurple,
           side: const BorderSide(color: NeyvoColors.borderDefault),
           minimumSize: const Size(0, 36),
           padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: NeyvoSpacing.md),
@@ -293,7 +299,7 @@ class NeyvoThemeData {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: NeyvoColors.teal,
+          foregroundColor: NeyvoColors.ubPurple,
           minimumSize: const Size(0, NeyvoSpacing.touchTarget),
         ),
       ),
@@ -307,7 +313,7 @@ class NeyvoThemeData {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(7),
-          borderSide: const BorderSide(color: NeyvoColors.teal, width: 1),
+          borderSide: const BorderSide(color: NeyvoColors.ubPurple, width: 1),
         ),
         labelStyle: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textSecondary),
         hintStyle: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted),

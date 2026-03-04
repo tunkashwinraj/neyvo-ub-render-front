@@ -32,49 +32,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDFUsbak1y49OtCYV2V6wdXL6YW0Rin2AM',
-    appId: '1:151387636667:web:0239fe9b2f98d6773eba9e',
-    messagingSenderId: '151387636667',
-    projectId: 'neyvo-launch',
-    authDomain: 'neyvo-launch.firebaseapp.com',
-    storageBucket: 'neyvo-launch.firebasestorage.app',
-    measurementId: 'G-3Q80BLPH93',
+    apiKey: 'AIzaSyC27EA4v032qzE56j7zk7mLN553yeBwEqs',
+    appId: '1:714495385281:web:49a759dfa4843f4b633e40',
+    messagingSenderId: '714495385281',
+    projectId: 'ub-neyvo',
+    authDomain: 'ub-neyvo.firebaseapp.com',
+    storageBucket: 'ub-neyvo.firebasestorage.app',
+    measurementId: 'G-0YJK8XR114',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBH1sO8dQ-gaE6Jab8BKgeQp9cApPH7KPo',
-    appId: '1:151387636667:android:0ac4f76bc37c98d53eba9e',
-    messagingSenderId: '151387636667',
-    projectId: 'neyvo-launch',
-    storageBucket: 'neyvo-launch.firebasestorage.app',
+    apiKey: 'AIzaSyCFpFRXVL__5c_Et5kRtvuHHx3FDXnkV8U',
+    appId: '1:714495385281:android:c565f760085b6744633e40',
+    messagingSenderId: '714495385281',
+    projectId: 'ub-neyvo',
+    storageBucket: 'ub-neyvo.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDSQNw_8OvYoKtMJb_xpRaY8Yl1bBGAuWI',
-    appId: '1:151387636667:ios:66aae9468e89fa433eba9e',
-    messagingSenderId: '151387636667',
-    projectId: 'neyvo-launch',
-    storageBucket: 'neyvo-launch.firebasestorage.app',
+    apiKey: 'AIzaSyCSh-endeLxI6b97BgsUhkA4ZcvzBBBdNU',
+    appId: '1:714495385281:ios:9778133ed7f25c2c633e40',
+    messagingSenderId: '714495385281',
+    projectId: 'ub-neyvo',
+    storageBucket: 'ub-neyvo.firebasestorage.app',
     iosBundleId: 'com.neyvo.pulse.neyvoPulseFront',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDSQNw_8OvYoKtMJb_xpRaY8Yl1bBGAuWI',
-    appId: '1:151387636667:ios:66aae9468e89fa433eba9e',
-    messagingSenderId: '151387636667',
-    projectId: 'neyvo-launch',
-    storageBucket: 'neyvo-launch.firebasestorage.app',
+    apiKey: 'AIzaSyCSh-endeLxI6b97BgsUhkA4ZcvzBBBdNU',
+    appId: '1:714495385281:ios:9778133ed7f25c2c633e40',
+    messagingSenderId: '714495385281',
+    projectId: 'ub-neyvo',
+    storageBucket: 'ub-neyvo.firebasestorage.app',
     iosBundleId: 'com.neyvo.pulse.neyvoPulseFront',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDFUsbak1y49OtCYV2V6wdXL6YW0Rin2AM',
-    appId: '1:151387636667:web:7d2ca9e4132b01de3eba9e',
-    messagingSenderId: '151387636667',
-    projectId: 'neyvo-launch',
-    authDomain: 'neyvo-launch.firebaseapp.com',
-    storageBucket: 'neyvo-launch.firebasestorage.app',
-    measurementId: 'G-PT81W4Z07T',
+    apiKey: 'AIzaSyC27EA4v032qzE56j7zk7mLN553yeBwEqs',
+    appId: '1:714495385281:web:ee2ef48f67f16663633e40',
+    messagingSenderId: '714495385281',
+    projectId: 'ub-neyvo',
+    authDomain: 'ub-neyvo.firebaseapp.com',
+    storageBucket: 'ub-neyvo.firebasestorage.app',
+    measurementId: 'G-T7MMXB6WZ0',
   );
 
 }
