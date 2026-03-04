@@ -32,7 +32,7 @@
     SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
     if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
-    SpeariaApi.setBaseUrl('https://neyvo-launch.onrender.com');
+    SpeariaApi.setBaseUrl('https://ub-neyvo-back.onrender.com');
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
 
     runApp(const NeyvoPulseApp());

@@ -4,6 +4,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/payment_result_dialog.dart';
 import '../pulse_route_names.dart';
@@ -718,11 +719,11 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                     const Divider(),
                     ListTile(
                       title: Text('Webhook URL', style: NeyvoType.labelLarge),
-                      subtitle: const SelectableText('https://neyvo-launch.onrender.com/api/pulse/integrations/school/webhook'),
+                      subtitle: SelectableText('${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'),
                       trailing: IconButton(
                         icon: const Icon(Icons.copy),
                         onPressed: () {
-                          Clipboard.setData(const ClipboardData(text: 'https://neyvo-launch.onrender.com/api/pulse/integrations/school/webhook'));
+                          Clipboard.setData(ClipboardData(text: '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'));
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('URL copied')));
                         },
                       ),
@@ -786,7 +787,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
               children: [
                 Text('System Information', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                 const SizedBox(height: NeyvoSpacing.xs),
-                Text('Backend: https://neyvo-launch.onrender.com', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                Text('Backend: ${SpeariaApi.baseUrl}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                 Text('Version: 1.0.0', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
               ],
             ),
