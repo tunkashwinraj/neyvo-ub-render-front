@@ -760,7 +760,7 @@ class _ImportTabState extends State<_ImportTab> {
                               2: FlexColumnWidth(1.5),
                             },
                             children: [
-                              const TableRow(
+                              TableRow(
                                 children: [
                                   Text('Name',
                                       style: NeyvoType.labelSmall),
