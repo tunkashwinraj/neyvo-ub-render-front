@@ -798,107 +798,32 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   }
 
   Widget _buildTeamTab() {
-    return ListView(
-      padding: const EdgeInsets.all(NeyvoSpacing.lg),
-      children: [
-        Text('Team', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Text(
-          'Manage team members and roles',
-          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.xl),
-        Text('Your role: ${_myRole ?? "—"}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-        const SizedBox(height: NeyvoSpacing.md),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_myRole == 'admin') ...[
-                  Text('Assign role (by Firebase UID)', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                  const SizedBox(height: NeyvoSpacing.sm),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: _memberUserIdController,
-                          decoration: const InputDecoration(
-                            labelText: 'User ID',
-                            hintText: 'Firebase UID',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: NeyvoSpacing.sm),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _newMemberRole,
-                          decoration: const InputDecoration(labelText: 'Role'),
-                          items: ['admin', 'staff', 'viewer']
-                              .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                              .toList(),
-                          onChanged: (v) => setState(() => _newMemberRole = v ?? 'staff'),
-                        ),
-                      ),
-                      const SizedBox(width: NeyvoSpacing.sm),
-                      FilledButton(
-                        onPressed: () async {
-                          final uid = _memberUserIdController.text.trim();
-                          if (uid.isEmpty) return;
-                          try {
-                            await NeyvoPulseApi.setMemberRole(uid, _newMemberRole);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Role updated')));
-                              _load();
-                            }
-                          } catch (e) {
-                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                          }
-                        },
-                        child: const Text('Set role'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: NeyvoSpacing.lg),
-                ],
-                Text('Members with assigned roles:', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textPrimary)),
-                const SizedBox(height: NeyvoSpacing.xs),
-                if (_members.isEmpty) ...[
-                  Text('None yet. Assign roles above (admin only).', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
-                  if (_myRole != 'admin' && FirebaseAuth.instance.currentUser?.uid != null) ...[
-                    const SizedBox(height: NeyvoSpacing.sm),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final uid = FirebaseAuth.instance.currentUser?.uid;
-                        if (uid == null) return;
-                        try {
-                          await NeyvoPulseApi.setMemberRole(uid, 'admin');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You are now the first admin.')));
-                            _load();
-                          }
-                        } catch (e) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                        }
-                      },
-                      icon: const Icon(Icons.person_add),
-                      label: const Text('Become first admin (one-time)'),
-                    ),
-                  ],
-                ] else
-                  ...(_members.map((m) => Padding(
-                    padding: const EdgeInsets.only(bottom: NeyvoSpacing.xs),
-                    child: Text('${m['user_id'] ?? m['id'] ?? '?'}: ${m['role'] ?? '—'}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                  ))),
-              ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Team management',
+              style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
             ),
-          ),
+            const SizedBox(height: NeyvoSpacing.sm),
+            Text(
+              'Manage team members, roles, and permissions in the dedicated Team section.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.team),
+              icon: const Icon(Icons.groups_outlined, size: 20),
+              label: const Text('Open Team'),
+              style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

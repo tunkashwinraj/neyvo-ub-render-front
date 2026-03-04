@@ -30,6 +30,7 @@ import '../ui/screens/voice_studio/voice_studio_page.dart';
 import '../ui/components/calls/incoming_call_overlay.dart';
 import '../ui/screens/agency/agency_overview_page.dart';
 import 'students_hub_page.dart';
+import 'team_page.dart';
 
 class PulseShell extends StatefulWidget {
   const PulseShell({
@@ -82,6 +83,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       const _NavItem('Students', Icons.school_outlined, PulseRouteNames.students),
       const _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls),
       const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
+      const _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team),
       const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
       const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
       const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
@@ -752,6 +754,8 @@ extension on _PulseShellState {
         return const StudentsHubPage();
       case PulseRouteNames.campaigns:
         return const CampaignsPage();
+      case PulseRouteNames.team:
+        return const TeamPage();
       case PulseRouteNames.testCall:
         return const TestCallPage();
       case PulseRouteNames.analytics:

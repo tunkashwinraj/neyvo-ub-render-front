@@ -460,6 +460,23 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getMyRole() async =>
       _get('/api/pulse/members/me');
 
+  /// Invite a team member by email with role and optional permissions (staff only).
+  /// Backend may implement POST /api/pulse/members/invite with body: { email, role, permissions? }.
+  static Future<Map<String, dynamic>> inviteMember({
+    required String email,
+    required String role,
+    List<String>? permissions,
+  }) async {
+    final body = <String, dynamic>{
+      'email': email.trim(),
+      'role': role,
+    };
+    if (permissions != null && permissions.isNotEmpty) {
+      body['permissions'] = permissions;
+    }
+    return _post('/api/pulse/members/invite', body);
+  }
+
   /// Start outbound call. Backend requires agent_id so every call is tied to an agent.
   static Future<Map<String, dynamic>> startOutboundCall({
     required String agentId,

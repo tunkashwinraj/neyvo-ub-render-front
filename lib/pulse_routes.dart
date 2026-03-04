@@ -34,6 +34,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.students));
       case PulseRouteNames.campaigns:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.campaigns));
+      case PulseRouteNames.team:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.team));
       case PulseRouteNames.outbound:
         // Legacy outbound route -> Calls/Dialer.
         return MaterialPageRoute(

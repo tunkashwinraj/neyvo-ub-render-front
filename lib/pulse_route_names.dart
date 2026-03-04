@@ -21,6 +21,7 @@ abstract class PulseRouteNames {
   // Legacy alias (do not use in new UI).
   static const String integration = '/pulse/integration';
   static const String campaigns = '/pulse/campaigns';
+  static const String team = '/pulse/team';
   static const String templateScripts = '/pulse/template-scripts';
   static const String wallet = '/pulse/wallet';
   static const String usage = '/pulse/usage';
