@@ -10,7 +10,6 @@ import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
-import '../ui/activation/activation_service.dart';
 
 class PulseDashboardPage extends StatefulWidget {
   const PulseDashboardPage({super.key});
@@ -124,16 +123,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: activationService,
-      builder: (context, _) {
-        final act = activationService.status;
-        final inActivation = act != null && act.stage != ActivationStage.live;
-        final businessOk = act?.businessModelReady ?? _businessConfigured;
-        final numberOk = act?.numberConnected ?? _numberLive;
-        final callOk = act?.firstCallCompleted ?? _firstCallCompleted;
-
-        if (_loading) {
+    if (_loading) {
           return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
         }
         if (_error != null) {
@@ -149,10 +139,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           );
         }
 
-        final ubReady = _ubStatus == 'ready';
-        final showCreateFirstOperator = ubReady && _operatorCount == 0;
+    final ubReady = _ubStatus == 'ready';
+    final showCreateFirstOperator = ubReady && _operatorCount == 0;
 
-        if (showCreateFirstOperator) {
+    if (showCreateFirstOperator) {
           return RefreshIndicator(
             onRefresh: _load,
             child: ListView(
@@ -221,17 +211,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           );
         }
 
+        final callOk = _firstCallCompleted;
         final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
-        final title = inActivation ? 'You’re almost live' : 'Your Voice AI is Online';
-        final subtitle = inActivation
-            ? 'Complete activation to go live on real calls.'
-            : 'System live. Scale confidently.';
+        const title = 'Your Voice AI is Online';
+        const subtitle = 'System live. Scale confidently.';
 
         return RefreshIndicator(
-          onRefresh: () async {
-            await _load();
-            await activationService.refresh();
-          },
+          onRefresh: _load,
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -279,20 +265,18 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 12),
-                                  _statusRow('Business Configured', businessOk),
+                                  _statusRow('Business Configured', _businessConfigured),
                                   _statusRow('Operator Attached', _agentAttached),
-                                  _statusRow('Number Live', numberOk),
+                                  _statusRow('Number Live', _numberLive),
                                   _statusRow('First Call Completed', callOk),
                                   if (!callOk) ...[
                                     const SizedBox(height: 12),
                                     SizedBox(
                                       width: double.infinity,
                                       child: FilledButton(
-                                        onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(
-                                          inActivation ? PulseRouteNames.testCall : PulseRouteNames.launch,
-                                        ),
+                                        onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
                                         style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                                        child: Text(inActivation ? 'Make a test call' : 'Open Launch Wizard'),
+                                        child: const Text('Make a test call'),
                                       ),
                                     ),
                                   ],

@@ -29,8 +29,6 @@ import '../ui/screens/integrations/integrations_page.dart';
 import '../ui/screens/voice_studio/voice_studio_page.dart';
 import '../ui/components/calls/incoming_call_overlay.dart';
 import '../ui/screens/agency/agency_overview_page.dart';
-import '../ui/activation/activation_service.dart';
-import '../ui/activation/activation_dock.dart';
 
 class PulseShell extends StatefulWidget {
   const PulseShell({
@@ -133,11 +131,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       CurvedAnimation(parent: _livePulseCtrl, curve: Curves.easeInOut),
     );
     _resolveAccountThenLoad();
-    // Kick off activation snapshot once account id is resolved.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      activationService.refresh();
-      activationService.addListener(_onActivationChanged);
-    });
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
       final items = _navItems;
@@ -154,15 +147,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         );
       });
     }
-  }
-
-  void _onActivationChanged() {
-    if (!mounted) return;
-    setState(() {
-      if (activationService.isLive) {
-        _hasFirstCompletedCall = true;
-      }
-    });
   }
 
   /// Resolve logged-in account from API first, then load all data so every request uses the resolved account id.
@@ -214,7 +198,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   @override
   void dispose() {
-    activationService.removeListener(_onActivationChanged);
     _walletSubscription?.cancel();
     _livePulseCtrl.dispose();
     super.dispose();
@@ -628,36 +611,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                 ),
                 Expanded(
-                  child: AnimatedBuilder(
-                    animation: activationService,
-                    builder: (context, _) {
-                      final showDock = !activationService.isLive;
-                      return Column(
-                        children: [
-                          if (showDock)
-                            ActivationDock(
-                              service: activationService,
-                              onNavigateRoute: (route) {
-                                final items = _navItems;
-                                final idx = items.indexWhere((n) => n.route == route);
-                                if (idx >= 0) {
-                                  setState(() => _selectedIndex = idx);
-                                  return;
-                                }
-                                if (route.isNotEmpty) {
-                                  Navigator.of(context).pushNamed(route);
-                                }
-                              },
-                              onOpenActivationHome: () {
-                                final items = _navItems;
-                                final idx = items.indexWhere((n) => n.route == PulseRouteNames.dashboard);
-                                if (idx >= 0) {
-                                  setState(() => _selectedIndex = idx);
-                                }
-                              },
-                            ),
-                          Expanded(
-                            child: Stack(
+                  child: Stack(
                               children: [
                                 _buildCurrentPage(),
                                 if (_incomingCall != null)
@@ -674,10 +628,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                             ),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                ),
               ],
             ),
           ),
