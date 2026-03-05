@@ -460,6 +460,24 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> setMemberRole(String userId, String role) async =>
       _patch('/api/pulse/members/$userId', {'role': role});
 
+  /// Update member role and permissions (admin only).
+  /// PATCH /api/pulse/members/<user_id> body: { role, permissions? }
+  static Future<Map<String, dynamic>> updateMember(
+    String userId, {
+    String? role,
+    List<String>? permissions,
+  }) async {
+    final body = <String, dynamic>{};
+    if (role != null && role.isNotEmpty) body['role'] = role;
+    if (permissions != null) body['permissions'] = permissions;
+    return _patch('/api/pulse/members/$userId', body);
+  }
+
+  /// Delete member from org (admin only).
+  static Future<void> deleteMember(String userId) async {
+    await SpeariaApi.deleteJson('/api/pulse/members/$userId');
+  }
+
   /// Phase D RBAC: get current user's role
   static Future<Map<String, dynamic>> getMyRole() async =>
       _get('/api/pulse/members/me');

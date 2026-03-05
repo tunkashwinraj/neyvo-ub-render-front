@@ -22,11 +22,16 @@ class StudentsHubPage extends StatefulWidget {
 class _StudentsHubPageState extends State<StudentsHubPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final GlobalKey<_DirectoryTabState> _directoryKey = GlobalKey<_DirectoryTabState>();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   @override
@@ -52,11 +57,17 @@ class _StudentsHubPageState extends State<StudentsHubPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _DirectoryTab(key: const ValueKey('directory')),
+          _DirectoryTab(key: _directoryKey),
           _ImportTab(key: const ValueKey('import')),
           _SyncTab(key: const ValueKey('sync')),
         ],
       ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton(
+              onPressed: () => _directoryKey.currentState?.openAddStudentDialog(),
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }
@@ -84,6 +95,153 @@ class _DirectoryTabState extends State<_DirectoryTab> {
     super.initState();
     _searchController.addListener(_filterStudents);
     _load();
+  }
+
+  Future<void> openAddStudentDialog() async {
+    final nameC = TextEditingController();
+    final phoneC = TextEditingController();
+    final emailC = TextEditingController();
+    final balanceC = TextEditingController();
+    final dueDateC = TextEditingController();
+    final lateFeeC = TextEditingController();
+    final studentIdC = TextEditingController();
+    final notesC = TextEditingController();
+
+    final navigator = Navigator.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add student'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: nameC,
+                decoration: const InputDecoration(
+                  labelText: 'Name *',
+                  hintText: 'Full name',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: phoneC,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone *',
+                  hintText: 'Number to call',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: emailC,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email (optional)',
+                  hintText: 'Email address',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: studentIdC,
+                decoration: const InputDecoration(
+                  labelText: 'Student / Contact ID (optional)',
+                  hintText: 'Internal ID or reference',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: notesC,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  hintText: 'Reason for call, follow-up notes...',
+                ),
+              ),
+              if (_isEducationOrg) ...[
+                const SizedBox(height: NeyvoSpacing.md),
+                TextField(
+                  controller: balanceC,
+                  decoration: const InputDecoration(
+                    labelText: 'Balance (optional)',
+                    hintText: '\$1,000',
+                  ),
+                ),
+                const SizedBox(height: NeyvoSpacing.md),
+                TextField(
+                  controller: dueDateC,
+                  decoration: const InputDecoration(
+                    labelText: 'Due Date (optional)',
+                    hintText: '2026-02-25',
+                  ),
+                ),
+                const SizedBox(height: NeyvoSpacing.md),
+                TextField(
+                  controller: lateFeeC,
+                  decoration: const InputDecoration(
+                    labelText: 'Late Fee (optional)',
+                    hintText: '\$75',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => navigator.pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameC.text.trim();
+              final phone = phoneC.text.trim();
+              if (name.isEmpty || phone.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Name and phone required')),
+                );
+                return;
+              }
+              try {
+                await NeyvoPulseApi.createStudent(
+                  name: name,
+                  phone: phone,
+                  email: emailC.text.trim().isEmpty ? null : emailC.text.trim(),
+                  balance:
+                      balanceC.text.trim().isEmpty ? null : balanceC.text.trim(),
+                  dueDate: dueDateC.text.trim().isEmpty ? null : dueDateC.text.trim(),
+                  lateFee:
+                      lateFeeC.text.trim().isEmpty ? null : lateFeeC.text.trim(),
+                  studentId: studentIdC.text.trim().isEmpty
+                      ? null
+                      : studentIdC.text.trim(),
+                  notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
+                );
+                if (!context.mounted) return;
+                navigator.pop();
+                await _load();
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(e.toString())));
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    nameC.dispose();
+    phoneC.dispose();
+    emailC.dispose();
+    balanceC.dispose();
+    dueDateC.dispose();
+    lateFeeC.dispose();
+    studentIdC.dispose();
+    notesC.dispose();
   }
 
   @override
