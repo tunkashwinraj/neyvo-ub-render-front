@@ -95,6 +95,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   ];
 
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
+  /// If staff has no permissions (empty list), show all items so the user is not locked out.
   List<_NavItem> get _navItems {
     final role = _myRole?.toLowerCase();
     final perms = _myPermissions;
@@ -103,8 +104,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       return List<_NavItem>.from(_allNavItems);
     }
     final filtered = _allNavItems.where((n) => perms.contains(n.permissionKey)).toList();
-    if (_selectedIndex >= filtered.length) _selectedIndex = 0;
-    return filtered;
+    // If filtered is empty (e.g. backend returned no permissions), show all tabs so sidebar is usable.
+    final items = filtered.isEmpty ? List<_NavItem>.from(_allNavItems) : filtered;
+    if (_selectedIndex >= items.length) _selectedIndex = 0;
+    return items;
   }
 
   static const String _managedProfileDetailRoute = 'detail';
