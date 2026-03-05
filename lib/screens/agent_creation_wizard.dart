@@ -439,7 +439,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
   }
 
   String get _accountTierDisplay {
-    final tier = (_billing?['voice_tier'] as String?)?.toLowerCase() ?? 'neutral';
+    final tier = (_billing?['voice_tier'] as String?)?.toLowerCase() ?? 'ultra';
     final cpm = _billing?['credits_per_minute'] ?? 25;
     switch (tier) {
       case 'natural': return 'Natural Human';

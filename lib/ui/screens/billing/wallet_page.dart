@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
+import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_detail_page.dart';
@@ -112,11 +113,12 @@ class _WalletPageState extends State<WalletPage> {
         return;
       }
       final call = Map<String, dynamic>.from(res['call'] as Map);
-      Navigator.of(context).push(
+      await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => CallDetailPage(call: call),
         ),
       );
+      if (mounted) _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -275,16 +277,33 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
+  void _openBilling() async {
+    await Navigator.of(context).pushNamed(PulseRouteNames.billing);
+    if (mounted) _load();
+  }
+
   Widget _transactionRow(Map<String, dynamic> t) {
     final type = (t['type'] ?? '').toString().toLowerCase();
     final creditsVal = (t['credits'] as num?)?.toInt() ?? 0;
     final isCredit = creditsVal >= 0;
-    final desc = (t['description'] ?? '—').toString();
     final callId = (t['call_id'] ?? '').toString().trim();
+    final durationMinutes = (t['duration_minutes'] as num?)?.toDouble();
+    final creditsCharged = (t['credits_charged'] as num?)?.toInt();
+    final hasCallDetail = callId.isNotEmpty && durationMinutes != null && creditsCharged != null;
+    final desc = hasCallDetail
+        ? 'Call · ${durationMinutes!.toStringAsFixed(1)} min · $creditsCharged credits'
+        : (t['description'] ?? '—').toString();
     final createdAt = t['created_at'];
 
+    final bool isCallDebit = callId.isNotEmpty;
+    final bool canGoToBilling = !isCallDebit && (type == 'credit' || type == 'debit' || type == 'purchase' || type == 'welcome_bonus' || type == 'addon_deduction' || type.isEmpty);
+
     return InkWell(
-      onTap: null,
+      onTap: isCallDebit
+          ? () => _openCallDetail(callId)
+          : canGoToBilling
+              ? _openBilling
+              : null,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
@@ -319,12 +338,17 @@ class _WalletPageState extends State<WalletPage> {
             ),
             SizedBox(
               width: 90,
-              child: callId.isEmpty
-                  ? const SizedBox.shrink()
-                  : TextButton(
+              child: isCallDebit
+                  ? TextButton(
                       onPressed: () => _openCallDetail(callId),
                       child: const Text('View call'),
-                    ),
+                    )
+                  : canGoToBilling
+                      ? TextButton(
+                          onPressed: _openBilling,
+                          child: const Text('View in Billing'),
+                        )
+                      : const SizedBox.shrink(),
             ),
           ],
         ),

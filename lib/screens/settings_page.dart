@@ -17,8 +17,7 @@ class PulseSettingsPage extends StatefulWidget {
   State<PulseSettingsPage> createState() => _PulseSettingsPageState();
 }
 
-class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _PulseSettingsPageState extends State<PulseSettingsPage> {
   final _schoolName = TextEditingController();
   final _defaultLateFee = TextEditingController();
   final _currency = TextEditingController();
@@ -53,7 +52,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _load();
     _maybeShowPaymentResult();
   }
@@ -73,7 +71,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
 
   @override
   void dispose() {
-    _tabController.dispose();
     _schoolName.dispose();
     _defaultLateFee.dispose();
     _currency.dispose();
@@ -258,45 +255,13 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
       );
     }
     
-    final user = FirebaseAuth.instance.currentUser;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TabBar(
-          controller: _tabController,
-          labelColor: NeyvoTheme.teal,
-          unselectedLabelColor: NeyvoTheme.textSecondary,
-          indicatorColor: NeyvoTheme.teal,
-          tabs: const [
-            Tab(text: 'Organization'),
-            Tab(text: 'Team'),
-            Tab(text: 'Security'),
-            Tab(text: 'API Keys'),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOrganizationTab(user),
-              _buildTeamTab(),
-              _buildSecurityTab(user),
-              _buildApiKeysTab(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOrganizationTab(User? user) {
     return ListView(
       padding: const EdgeInsets.all(NeyvoSpacing.lg),
       children: [
         Text('University of Bridgeport', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
         const SizedBox(height: NeyvoSpacing.xl),
         Text('Account', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
+        const SizedBox(height: NeyvoSpacing.sm),
         const SizedBox(height: NeyvoSpacing.md),
         Card(
           color: NeyvoTheme.bgCard,
@@ -327,6 +292,8 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
           ),
         ),
         const SizedBox(height: NeyvoSpacing.xl),
+        Text('Organization', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
+        const SizedBox(height: NeyvoSpacing.md),
         Card(
           color: NeyvoTheme.bgCard,
           child: Padding(
@@ -389,21 +356,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md),
           ),
         ),
-        const SizedBox(height: NeyvoSpacing.lg),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('System Information', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
-                const SizedBox(height: NeyvoSpacing.xs),
-                Text('Version: 1.0.0', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-              ],
-            ),
-          ),
-        ),
         const SizedBox(height: NeyvoSpacing.xl),
         Card(
           color: NeyvoTheme.bgCard,
@@ -448,135 +400,17 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildTeamTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Team management',
-              style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
-            ),
-            const SizedBox(height: NeyvoSpacing.sm),
-            Text(
-              'Manage team members, roles, and permissions in the dedicated Team section.',
-              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: NeyvoSpacing.lg),
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.team),
-              icon: const Icon(Icons.groups_outlined, size: 20),
-              label: const Text('Open Team'),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBillingTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Billing moved', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-            const SizedBox(height: 8),
-            Text(
-              'Billing is now a dedicated section in the Voice OS navigation.',
-              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-              child: const Text('Open Billing'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildApiKeysTab() {
-    return ListView(
-      padding: const EdgeInsets.all(NeyvoSpacing.lg),
-      children: [
-        Text('API Keys', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Text(
-          'Generate and manage API keys for integrations',
-          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.xl),
+        const SizedBox(height: NeyvoSpacing.lg),
         Card(
           color: NeyvoTheme.bgCard,
           child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            padding: const EdgeInsets.all(NeyvoSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('API keys allow external services to access your account.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
-                const SizedBox(height: NeyvoSpacing.md),
-                FilledButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API key generation coming soon')));
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Generate key'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSecurityTab(User? user) {
-    return ListView(
-      padding: const EdgeInsets.all(NeyvoSpacing.lg),
-      children: [
-        Text('Security', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Text(
-          'Password, sessions, and data export',
-          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.xl),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.lock_outline, color: NeyvoTheme.textSecondary),
-                  title: Text('Change password', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                  subtitle: Text('Manage via Firebase Auth', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Use Firebase console or email reset link')));
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.download_outlined, color: NeyvoTheme.textSecondary),
-                  title: Text('Data export', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                  subtitle: Text('GDPR-compliant export of your data', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data export coming soon')));
-                  },
-                ),
+                Text('System Information', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
+                const SizedBox(height: NeyvoSpacing.xs),
+                Text('Version: 1.0.0', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
               ],
             ),
           ),

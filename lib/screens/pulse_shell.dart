@@ -87,7 +87,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
-    _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations, 'integrations'),
     _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
     _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet, 'billing'),
     _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings, 'settings'),

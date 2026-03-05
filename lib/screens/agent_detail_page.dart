@@ -202,7 +202,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     if (!_useAccountDefault) {
       final override = _agent?['voice_tier_override'] as String?;
       final legacy = _agent?['voice_tier'] as String?;
-      return (override ?? legacy ?? 'neutral').toString().toLowerCase();
+      return (override ?? legacy ?? 'ultra').toString().toLowerCase();
     }
     return (_billing?['voice_tier'] as String?)?.toLowerCase() ?? 'neutral';
   }
@@ -242,7 +242,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   }
 
   List<String> get _unlockedTiers =>
-      List<String>.from(_billing?['unlocked_tiers'] as List? ?? ['neutral']);
+      List<String>.from(_billing?['unlocked_tiers'] as List? ?? ['neutral', 'natural', 'ultra']);
 
   bool get _allowPerAgentVoiceTier =>
       _billing?['allow_per_agent_voice_tier'] == true;
@@ -794,7 +794,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                 RadioListTile<bool>(
                   title: const Text('Use account default'),
                   subtitle: Text(
-                    '${_tierDisplay((_billing?['voice_tier'] as String?)?.toLowerCase() ?? 'neutral')} (from Settings → Billing)',
+                    '${_tierDisplay((_billing?['voice_tier'] as String?)?.toLowerCase() ?? 'ultra')} (from Settings → Billing)',
                     style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                   ),
                   value: true,
