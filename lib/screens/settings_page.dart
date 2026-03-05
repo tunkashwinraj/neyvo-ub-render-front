@@ -427,7 +427,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                     ),
                   ),
                 ),
-                Container(width: 1, height: 32, color: NeyvoTheme.borderDefault),
+                Container(width: 1, height: 32, color: NeyvoTheme.border),
                 Expanded(
                   child: InkWell(
                     onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.wallet),
