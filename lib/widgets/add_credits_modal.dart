@@ -248,8 +248,16 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
                       ),
                     ),
                     Text(
-                      '~$approxMin min · \$$price one-time',
+                      '~$approxMin min',
                       style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'One-time cost: \$$price',
+                      style: NeyvoType.labelLarge.copyWith(
+                        color: NeyvoTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -258,7 +266,7 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
               FilledButton(
                 onPressed: _purchaseInProgress ? null : () => _purchase(packKey),
                 style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
-                child: const Text('Purchase'),
+                child: Text('Purchase \$$price'),
               ),
             ],
           ),
@@ -289,6 +297,15 @@ class _CustomAmountRowState extends State<_CustomAmountRow> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  String _buttonLabel() {
+    final v = double.tryParse(_controller.text.trim());
+    if (v != null && v >= 20 && v <= 100000) {
+      final int dollars = v.truncate();
+      return dollars == v ? 'Purchase \$$dollars' : 'Purchase \$${v.toStringAsFixed(0)}';
+    }
+    return 'Purchase';
   }
 
   @override
@@ -330,7 +347,7 @@ class _CustomAmountRowState extends State<_CustomAmountRow> {
                   widget.onPurchase(v);
                 },
           style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
-          child: const Text('Purchase'),
+          child: Text(_buttonLabel()),
         ),
       ],
     );

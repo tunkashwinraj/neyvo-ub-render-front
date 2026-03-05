@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../utils/export_csv.dart';
 import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_detail_page.dart';
@@ -138,6 +139,32 @@ class _WalletPageState extends State<WalletPage> {
     return s;
   }
 
+  Future<void> _downloadTransactionsReport() async {
+    try {
+      final res = await NeyvoPulseApi.getBillingTransactions(limit: 2000, offset: 0, type: 'all');
+      final list = (res['transactions'] as List<dynamic>?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final sb = StringBuffer();
+      sb.writeln('Date,Type,Amount (credits),Amount (\$),Description,Call ID,Transaction type');
+      for (final t in list) {
+        final amount = (t['amount'] as num?)?.toInt() ?? 0;
+        final desc = (t['description'] ?? '').toString().replaceAll('"', '""');
+        final type = (t['type'] ?? '').toString();
+        final callId = (t['call_id'] ?? '').toString();
+        final txnType = (t['transaction_type'] ?? type).toString();
+        final dollars = amount.abs() <= 0 ? '' : creditsToDollarsDisplay(amount.abs());
+        sb.writeln('${_formatDate(t['created_at'])},$type,$amount,"$dollars","$desc","$callId","$txnType"');
+      }
+      final date = DateTime.now().toIso8601String().substring(0, 10);
+      if (!mounted) return;
+      await downloadCsv('wallet_transactions_$date.csv', '\uFEFF${sb.toString()}', context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading && _wallet == null) {
@@ -239,6 +266,12 @@ class _WalletPageState extends State<WalletPage> {
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: _downloadTransactionsReport,
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                      label: const Text('Download report'),
                     ),
                     const SizedBox(width: 8),
                     TextButton.icon(

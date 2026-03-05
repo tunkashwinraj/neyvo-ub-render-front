@@ -7,6 +7,7 @@ import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
+import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
 
 class CampaignsPage extends StatefulWidget {
@@ -211,6 +212,56 @@ class _CampaignsPageState extends State<CampaignsPage> {
     _detailRefreshTimer?.cancel();
     _detailRefreshTimer = null;
   }
+
+  Future<void> _downloadCampaignReport(String campaignId) async {
+    try {
+      final res = await NeyvoPulseApi.getCampaignReport(campaignId);
+      if (res['ok'] != true || !mounted) return;
+      final campaign = Map<String, dynamic>.from(res['campaign'] as Map);
+      final agent = res['agent'] != null ? Map<String, dynamic>.from(res['agent'] as Map) : null;
+      final template = res['template'] != null ? Map<String, dynamic>.from(res['template'] as Map) : null;
+      final items = (res['call_items'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final callDetails = (res['call_details'] as Map?)?.map((k, v) => MapEntry(k as String, Map<String, dynamic>.from(v as Map))) ?? {};
+      final sb = StringBuffer();
+      sb.writeln('Campaign Report');
+      sb.writeln('Name,${_escapeCsv(campaign['name']?.toString() ?? '')}');
+      sb.writeln('Status,${campaign['status'] ?? ''}');
+      sb.writeln('Total Planned,${campaign['total_planned'] ?? ''}');
+      sb.writeln('Created,${campaign['created_at'] ?? ''}');
+      sb.writeln('');
+      if (agent != null) {
+        sb.writeln('Agent');
+        sb.writeln('Name,${_escapeCsv(agent['name']?.toString() ?? '')}');
+        sb.writeln('Voice Tier,${agent['voice_tier_override'] ?? agent['voice_tier'] ?? ''}');
+        sb.writeln('');
+      }
+      if (template != null) {
+        sb.writeln('Template,${_escapeCsv(template['name']?.toString() ?? template['id']?.toString() ?? '')}');
+        sb.writeln('');
+      }
+      sb.writeln('Call Items');
+      sb.writeln('Name,Phone,Student ID,Status,Attempt,VAPI Call ID,Duration (s),Summary,Sentiment');
+      for (final it in items) {
+        final vapiId = (it['vapi_call_id'] ?? '').toString();
+        final detail = callDetails[vapiId];
+        final duration = detail?['duration_seconds'] ?? '';
+        final summary = _escapeCsv((detail?['summary'] ?? '').toString().replaceAll('\n', ' '));
+        final sentiment = (detail?['sentiment'] ?? '').toString();
+        sb.writeln('"${_escapeCsv(it['name']?.toString() ?? '')}","${_escapeCsv(it['phone']?.toString() ?? '')}",${it['student_id'] ?? ''},${it['status'] ?? ''},${it['attempt'] ?? ''},$vapiId,$duration,"$summary",$sentiment');
+      }
+      final date = DateTime.now().toIso8601String().substring(0, 10);
+      final name = (campaign['name'] ?? 'campaign').toString().replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(RegExp(r'\s+'), '_');
+      if (!mounted) return;
+      await downloadCsv('campaign_report_${name}_$date.csv', '\uFEFF${sb.toString()}', context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e'), backgroundColor: NeyvoTheme.error),
+      );
+    }
+  }
+
+  String _escapeCsv(String s) => s.replaceAll('"', '""');
 
   List<Map<String, dynamic>> get _filteredStudents {
     var list = List<Map<String, dynamic>>.from(_students);
@@ -960,6 +1011,14 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh),
                 onPressed: () => setState(() => _campaignDetailRefreshKey++),
+              ),
+              Tooltip(
+                message: 'Download detailed campaign report (CSV)',
+                child: TextButton.icon(
+                  icon: const Icon(Icons.download_outlined, size: 20),
+                  label: const Text('Download report'),
+                  onPressed: () => _downloadCampaignReport(campaignId),
+                ),
               ),
               TextButton.icon(
                 icon: const Icon(Icons.verified_outlined, size: 20),

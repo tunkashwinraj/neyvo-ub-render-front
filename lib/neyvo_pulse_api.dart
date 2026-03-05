@@ -740,6 +740,10 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCampaign(String campaignId) async =>
       _get('/api/pulse/campaigns/$campaignId');
 
+  /// Detailed campaign report: campaign, agent, template, call items, and per-call insights.
+  static Future<Map<String, dynamic>> getCampaignReport(String campaignId) async =>
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/report');
+
   /// List calls placed for a campaign.
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
       _get('/api/pulse/campaigns/$campaignId/calls', params: {'limit': limit});
