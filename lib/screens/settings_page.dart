@@ -602,7 +602,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                         children: [
                           Text(
                             'Voice / Vapi',
-                            style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textSecondary),
+                            style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary),
                           ),
                           const SizedBox(height: NeyvoSpacing.sm),
                           TextField(
@@ -625,7 +625,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                             onChanged: (_) => setState(() {}),
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
-                          Text('Templates & voice profiles', style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textSecondary)),
+                          Text('Templates & voice profiles', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                           const SizedBox(height: 4),
                           Text('Seed the template library or voice profiles if the operator wizard shows no options.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                           const SizedBox(height: NeyvoSpacing.sm),
