@@ -169,6 +169,38 @@ class _WalletPageState extends State<WalletPage> {
                     Expanded(
                       child: Text('Wallet', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                     ),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.voiceTier),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.record_voice_over_outlined, size: 18, color: NeyvoColors.teal),
+                            const SizedBox(width: 6),
+                            Text('View voice tiers', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.subscriptionPlan),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.card_membership_outlined, size: 18, color: NeyvoColors.teal),
+                            const SizedBox(width: 6),
+                            Text('View plans', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     TextButton.icon(
                       onPressed: _load,
                       icon: const Icon(Icons.refresh, size: 18),

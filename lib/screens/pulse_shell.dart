@@ -741,6 +741,11 @@ extension on _PulseShellState {
 
   /// Map the currently selected nav route to the active page widget.
   Widget _buildCurrentPage() {
+    // When opened via "View plans" / "View voice tiers" from Billing, show that page (not in sidebar).
+    final initialRoute = widget.initialRouteName;
+    if (initialRoute == PulseRouteNames.voiceTier) return const VoiceTierPage();
+    if (initialRoute == PulseRouteNames.subscriptionPlan) return const PlanSelectorPage();
+
     final items = _navItems;
     if (_selectedIndex < 0 || _selectedIndex >= items.length) {
       return const PulseDashboardPage();
