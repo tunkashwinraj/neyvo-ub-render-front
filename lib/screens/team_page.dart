@@ -198,7 +198,7 @@ class _TeamPageState extends State<TeamPage> {
           const SizedBox(height: NeyvoSpacing.sm),
           Text(
             'You belong to multiple orgs. Switch to see all members in that org.',
-            style: NeyvoTextStyles.caption.copyWith(color: NeyvoColors.textSecondary),
+            style: NeyvoTextStyles.labelSmall.copyWith(color: NeyvoColors.textSecondary),
           ),
         ],
         const SizedBox(height: NeyvoSpacing.lg),
