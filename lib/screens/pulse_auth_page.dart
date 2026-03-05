@@ -53,6 +53,120 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     return true;
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final emailC = TextEditingController(text: _email.text.trim());
+    String? dialogError;
+    bool sending = false;
+    bool success = false;
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !sending,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Reset password'),
+              content: SingleChildScrollView(
+                child: success
+                    ? Text(
+                        'Check your email for a link to reset your password.',
+                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Enter your email and we\'ll send you a link to set a new password.',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.lg),
+                          TextField(
+                            controller: emailC,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              hintText: 'you@company.com',
+                            ),
+                            enabled: !sending,
+                          ),
+                          if (dialogError != null) ...[
+                            const SizedBox(height: NeyvoSpacing.sm),
+                            Text(
+                              dialogError!,
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+              actions: [
+                if (!success)
+                  TextButton(
+                    onPressed: sending ? null : () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                if (success)
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('OK'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: sending
+                        ? null
+                        : () async {
+                            final email = emailC.text.trim();
+                            if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+                              setDialogState(() => dialogError = 'Please enter a valid email address');
+                              return;
+                            }
+                            setDialogState(() {
+                              dialogError = null;
+                              sending = true;
+                            });
+                            try {
+                              await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                success = true;
+                              });
+                            } on FirebaseAuthException catch (e) {
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                dialogError = e.code == 'user-not-found'
+                                    ? 'No account found for this email.'
+                                    : (e.message ?? e.code);
+                              });
+                            } catch (e) {
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                dialogError = e.toString();
+                              });
+                            }
+                          },
+                    child: sending
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Send reset link'),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    emailC.dispose();
+  }
+
   Future<void> _submit() async {
     setState(() {
       _error = null;
@@ -186,6 +300,16 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                                     )
                                   : Text(_isSignUp ? 'Create account' : 'Sign in'),
                             ),
+                            if (!_isSignUp) ...[
+                              const SizedBox(height: NeyvoSpacing.sm),
+                              TextButton(
+                                onPressed: _loading ? null : _showForgotPasswordDialog,
+                                child: Text(
+                                  'Forgot password?',
+                                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: NeyvoSpacing.md),
                             TextButton(
                               onPressed: _loading

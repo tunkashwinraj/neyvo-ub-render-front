@@ -73,29 +73,36 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
   late final AnimationController _livePulseCtrl;
   late final Animation<double> _livePulse;
+  String? _myRole;
+  List<String>? _myPermissions;
 
-  /// Unified Voice OS navigation – no surfaces exposed to the user.
+  /// Permission key per nav item; used to filter sidebar for staff. Admin sees all.
+  static const List<_NavItem> _allNavItems = [
+    _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard, 'dashboard'),
+    _NavItem('Operators', Icons.smart_toy_outlined, PulseRouteNames.agents, 'operators'),
+    _NavItem('Lines', Icons.phone_outlined, PulseRouteNames.phoneNumbers, 'operators'),
+    _NavItem('Students', Icons.school_outlined, PulseRouteNames.students, 'students'),
+    _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls, 'call_logs'),
+    _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
+    _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
+    _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
+    _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations, 'integrations'),
+    _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
+    _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet, 'billing'),
+    _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings, 'settings'),
+  ];
+
+  /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
   List<_NavItem> get _navItems {
-    // UB-only nav: Students hub, Call Logs, Campaigns as first-class.
-    final items = <_NavItem>[
-      const _NavItem('Home', Icons.home_outlined, PulseRouteNames.dashboard),
-      const _NavItem('Operators', Icons.smart_toy_outlined, PulseRouteNames.agents),
-      const _NavItem('Lines', Icons.phone_outlined, PulseRouteNames.phoneNumbers),
-      const _NavItem('Students', Icons.school_outlined, PulseRouteNames.students),
-      const _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls),
-      const _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns),
-      const _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team),
-      const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
-      const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
-      const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
-      const _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet),
-      const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
-    ];
-
-    if (_selectedIndex >= items.length) {
-      _selectedIndex = 0;
+    final role = _myRole?.toLowerCase();
+    final perms = _myPermissions;
+    if (role == 'admin' || perms == null) {
+      if (_selectedIndex >= _allNavItems.length) _selectedIndex = 0;
+      return List<_NavItem>.from(_allNavItems);
     }
-    return items;
+    final filtered = _allNavItems.where((n) => perms.contains(n.permissionKey)).toList();
+    if (_selectedIndex >= filtered.length) _selectedIndex = 0;
+    return filtered;
   }
 
   static const String _managedProfileDetailRoute = 'detail';
@@ -161,6 +168,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   Future<void> _resolveAccountThenLoad() async {
     await _loadAccountInfo();
     if (!mounted) return;
+    await _loadMyRoleAndPermissions();
+    if (!mounted) return;
     _loadWalletCredits();
     _loadNumbersSummary();
     _loadUsageSummary();
@@ -225,6 +234,21 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
           _subscriptionTier =
               (w['subscription_tier'] as String?)?.toLowerCase();
           _orgStatus = (w['status'] as String?)?.toLowerCase();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadMyRoleAndPermissions() async {
+    try {
+      final res = await NeyvoPulseApi.getMyRole();
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        final role = res['role']?.toString();
+        final perms = res['permissions'];
+        setState(() {
+          _myRole = role;
+          _myPermissions = perms is List ? (perms as List).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList() : null;
         });
       }
     } catch (_) {}
@@ -784,7 +808,8 @@ class _NavItem {
   final String label;
   final IconData icon;
   final String route;
-  const _NavItem(this.label, this.icon, this.route);
+  final String permissionKey;
+  const _NavItem(this.label, this.icon, this.route, this.permissionKey);
 }
 
 /// Sidebar nav item: 36px height, 16px icon, 10px gap. Active = teal + left border.
