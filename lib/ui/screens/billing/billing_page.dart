@@ -216,7 +216,7 @@ class _BillingPageState extends State<BillingPage> {
                           SizedBox(
                             width: 160,
                             child: OutlinedButton(
-                              onPressed: () => _showSubscriptionPlansDialog(context, tier),
+                              onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.subscriptionPlan),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: NeyvoColors.teal,
                                 side: const BorderSide(color: NeyvoColors.teal),
@@ -237,7 +237,7 @@ class _BillingPageState extends State<BillingPage> {
                   child: _VoiceTierBlock(
                     wallet: _wallet,
                     onTierChanged: _load,
-                    onViewTiers: () => _showVoiceTiersDialog(context),
+                    onViewTiers: () => Navigator.of(context).pushNamed(PulseRouteNames.voiceTier),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -285,109 +285,6 @@ class _BillingPageState extends State<BillingPage> {
           ),
         ),
       ],
-    );
-  }
-
-  void _showVoiceTiersDialog(BuildContext context) {
-    const tiers = [
-      {'id': 'neutral', 'name': 'Neutral Human', 'cpm': 25, 'usd': '\$0.25/min'},
-      {'id': 'natural', 'name': 'Natural Human', 'cpm': 35, 'usd': '\$0.35/min'},
-      {'id': 'ultra', 'name': 'Ultra Real Human', 'cpm': 49, 'usd': '\$0.49/min'},
-    ];
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: NeyvoColors.bgBase,
-        title: const Text('Voice tiers'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Credits per minute and approximate cost:', style: NeyvoTextStyles.body),
-              const SizedBox(height: 14),
-              for (final t in tiers) Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(t['name'] as String, style: NeyvoTextStyles.bodyPrimary),
-                    Text('${t['cpm']} cr/min · ${t['usd']}', style: NeyvoTextStyles.body),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  void _showSubscriptionPlansDialog(BuildContext context, String currentTier) {
-    final plans = [
-      {'id': 'free', 'name': 'Free', 'active': currentTier == 'free', 'benefits': ['Neutral voice only', '1 included number']},
-      {'id': 'pro', 'name': 'Pro', 'active': currentTier == 'pro', 'benefits': ['All voice tiers', '3 included numbers', '10% credit bonus']},
-      {'id': 'business', 'name': 'Business', 'active': currentTier == 'business', 'benefits': ['All voice tiers (Neutral, Natural, Ultra)', '10 included numbers', '20% credit bonus', 'Per-operator voice tier']},
-    ];
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: NeyvoColors.bgBase,
-        title: const Text('Subscription plans'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final p in plans) ...[
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: (p['active'] as bool) ? NeyvoColors.teal.withOpacity(0.12) : NeyvoColors.bgRaised.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: (p['active'] as bool) ? NeyvoColors.teal : NeyvoColors.borderSubtle,
-                      width: (p['active'] as bool) ? 2 : 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(p['name'] as String, style: NeyvoTextStyles.heading.copyWith(fontSize: 16)),
-                          if (p['active'] as bool) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: NeyvoColors.teal, borderRadius: BorderRadius.circular(999)),
-                              child: Text('Active', style: NeyvoTextStyles.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ...((p['benefits'] as List<String>).map((b) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('• $b', style: NeyvoTextStyles.body),
-                      ))),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
-        ],
-      ),
     );
   }
 

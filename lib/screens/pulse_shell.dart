@@ -27,6 +27,8 @@ import '../ui/screens/calls/calls_page.dart';
 import '../ui/screens/calls/test_call_page.dart';
 import '../ui/screens/billing/billing_page.dart';
 import '../ui/screens/billing/wallet_page.dart';
+import '../ui/screens/billing/voice_tier_page.dart';
+import '../ui/screens/billing/plan_selector_page.dart';
 import '../ui/screens/integrations/integrations_page.dart';
 import '../ui/screens/voice_studio/voice_studio_page.dart';
 import '../ui/components/calls/incoming_call_overlay.dart';
@@ -773,6 +775,10 @@ extension on _PulseShellState {
         return const BillingPage();
       case PulseRouteNames.wallet:
         return const WalletPage();
+      case PulseRouteNames.voiceTier:
+        return const VoiceTierPage();
+      case PulseRouteNames.subscriptionPlan:
+        return const PlanSelectorPage();
       case PulseRouteNames.settings:
         return const PulseSettingsPage();
       case PulseRouteNames.agency:

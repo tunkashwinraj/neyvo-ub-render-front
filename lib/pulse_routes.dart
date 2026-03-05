@@ -72,12 +72,14 @@ class PulseRouter {
       case PulseRouteNames.wallet:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.wallet));
       case PulseRouteNames.usage:
-      case PulseRouteNames.voiceTier:
-      case PulseRouteNames.subscriptionPlan:
       case PulseRouteNames.addons:
       case PulseRouteNames.payments:
         // Billing is unified in one page for Voice OS.
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
+      case PulseRouteNames.voiceTier:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceTier));
+      case PulseRouteNames.subscriptionPlan:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan));
       case PulseRouteNames.developerConsole:
         return MaterialPageRoute(builder: (_) => const DeveloperConsolePage());
       case PulseRouteNames.settings:

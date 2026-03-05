@@ -296,7 +296,15 @@ class _WalletPageState extends State<WalletPage> {
     final createdAt = t['created_at'];
 
     final bool isCallDebit = callId.isNotEmpty;
-    final bool canGoToBilling = !isCallDebit && (type == 'credit' || type == 'debit' || type == 'purchase' || type == 'welcome_bonus' || type == 'addon_deduction' || type.isEmpty);
+    final bool isSubscription = type == 'subscription_plan' || desc.toLowerCase().contains('plan');
+    final bool canGoToBilling = !isCallDebit &&
+        (type == 'credit' ||
+            type == 'debit' ||
+            type == 'purchase' ||
+            type == 'welcome_bonus' ||
+            type == 'addon_deduction' ||
+            isSubscription ||
+            type.isEmpty);
 
     return InkWell(
       onTap: isCallDebit
@@ -346,7 +354,7 @@ class _WalletPageState extends State<WalletPage> {
                   : canGoToBilling
                       ? TextButton(
                           onPressed: _openBilling,
-                          child: const Text('View in Billing'),
+                          child: Text(isSubscription ? 'View plan' : 'View in Billing'),
                         )
                       : const SizedBox.shrink(),
             ),
