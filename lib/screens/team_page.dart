@@ -28,6 +28,8 @@ class _TeamPageState extends State<TeamPage> {
   String? _myEmail;
   String? _myName;
   String? _myUserId;
+  String? _currentAccountId;
+  List<String> _orgAccountIds = [];
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
   String? _error;
@@ -47,10 +49,20 @@ class _TeamPageState extends State<TeamPage> {
       final results = await Future.wait([
         NeyvoPulseApi.getMyRole(),
         NeyvoPulseApi.listMembers(),
+        NeyvoPulseApi.getAccountInfo(),
+        NeyvoPulseApi.getAccountOrgs(),
       ]);
       final roleRes = results[0] as Map<String, dynamic>;
       final membersRes = results[1] as Map<String, dynamic>;
+      final accountRes = results[2] as Map<String, dynamic>;
+      final orgsRes = results[3] as Map<String, dynamic>;
       if (!mounted) return;
+      final orgsList = orgsRes['orgs'] as List? ?? [];
+      final orgIds = orgsList
+          .map((e) => (e is Map ? e['account_id'] : e?.toString())?.toString())
+          .where((s) => s != null && s.isNotEmpty)
+          .cast<String>()
+          .toList();
       setState(() {
         _myRole = roleRes['role']?.toString();
         _myEmail = roleRes['email']?.toString();
@@ -61,6 +73,8 @@ class _TeamPageState extends State<TeamPage> {
         _members = List<Map<String, dynamic>>.from(
           membersRes['members'] as List? ?? [],
         );
+        _currentAccountId = accountRes['account_id']?.toString();
+        _orgAccountIds = orgIds;
         _loading = false;
       });
     } catch (e) {
@@ -69,6 +83,18 @@ class _TeamPageState extends State<TeamPage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _switchOrg(String accountId) async {
+    if (accountId == _currentAccountId) return;
+    try {
+      await NeyvoPulseApi.linkUserToAccount(accountId);
+      if (!mounted) return;
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
     }
   }
 
@@ -139,6 +165,42 @@ class _TeamPageState extends State<TeamPage> {
           }(),
           style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
         ),
+        if (_orgAccountIds.length > 1) ...[
+          const SizedBox(height: NeyvoSpacing.sm),
+          Row(
+            children: [
+              Text(
+                'Current org: ',
+                style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
+              ),
+              Text(
+                _currentAccountId ?? '—',
+                style: NeyvoTextStyles.label.copyWith(
+                  color: NeyvoColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: NeyvoSpacing.md),
+              DropdownButton<String>(
+                value: _currentAccountId,
+                isDense: true,
+                underline: const SizedBox(),
+                hint: const Text('Switch org'),
+                items: _orgAccountIds
+                    .map((id) => DropdownMenuItem<String>(value: id, child: Text(id)))
+                    .toList(),
+                onChanged: (String? id) {
+                  if (id != null) _switchOrg(id);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: NeyvoSpacing.sm),
+          Text(
+            'You belong to multiple orgs. Switch to see all members in that org.',
+            style: NeyvoTextStyles.caption.copyWith(color: NeyvoColors.textSecondary),
+          ),
+        ],
         const SizedBox(height: NeyvoSpacing.lg),
         if (_myRole == 'admin') ...[
           OutlinedButton.icon(

@@ -64,6 +64,10 @@ class NeyvoPulseApi {
   /// GET /api/ub/status – UB model status. Returns: { ok, status, summary, departments, faqTopics, error? }
   static Future<Map<String, dynamic>> getUbStatus() async => _get('/api/ub/status');
 
+  /// GET /api/pulse/account/orgs – list of orgs (account_id) the current user is a member of. For org switcher.
+  static Future<Map<String, dynamic>> getAccountOrgs() async =>
+      _get('/api/pulse/account/orgs');
+
   /// POST /api/pulse/account/link – link current user (X-User-Id) to an account. Body: { account_id }.
   /// Does not use _post so we send only the new account_id (backend uses X-User-Id).
   static Future<Map<String, dynamic>> linkUserToAccount(String accountId) async {
