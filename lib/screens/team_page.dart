@@ -245,10 +245,14 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         email: email,
         role: _role,
         permissions: permissions,
+        sendInviteEmail: true,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Team member invited')),
+        SnackBar(
+          content: Text('Invite sent to $email. If they don\'t receive it, ask them to check spam.'),
+          duration: const Duration(seconds: 5),
+        ),
       );
       widget.onSaved();
     } catch (e) {

@@ -465,15 +465,18 @@ class NeyvoPulseApi {
       _get('/api/pulse/members/me');
 
   /// Invite a team member by email with role and optional permissions (staff only).
-  /// Backend may implement POST /api/pulse/members/invite with body: { email, role, permissions? }.
+  /// Backend must send an invite email to the given address; send_invite_email: true requests that.
+  /// POST /api/pulse/members/invite body: { email, role, permissions?, send_invite_email }.
   static Future<Map<String, dynamic>> inviteMember({
     required String email,
     required String role,
     List<String>? permissions,
+    bool sendInviteEmail = true,
   }) async {
     final body = <String, dynamic>{
       'email': email.trim(),
       'role': role,
+      'send_invite_email': sendInviteEmail,
     };
     if (permissions != null && permissions.isNotEmpty) {
       body['permissions'] = permissions;
