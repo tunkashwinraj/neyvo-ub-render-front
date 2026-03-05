@@ -5,6 +5,8 @@ import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../widgets/add_credits_modal.dart';
+import 'plan_selector_page.dart';
+import 'voice_tier_page.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -216,7 +218,22 @@ class _BillingPageState extends State<BillingPage> {
                           SizedBox(
                             width: 160,
                             child: OutlinedButton(
-                              onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.subscriptionPlan),
+                              onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => Scaffold(
+                                  appBar: AppBar(
+                                    title: const Text('Subscription plans'),
+                                    backgroundColor: NeyvoColors.bgBase,
+                                    foregroundColor: NeyvoColors.textPrimary,
+                                    leading: IconButton(
+                                      icon: const Icon(Icons.arrow_back),
+                                      onPressed: () => Navigator.of(context).pop(),
+                                    ),
+                                  ),
+                                  body: const PlanSelectorPage(),
+                                ),
+                              ),
+                            ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: NeyvoColors.teal,
                                 side: const BorderSide(color: NeyvoColors.teal),
@@ -237,7 +254,22 @@ class _BillingPageState extends State<BillingPage> {
                   child: _VoiceTierBlock(
                     wallet: _wallet,
                     onTierChanged: _load,
-                    onViewTiers: () => Navigator.of(context).pushNamed(PulseRouteNames.voiceTier),
+                    onViewTiers: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Voice tier'),
+                            backgroundColor: NeyvoColors.bgBase,
+                            foregroundColor: NeyvoColors.textPrimary,
+                            leading: IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                          body: const VoiceTierPage(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

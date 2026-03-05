@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
-import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
+import 'plan_selector_page.dart';
 
 class VoiceTierPage extends StatefulWidget {
   const VoiceTierPage({super.key});
@@ -144,8 +144,22 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
                               ),
                               const SizedBox(height: 6),
                               TextButton(
-                                onPressed: () => Navigator.of(context, rootNavigator: true)
-                                    .pushNamed(PulseRouteNames.subscriptionPlan),
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => Scaffold(
+                                      appBar: AppBar(
+                                        title: const Text('Subscription plans'),
+                                        backgroundColor: NeyvoColors.bgBase,
+                                        foregroundColor: NeyvoColors.textPrimary,
+                                        leading: IconButton(
+                                          icon: const Icon(Icons.arrow_back),
+                                          onPressed: () => Navigator.of(context).pop(),
+                                        ),
+                                      ),
+                                      body: const PlanSelectorPage(),
+                                    ),
+                                  ),
+                                ),
                                 child: const Text('View plans'),
                               ),
                             ],

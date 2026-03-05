@@ -8,6 +8,8 @@ import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_detail_page.dart';
+import 'plan_selector_page.dart';
+import 'voice_tier_page.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -170,7 +172,22 @@ class _WalletPageState extends State<WalletPage> {
                       child: Text('Wallet', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                     ),
                     InkWell(
-                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.voiceTier),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => Scaffold(
+                            appBar: AppBar(
+                              title: const Text('Voice tier'),
+                              backgroundColor: NeyvoColors.bgBase,
+                              foregroundColor: NeyvoColors.textPrimary,
+                              leading: IconButton(
+                                icon: const Icon(Icons.arrow_back),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                            body: const VoiceTierPage(),
+                          ),
+                        ),
+                      ),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -186,7 +203,22 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(width: 8),
                     InkWell(
-                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.subscriptionPlan),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => Scaffold(
+                            appBar: AppBar(
+                              title: const Text('Subscription plans'),
+                              backgroundColor: NeyvoColors.bgBase,
+                              foregroundColor: NeyvoColors.textPrimary,
+                              leading: IconButton(
+                                icon: const Icon(Icons.arrow_back),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                            body: const PlanSelectorPage(),
+                          ),
+                        ),
+                      ),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
