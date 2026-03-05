@@ -188,14 +188,14 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
     setState(() => _saving = true);
     try {
       await NeyvoPulseApi.updateSettings(
-        schoolName: _schoolName.text.trim().isEmpty ? null : _schoolName.text.trim(),
+        schoolName: null,
         defaultLateFee: _defaultLateFee.text.trim().isEmpty ? null : _defaultLateFee.text.trim(),
         currency: _currency.text.trim().isEmpty ? null : _currency.text.trim(),
         timezone: _timezoneValue,
         inboundEnabled: _inboundEnabled,
-        primaryPhoneE164: _primaryPhoneController.text.trim().isEmpty ? null : _primaryPhoneController.text.trim(),
-        vapiAssistantId: _vapiAssistantId.text.trim().isEmpty ? null : _vapiAssistantId.text.trim(),
-        vapiPhoneNumberId: _vapiPhoneNumberId.text.trim().isEmpty ? null : _vapiPhoneNumberId.text.trim(),
+        primaryPhoneE164: null,
+        vapiAssistantId: null,
+        vapiPhoneNumberId: null,
         defaultAgentId: _defaultAgentId,
       );
       if (mounted) {
@@ -272,7 +272,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             Tab(text: 'Organization'),
             Tab(text: 'Team'),
             Tab(text: 'Security'),
-            Tab(text: 'Advanced'),
+            Tab(text: 'API Keys'),
           ],
         ),
         Expanded(
@@ -294,87 +294,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
     return ListView(
       padding: const EdgeInsets.all(NeyvoSpacing.lg),
       children: [
-        Text('Organization', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Text(
-          'Configure your organization and preferences',
-          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.lg),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Billing', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text('Wallet, subscription, numbers cost, add-ons.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                  child: const Text('Open'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Wallet', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text('View balance and transaction history.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.wallet),
-                  child: const Text('Open'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Integrations', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text('Inbound health check and data sync.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.integrations),
-                  child: const Text('Open'),
-                ),
-              ],
-            ),
-          ),
-        ),
+        Text('University of Bridgeport', style: NeyvoType.headlineLarge.copyWith(color: NeyvoTheme.textPrimary)),
         const SizedBox(height: NeyvoSpacing.xl),
         Text('Account', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
         const SizedBox(height: NeyvoSpacing.md),
@@ -382,145 +302,37 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
           color: NeyvoTheme.bgCard,
           child: Padding(
             padding: const EdgeInsets.all(NeyvoSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined, color: NeyvoTheme.textSecondary),
-                  title: Text('Account ID', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        (_accountId != null && _accountId!.length <= 20) ? _accountId! : '—',
-                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-                      ),
-                      if (_accountId != null && _accountId!.length > 20)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            'Backend should return a short Account ID (e.g. 6–8 digits), not the document ID.',
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
-                          ),
-                        )
-                      else if (_accountId == NeyvoPulseApi.defaultAccountId)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            'Account ID is set when your account is created. Use it when contacting support.',
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                        ),
-                    ],
-                  ),
-                  trailing: (_accountId != null && _accountId!.length <= 20)
-                      ? IconButton(
-                          icon: const Icon(Icons.copy),
-                          tooltip: 'Copy',
-                          onPressed: () {
-                            if (_accountId != null) {
-                              Clipboard.setData(ClipboardData(text: _accountId!));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Account ID copied')),
-                              );
-                            }
-                          },
-                        )
-                      : null,
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: NeyvoSpacing.lg, right: NeyvoSpacing.lg, bottom: NeyvoSpacing.sm),
-                  child: Text(
-                    'Your unique account identifier. Use it when linking integrations or contacting support.',
-                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.email_outlined, color: NeyvoTheme.textSecondary),
-                  title: Text('Email', style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textPrimary)),
-                  subtitle: Text(user?.email ?? 'Not signed in', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary)),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.phone_outlined, color: NeyvoTheme.textSecondary),
-                  title: Text('Phone', style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textPrimary)),
-                  subtitle: Text(_userPhone(user), style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary)),
-                ),
-                if (user != null && _userPhone(user) == '—')
-                  Padding(
-                    padding: const EdgeInsets.only(left: NeyvoSpacing.lg, top: 4),
-                    child: Text(
-                      'Add a phone in Firebase Auth (phone sign-in or link phone to this account) to see it here.',
-                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
-                    ),
-                  ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.only(left: NeyvoSpacing.lg, right: NeyvoSpacing.lg, top: NeyvoSpacing.md, bottom: NeyvoSpacing.sm),
-                  child: Text(
-                    'Link to a different account',
-                    style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: NeyvoSpacing.sm),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _linkAccountIdController,
-                          decoration: const InputDecoration(
-                            labelText: 'Account ID (6–8 digits)',
-                            hintText: 'e.g. 12345678',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _linkToAccount(),
-                        ),
-                      ),
-                      const SizedBox(width: NeyvoSpacing.md),
-                      FilledButton(
-                        onPressed: _linkingAccount ? null : _linkToAccount,
-                        child: _linkingAccount ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Link'),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: NeyvoSpacing.lg, right: NeyvoSpacing.lg, bottom: NeyvoSpacing.md),
-                  child: Text(
-                    'Switch this user to another org. You must be signed in (X-User-Id). After linking, the app will reload settings for the new account.',
-                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
-                  ),
-                ),
-              ],
+            child: ListTile(
+              leading: const Icon(Icons.badge_outlined, color: NeyvoTheme.textSecondary),
+              title: Text('Account ID', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+              subtitle: Text(
+                (_accountId != null && _accountId!.length <= 20) ? _accountId! : '—',
+                style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+              ),
+              trailing: (_accountId != null && _accountId!.length <= 20)
+                  ? IconButton(
+                      icon: const Icon(Icons.copy),
+                      tooltip: 'Copy',
+                      onPressed: () {
+                        if (_accountId != null) {
+                          Clipboard.setData(ClipboardData(text: _accountId!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account ID copied')),
+                          );
+                        }
+                      },
+                    )
+                  : null,
             ),
           ),
         ),
-
         const SizedBox(height: NeyvoSpacing.xl),
-        
-        // Organization Information
-        Text('Organization Information', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
-        const SizedBox(height: NeyvoSpacing.md),
         Card(
           color: NeyvoTheme.bgCard,
           child: Padding(
             padding: const EdgeInsets.all(NeyvoSpacing.lg),
             child: Column(
               children: [
-                TextField(
-                  controller: _schoolName,
-                  decoration: const InputDecoration(
-                    labelText: 'Organization Name',
-                    hintText: 'Acme Inc',
-                    prefixIcon: Icon(Icons.business_outlined),
-                  ),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
                 DropdownButtonFormField<String>(
                   value: _timezoneValue,
                   decoration: const InputDecoration(
@@ -533,33 +345,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                       DropdownMenuItem(value: _timezoneValue, child: Text(_timezoneValue)),
                   ],
                   onChanged: (v) => setState(() => _timezoneValue = v ?? 'America/New_York'),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
-                TextField(
-                  controller: _primaryPhoneController,
-                  decoration: InputDecoration(
-                    labelText: 'Phone number (E.164)',
-                    hintText: '+1234567890',
-                    prefixIcon: const Icon(Icons.phone_outlined),
-                    suffixIcon: _verifyingPhone
-                        ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                        : TextButton(
-                            onPressed: _primaryPhoneController.text.trim().isEmpty ? null : () async {
-                              setState(() => _verifyingPhone = true);
-                              try {
-                                // Backend verify endpoint if available; for now just mark as verified
-                                await Future.delayed(const Duration(milliseconds: 800));
-                                if (mounted) setState(() { _phoneVerified = true; _verifyingPhone = false; });
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number format accepted. Save to update.')));
-                              } catch (_) {
-                                if (mounted) setState(() => _verifyingPhone = false);
-                              }
-                            },
-                            child: const Text('Verify'),
-                          ),
-                  ),
-                  keyboardType: TextInputType.phone,
-                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: NeyvoSpacing.md),
                 DropdownButtonFormField<String>(
@@ -589,91 +374,14 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                   ),
                   secondary: const Icon(Icons.call_received_outlined),
                 ),
-                const SizedBox(height: NeyvoSpacing.md),
-                ExpansionTile(
-                  title: Text('Advanced', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                  initiallyExpanded: _showAdvanced,
-                  onExpansionChanged: (v) => setState(() => _showAdvanced = v),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: NeyvoSpacing.md, right: NeyvoSpacing.lg, bottom: NeyvoSpacing.lg),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Voice / Vapi',
-                            style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                          const SizedBox(height: NeyvoSpacing.sm),
-                          TextField(
-                            controller: _vapiAssistantId,
-                            decoration: const InputDecoration(
-                              labelText: 'Vapi Assistant ID',
-                              hintText: 'e.g. from Vapi dashboard',
-                              prefixIcon: Icon(Icons.smart_toy_outlined),
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          const SizedBox(height: NeyvoSpacing.sm),
-                          TextField(
-                            controller: _vapiPhoneNumberId,
-                            decoration: const InputDecoration(
-                              labelText: 'Vapi Phone Number ID',
-                              hintText: 'Optional',
-                              prefixIcon: Icon(Icons.phone_outlined),
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Text('Templates & voice profiles', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
-                          const SizedBox(height: 4),
-                          Text('Seed the template library or voice profiles if the operator wizard shows no options.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                          const SizedBox(height: NeyvoSpacing.sm),
-                          Row(
-                            children: [
-                              TextButton.icon(
-                                icon: const Icon(Icons.refresh, size: 18),
-                                label: const Text('Seed templates'),
-                                onPressed: () async {
-                                  try {
-                                    await NeyvoPulseApi.seedTemplates();
-                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Templates seeded.')));
-                                  } catch (e) {
-                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                icon: const Icon(Icons.record_voice_over, size: 18),
-                                label: const Text('Seed voice profiles'),
-                                onPressed: () async {
-                                  try {
-                                    await NeyvoPulseApi.seedVoiceProfiles();
-                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice profiles seeded.')));
-                                  } catch (e) {
-                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
         ),
-        
         const SizedBox(height: NeyvoSpacing.xl),
-        
-        // Save Button
         FilledButton.icon(
           onPressed: _saving ? null : _save,
-          icon: _saving 
+          icon: _saving
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save),
           label: Text(_saving ? 'Saving...' : 'Save Settings'),
@@ -681,10 +389,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md),
           ),
         ),
-        
         const SizedBox(height: NeyvoSpacing.lg),
-
-        // System Info
         Card(
           color: NeyvoTheme.bgCard,
           child: Padding(
@@ -694,8 +399,51 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
               children: [
                 Text('System Information', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                 const SizedBox(height: NeyvoSpacing.xs),
-                Text('Backend: ${SpeariaApi.baseUrl}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                 Text('Version: 1.0.0', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: NeyvoSpacing.xl),
+        Card(
+          color: NeyvoTheme.bgCard,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md, horizontal: NeyvoSpacing.lg),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_balance_wallet_outlined, color: NeyvoTheme.teal, size: 24),
+                          const SizedBox(width: 12),
+                          Text('Billing', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 32, color: NeyvoTheme.borderDefault),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.wallet),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_balance_outlined, color: NeyvoTheme.teal, size: 24),
+                          const SizedBox(width: 12),
+                          Text('Wallet', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

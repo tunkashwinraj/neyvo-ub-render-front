@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
 import 'pulse_dashboard_page.dart';
@@ -254,6 +255,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     } catch (_) {}
   }
 
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    NeyvoPulseApi.setDefaultAccountId(null);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('neyvo_pulse_onboarding_completed');
+    } catch (_) {}
+  }
+
   Future<void> _loadAccountInfo() async {
     try {
       final res = await NeyvoPulseApi.getAccountInfo();
@@ -381,62 +391,33 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                 ),
                 const Divider(height: 1, color: NeyvoColors.borderSubtle),
-                // Credits at bottom (label size, teal)
-                if (_walletCredits != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Text(
-                      '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} cr',
-                      style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal, fontSize: 12),
-                    ),
-                  ),
-                if (_accountName != null && _accountName!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                    child: Text(
-                      _accountName!,
-                      style: NeyvoTextStyles.micro,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                if (_subscriptionTier != null && _subscriptionTier!.isNotEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: NeyvoColors.teal.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: NeyvoColors.teal.withOpacity(0.3),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Text(
-                          _subscriptionTier == 'business'
-                              ? 'Business'
-                              : _subscriptionTier == 'pro'
-                                  ? 'Pro'
-                                  : 'Free',
-                          style: NeyvoTextStyles.micro.copyWith(
-                            color: NeyvoColors.teal,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Account ID: ${_accountIdDisplay ?? '—'}',
+                        style: NeyvoTextStyles.micro,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        FirebaseAuth.instance.currentUser?.email ?? '—',
+                        style: NeyvoTextStyles.micro,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                // Account ID shown in Settings → Organization only (not raw org doc id in sidebar)
+                ),
                 ListTile(
                   dense: true,
                   leading: Icon(Icons.logout, size: 18, color: NeyvoColors.textMuted),
                   title: Text('Sign out', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-                  onTap: () async => await FirebaseAuth.instance.signOut(),
+                  onTap: () async => await _signOut(),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -594,7 +575,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                (_accountName?.isNotEmpty == true ? _accountName!.substring(0, 1) : '?').toUpperCase(),
+                                ((FirebaseAuth.instance.currentUser?.email ?? '').isNotEmpty
+                                    ? (FirebaseAuth.instance.currentUser!.email!.substring(0, 1))
+                                    : '?').toUpperCase(),
                                 style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal, fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                             ),
@@ -603,38 +586,36 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                           ],
                         ),
                         itemBuilder: (context) => [
-                          if (_accountName != null && _accountName!.isNotEmpty)
-                            PopupMenuItem(
-                              enabled: false,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(_accountName!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary)),
-                                  if (_accountIdDisplay != null && _accountIdDisplay!.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        'Account ID: $_accountIdDisplay',
-                                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                          PopupMenuItem(
+                            enabled: false,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Account ID: ${_accountIdDisplay ?? '—'}',
+                                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    FirebaseAuth.instance.currentUser?.email ?? '—',
+                                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                                  ),
+                                ),
+                              ],
                             ),
-                          const PopupMenuItem(value: 'switch_org', child: Row(children: [Icon(Icons.swap_horiz, size: 20), SizedBox(width: 12), Text('Switch org')])),
+                          ),
                           const PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.settings_outlined, size: 20), SizedBox(width: 12), Text('Settings')])),
                           const PopupMenuItem(value: 'signout', child: Row(children: [Icon(Icons.logout, size: 20), SizedBox(width: 12), Text('Sign out')])),
                         ],
                         onSelected: (value) {
-                          if (value == 'switch_org') {
-                            _showOrgSwitchDialog();
-                          } else if (value == 'settings') {
+                          if (value == 'settings') {
                             final items = _navItems;
                             final idx = items.indexWhere((n) => n.label == 'Settings');
                             if (idx >= 0) setState(() => _selectedIndex = idx);
                           } else if (value == 'signout') {
-                            FirebaseAuth.instance.signOut();
+                            _signOut();
                           }
                         },
                       ),

@@ -97,6 +97,7 @@ class _BillingPageState extends State<BillingPage> {
         .toLowerCase();
 
     final numbers = (_numbers?['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final totalNumbers = (_numbers?['total_numbers'] as num?)?.toInt() ?? numbers.length;
     final monthlyCost = (_numbers?['monthly_number_cost'] ?? _numbers?['monthly_cost'])
             ?.toString() ??
         '\$0.00';
@@ -116,6 +117,22 @@ class _BillingPageState extends State<BillingPage> {
                     Expanded(
                       child: Text('Billing', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                     ),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.list_alt_outlined, size: 18, color: NeyvoColors.teal),
+                            const SizedBox(width: 6),
+                            Text('View transactions', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     TextButton.icon(
                       onPressed: _load,
                       icon: const Icon(Icons.refresh, size: 18),
@@ -160,12 +177,6 @@ class _BillingPageState extends State<BillingPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
-                  icon: const Icon(Icons.list_alt, size: 18),
-                  label: const Text('View transactions'),
-                ),
                 const SizedBox(height: 20),
                 _sectionTitle('Subscription'),
                 const SizedBox(height: 10),
@@ -192,9 +203,10 @@ class _BillingPageState extends State<BillingPage> {
                                 ] else if (tier == 'pro') ...[
                                   Text('• All voice tiers', style: NeyvoTextStyles.body),
                                   Text('• 3 included numbers', style: NeyvoTextStyles.body),
+                                  Text('• 10% credit bonus on purchases', style: NeyvoTextStyles.body),
                                 ] else
                                   Text(
-                                    'Tier unlocks voice quality, outbound features, and credits bonuses.',
+                                    'Tier unlocks voice quality, outbound features, and credit bonuses.',
                                     style: NeyvoTextStyles.body,
                                   ),
                               ],
@@ -202,19 +214,15 @@ class _BillingPageState extends State<BillingPage> {
                           ),
                           const SizedBox(width: 16),
                           SizedBox(
-                            width: 220,
-                            child: FilledButton(
-                              onPressed: () async {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Plan management is available in the backend subscription flow.')),
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                backgroundColor: NeyvoColors.teal,
-                                foregroundColor: Colors.white,
+                            width: 160,
+                            child: OutlinedButton(
+                              onPressed: () => _showSubscriptionPlansDialog(context, tier),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: NeyvoColors.teal,
+                                side: const BorderSide(color: NeyvoColors.teal),
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
-                              child: const Text('Upgrade'),
+                              child: const Text('View plans'),
                             ),
                           ),
                         ],
@@ -229,10 +237,11 @@ class _BillingPageState extends State<BillingPage> {
                   child: _VoiceTierBlock(
                     wallet: _wallet,
                     onTierChanged: _load,
+                    onViewTiers: () => _showVoiceTiersDialog(context),
                   ),
                 ),
                 const SizedBox(height: 20),
-                _sectionTitle('Numbers cost'),
+                _sectionTitle('Numbers'),
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
                   child: Row(
@@ -241,9 +250,17 @@ class _BillingPageState extends State<BillingPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Cost per number: $perNumber', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-                            const SizedBox(height: 4),
-                            Text('Monthly total: $monthlyCost', style: NeyvoTextStyles.body),
+                            if (numbers.isEmpty) ...[
+                              Text('No numbers yet', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                              const SizedBox(height: 4),
+                              Text('Add a number to get started. Manage numbers on the Lines page.', style: NeyvoTextStyles.body),
+                            ] else ...[
+                              Text('You have ${totalNumbers} number${totalNumbers == 1 ? '' : 's'}', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                              const SizedBox(height: 4),
+                              Text('Cost per number: $perNumber', style: NeyvoTextStyles.body),
+                              const SizedBox(height: 2),
+                              Text('Monthly total: $monthlyCost', style: NeyvoTextStyles.body),
+                            ],
                           ],
                         ),
                       ),
@@ -251,41 +268,14 @@ class _BillingPageState extends State<BillingPage> {
                       SizedBox(
                         width: 220,
                         child: FilledButton(
-                          onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed('/pulse/phone-numbers'),
+                          onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers),
                           style: FilledButton.styleFrom(
                             backgroundColor: NeyvoColors.teal,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: const Text('Manage numbers'),
+                          child: Text(numbers.isEmpty ? 'Add number' : 'Manage numbers'),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _sectionTitle('Add-ons'),
-                const SizedBox(height: 10),
-                NeyvoGlassPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _addonTile(
-                        title: 'HIPAA',
-                        subtitle: 'Compliance-grade handling for covered workflows.',
-                        comingSoon: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _addonTile(
-                        title: 'Shield',
-                        subtitle: 'Spam and fraud protection for numbers.',
-                        comingSoon: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _addonTile(
-                        title: 'Concurrency',
-                        subtitle: 'Increase simultaneous call capacity.',
-                        comingSoon: true,
                       ),
                     ],
                   ),
@@ -298,59 +288,120 @@ class _BillingPageState extends State<BillingPage> {
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Text(text, style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary));
-  }
-
-  Widget _addonTile({
-    required String title,
-    required String subtitle,
-    required bool comingSoon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: NeyvoColors.bgRaised.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeyvoColors.borderSubtle),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+  void _showVoiceTiersDialog(BuildContext context) {
+    const tiers = [
+      {'id': 'neutral', 'name': 'Neutral Human', 'cpm': 25, 'usd': '\$0.25/min'},
+      {'id': 'natural', 'name': 'Natural Human', 'cpm': 35, 'usd': '\$0.35/min'},
+      {'id': 'ultra', 'name': 'Ultra Real Human', 'cpm': 49, 'usd': '\$0.49/min'},
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NeyvoColors.bgBase,
+        title: const Text('Voice tiers'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Credits per minute and approximate cost:', style: NeyvoTextStyles.body),
+              const SizedBox(height: 14),
+              for (final t in tiers) Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(title, style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(width: 8),
-                    if (comingSoon)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: NeyvoColors.borderSubtle,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text('Coming soon', style: NeyvoTextStyles.micro),
-                      ),
+                    Text(t['name'] as String, style: NeyvoTextStyles.bodyPrimary),
+                    Text('${t['cpm']} cr/min · ${t['usd']}', style: NeyvoTextStyles.body),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(subtitle, style: NeyvoTextStyles.body),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
         ],
       ),
     );
+  }
+
+  void _showSubscriptionPlansDialog(BuildContext context, String currentTier) {
+    final plans = [
+      {'id': 'free', 'name': 'Free', 'active': currentTier == 'free', 'benefits': ['Neutral voice only', '1 included number']},
+      {'id': 'pro', 'name': 'Pro', 'active': currentTier == 'pro', 'benefits': ['All voice tiers', '3 included numbers', '10% credit bonus']},
+      {'id': 'business', 'name': 'Business', 'active': currentTier == 'business', 'benefits': ['All voice tiers (Neutral, Natural, Ultra)', '10 included numbers', '20% credit bonus', 'Per-operator voice tier']},
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NeyvoColors.bgBase,
+        title: const Text('Subscription plans'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final p in plans) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: (p['active'] as bool) ? NeyvoColors.teal.withOpacity(0.12) : NeyvoColors.bgRaised.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (p['active'] as bool) ? NeyvoColors.teal : NeyvoColors.borderSubtle,
+                      width: (p['active'] as bool) ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(p['name'] as String, style: NeyvoTextStyles.heading.copyWith(fontSize: 16)),
+                          if (p['active'] as bool) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: NeyvoColors.teal, borderRadius: BorderRadius.circular(999)),
+                              child: Text('Active', style: NeyvoTextStyles.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...((p['benefits'] as List<String>).map((b) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('• $b', style: NeyvoTextStyles.body),
+                      ))),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Text(text, style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary));
   }
 }
 
 class _VoiceTierBlock extends StatelessWidget {
   final Map<String, dynamic>? wallet;
   final VoidCallback onTierChanged;
+  final VoidCallback? onViewTiers;
 
-  const _VoiceTierBlock({this.wallet, required this.onTierChanged});
+  const _VoiceTierBlock({this.wallet, required this.onTierChanged, this.onViewTiers});
 
   static const Map<String, String> _tierLabels = {
     'neutral': 'Neutral Human',
@@ -360,11 +411,12 @@ class _VoiceTierBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentTier = (wallet?['voice_tier'] ?? wallet?['tier'] ?? 'neutral').toString().toLowerCase();
-    final tierDisplay = (wallet?['tier_display'] ?? _tierLabels[currentTier] ?? 'Neutral Human').toString();
-    final cpm = (wallet?['credits_per_minute'] as num?)?.toInt() ?? 25;
-    final unlocked = (wallet?['unlocked_tiers'] as List<dynamic>?)?.map((e) => e.toString().toLowerCase()).toList() ?? ['neutral'];
-    final canChange = unlocked.length > 1;
+    final currentTier = (wallet?['voice_tier'] ?? wallet?['tier'] ?? 'ultra').toString().toLowerCase();
+    final tierDisplay = (wallet?['tier_display'] ?? _tierLabels[currentTier] ?? 'Ultra Real Human').toString();
+    final cpm = (wallet?['credits_per_minute'] as num?)?.toInt() ?? 49;
+    final unlocked = (wallet?['unlocked_tiers'] as List<dynamic>?)?.map((e) => e.toString().toLowerCase()).toList();
+    final canChange = unlocked != null && unlocked.length > 1;
+    final effectiveUnlocked = unlocked ?? ['neutral', 'natural', 'ultra'];
 
     return Row(
       children: [
@@ -378,22 +430,30 @@ class _VoiceTierBlock extends StatelessWidget {
             ],
           ),
         ),
+        if (onViewTiers != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: TextButton(
+              onPressed: onViewTiers,
+              child: const Text('View voice tiers'),
+            ),
+          ),
         if (canChange)
           SizedBox(
             width: 200,
             child: DropdownButtonFormField<String>(
-              value: _tierLabels.containsKey(currentTier) ? currentTier : 'neutral',
+              value: _tierLabels.containsKey(currentTier) ? currentTier : 'ultra',
               decoration: InputDecoration(
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
               dropdownColor: NeyvoColors.bgOverlay,
               items: [
-                if (unlocked.contains('neutral'))
+                if (effectiveUnlocked.contains('neutral'))
                   DropdownMenuItem(value: 'neutral', child: Text(_tierLabels['neutral']!, style: NeyvoTextStyles.body)),
-                if (unlocked.contains('natural'))
+                if (effectiveUnlocked.contains('natural'))
                   DropdownMenuItem(value: 'natural', child: Text(_tierLabels['natural']!, style: NeyvoTextStyles.body)),
-                if (unlocked.contains('ultra'))
+                if (effectiveUnlocked.contains('ultra'))
                   DropdownMenuItem(value: 'ultra', child: Text(_tierLabels['ultra']!, style: NeyvoTextStyles.body)),
               ],
               onChanged: (String? value) async {
