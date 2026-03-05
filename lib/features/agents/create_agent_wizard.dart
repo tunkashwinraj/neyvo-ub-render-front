@@ -3,10 +3,10 @@
 
 import 'package:flutter/material.dart';
 
+import '../../neyvo_pulse_api.dart';
 import '../../theme/neyvo_theme.dart';
 import '../business_intelligence/bi_wizard_api_service.dart';
 import '../managed_profiles/managed_profile_api_service.dart';
-//cmd new
 class CreateAgentWizard extends StatefulWidget {
   const CreateAgentWizard({super.key});
 
@@ -99,10 +99,6 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
   }
 
   Future<void> _create() async {
-    if (_biStatus != 'ready') {
-      setState(() => _error = 'Set up your business profile first in Launch Wizard.');
-      return;
-    }
     final goal = _selectedGoals.isNotEmpty
         ? _selectedGoals.join('. ')
         : _defaultGoalForRole(_role);
@@ -116,17 +112,46 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     }
     setState(() { _saving = true; _error = null; });
     try {
-      final res = await ManagedProfileApiService.createProfileFromBi(
-        role: _role,
-        goal: goal,
-        allowedActions: allowed,
-        tone: _tone,
-        direction: 'inbound',
-      );
-      if (res['error'] != null) {
-        setState(() => _error = res['error'].toString());
+      if (_biStatus == 'ready') {
+        final res = await ManagedProfileApiService.createProfileFromBi(
+          role: _role,
+          goal: goal,
+          allowedActions: allowed,
+          tone: _tone,
+          direction: 'inbound',
+        );
+        if (res['error'] != null) {
+          setState(() => _error = res['error'].toString());
+        } else {
+          if (mounted) Navigator.of(context).pop(true);
+        }
       } else {
-        if (mounted) Navigator.of(context).pop(true);
+        // Create without BI: use createProfile with minimal org info.
+        String businessName = 'Voice Operator';
+        String phoneNumber = '+15550000000';
+        try {
+          final account = await NeyvoPulseApi.getAccountInfo();
+          final name = account['name'] ?? account['organization_name'] ?? '';
+          if (name.toString().trim().isNotEmpty) businessName = name.toString().trim();
+          final phone = account['primary_phone_e164'] ?? account['primary_phone'] ?? '';
+          if (phone.toString().trim().isNotEmpty) phoneNumber = phone.toString().trim();
+        } catch (_) {}
+        final res = await ManagedProfileApiService.createProfile({
+          'schema_version': 2,
+          'business_name': businessName,
+          'phone_number': phoneNumber,
+          'role': _role,
+          'goal': goal,
+          'allowed_actions': allowed,
+          'direction': 'inbound',
+          'conversation_profile': {'tone': _tone},
+          'profile_name': '$businessName · ${_role == 'support' ? 'Support' : _role}',
+        });
+        if (res['error'] != null) {
+          setState(() => _error = res['error'].toString());
+        } else {
+          if (mounted) Navigator.of(context).pop(true);
+        }
       }
     } catch (e) {
       setState(() => _error = e.toString());
@@ -142,30 +167,6 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         content: SizedBox(
           width: 200,
           child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
-        ),
-      );
-    }
-    if (_biStatus != 'ready') {
-      return AlertDialog(
-        title: const Text('Create Operator'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Icon(Icons.info_outline, size: 48, color: NeyvoColors.warning),
-            const SizedBox(height: 16),
-            Text(
-              'Set up your business profile first to create the right agents.',
-              style: NeyvoTextStyles.body,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-              child: const Text('Go to Launch Wizard'),
-            ),
-          ],
         ),
       );
     }

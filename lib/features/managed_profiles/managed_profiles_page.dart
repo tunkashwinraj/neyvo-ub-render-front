@@ -3,8 +3,6 @@
 
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
-import '../../pulse_route_names.dart';
-import '../business_intelligence/bi_wizard_api_service.dart';
 import '../agents/create_agent_wizard.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
@@ -45,25 +43,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
   }
 
   Future<void> _openCreateAgent() async {
-    // Check BI status first
-    try {
-      final res = await BiWizardApiService.getStatus();
-      if (!mounted) return;
-      final status = (res['status'] as String?)?.toLowerCase() ?? 'missing';
-      if (status != 'ready') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Set up your business profile first in Launch Wizard.'),
-            action: SnackBarAction(
-              label: 'Go',
-              onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.launch),
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    } catch (_) {}
+    // No business wizard gate — allow creating operators directly.
     final created = await showDialog<bool>(
       context: context,
       builder: (ctx) => const CreateAgentWizard(),
