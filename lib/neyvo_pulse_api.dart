@@ -460,16 +460,24 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> setMemberRole(String userId, String role) async =>
       _patch('/api/pulse/members/$userId', {'role': role});
 
-  /// Update member role and permissions (admin only).
-  /// PATCH /api/pulse/members/<user_id> body: { role, permissions? }
+  /// Update member role, permissions, name, staff_id, phone (admin only).
+  /// PATCH /api/pulse/members/<user_id> body: { role?, permissions?, name?, staff_id?, phone?, email? }
   static Future<Map<String, dynamic>> updateMember(
     String userId, {
     String? role,
     List<String>? permissions,
+    String? name,
+    String? staffId,
+    String? phone,
+    String? email,
   }) async {
     final body = <String, dynamic>{};
     if (role != null && role.isNotEmpty) body['role'] = role;
     if (permissions != null) body['permissions'] = permissions;
+    if (name != null) body['name'] = name.trim();
+    if (staffId != null) body['staff_id'] = staffId.trim();
+    if (phone != null) body['phone'] = phone.trim();
+    if (email != null && email.trim().isNotEmpty) body['email'] = email.trim();
     return _patch('/api/pulse/members/$userId', body);
   }
 
@@ -482,22 +490,32 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getMyRole() async =>
       _get('/api/pulse/members/me');
 
-  /// Invite a team member by email with role and optional permissions (staff only).
-  /// Backend must send an invite email to the given address; send_invite_email: true requests that.
-  /// POST /api/pulse/members/invite body: { email, role, permissions?, send_invite_email }.
+  /// Invite a team member by email with role and optional permissions.
+  /// Name is required; staff_id and phone are optional. Backend sends invite email when send_invite_email is true.
+  /// POST /api/pulse/members/invite body: { name, email, role, staff_id?, phone?, permissions?, send_invite_email }.
   static Future<Map<String, dynamic>> inviteMember({
+    required String name,
     required String email,
     required String role,
     List<String>? permissions,
+    String? staffId,
+    String? phone,
     bool sendInviteEmail = true,
   }) async {
     final body = <String, dynamic>{
+      'name': name.trim(),
       'email': email.trim(),
       'role': role,
       'send_invite_email': sendInviteEmail,
     };
     if (permissions != null && permissions.isNotEmpty) {
       body['permissions'] = permissions;
+    }
+    if (staffId != null && staffId.trim().isNotEmpty) {
+      body['staff_id'] = staffId.trim();
+    }
+    if (phone != null && phone.trim().isNotEmpty) {
+      body['phone'] = phone.trim();
     }
     return _post('/api/pulse/members/invite', body);
   }

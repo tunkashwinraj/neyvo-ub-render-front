@@ -26,6 +26,7 @@ class TeamPage extends StatefulWidget {
 class _TeamPageState extends State<TeamPage> {
   String? _myRole;
   String? _myEmail;
+  String? _myName;
   String? _myUserId;
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
@@ -53,6 +54,9 @@ class _TeamPageState extends State<TeamPage> {
       setState(() {
         _myRole = roleRes['role']?.toString();
         _myEmail = roleRes['email']?.toString();
+        _myName = (roleRes['name'] ?? '').toString().trim().isNotEmpty
+            ? roleRes['name']?.toString().trim()
+            : null;
         _myUserId = roleRes['user_id']?.toString();
         _members = List<Map<String, dynamic>>.from(
           membersRes['members'] as List? ?? [],
@@ -127,9 +131,11 @@ class _TeamPageState extends State<TeamPage> {
         Text(
           () {
             final role = _myRole ?? '—';
+            final name = (_myName ?? '').trim();
             final email = (_myEmail ?? '').trim();
-            if (email.isEmpty) return 'Your role: $role';
-            return 'Your role: $role · $email';
+            final nameOrEmail = name.isNotEmpty ? name : (email.isNotEmpty ? email : '');
+            if (nameOrEmail.isEmpty) return 'Your role: $role';
+            return 'Your role: $role · $nameOrEmail';
           }(),
           style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
         ),
@@ -158,6 +164,8 @@ class _TeamPageState extends State<TeamPage> {
           )
         else
           ..._members.map((m) {
+            final rawName = m['name'];
+            final name = rawName == null ? '' : rawName.toString().trim();
             final rawEmail = m['email'];
             final email = rawEmail == null ? '' : rawEmail.toString().trim();
             final userId = m['user_id'] ?? m['id'] ?? '?';
@@ -165,12 +173,14 @@ class _TeamPageState extends State<TeamPage> {
             final perms = m['permissions'];
             final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
             String display;
-            if (email.isNotEmpty) {
+            if (name.isNotEmpty) {
+              display = name;
+            } else if (email.isNotEmpty) {
               display = email;
             } else if (_myUserId != null &&
                 userId.toString() == _myUserId &&
-                (_myEmail ?? '').trim().isNotEmpty) {
-              display = _myEmail!.trim();
+                (_myName ?? _myEmail ?? '').toString().trim().isNotEmpty) {
+              display = (_myName ?? _myEmail ?? '').trim();
             } else {
               display = userId.toString();
             }
@@ -254,14 +264,16 @@ class _TeamPageState extends State<TeamPage> {
   Future<void> _confirmRemoveMember(Map<String, dynamic> member) async {
     final userId = (member['user_id'] ?? member['id'] ?? '').toString();
     if (userId.isEmpty) return;
-    final email = (member['email'] ?? '').toString();
+    final name = (member['name'] ?? '').toString().trim();
+    final email = (member['email'] ?? '').toString().trim();
+    final displayLabel = name.isNotEmpty ? name : (email.isNotEmpty ? email : userId);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: NeyvoColors.bgBase,
         title: const Text('Remove team member'),
         content: Text(
-          'Remove ${email.isNotEmpty ? email : userId} from this team?',
+          'Remove $displayLabel from this team?',
           style: NeyvoTextStyles.body,
         ),
         actions: [
@@ -308,19 +320,26 @@ class _AddMemberDialog extends StatefulWidget {
 }
 
 class _AddMemberDialogState extends State<_AddMemberDialog> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _staffIdController = TextEditingController();
+  final _phoneController = TextEditingController();
   String _role = 'staff';
   final Set<String> _selectedPermissions = {};
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
+    _staffIdController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   bool get _canSubmit {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    if (email.isEmpty) return false;
+    if (name.isEmpty || email.isEmpty) return false;
     if (_role == 'staff') {
       return _selectedPermissions.isNotEmpty;
     }
@@ -329,15 +348,21 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final staffId = _staffIdController.text.trim();
+    final phone = _phoneController.text.trim();
     final list = _selectedPermissions.toList();
     list.sort();
     final permissions = _role == 'staff' ? list : null;
     try {
       await NeyvoPulseApi.inviteMember(
+        name: name,
         email: email,
         role: _role,
         permissions: permissions,
+        staffId: staffId.isEmpty ? null : staffId,
+        phone: phone.isEmpty ? null : phone,
         sendInviteEmail: true,
       );
       if (!mounted) return;
@@ -370,11 +395,40 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Name *',
+                hintText: 'Full name',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Email *',
                 hintText: 'colleague@example.com',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _staffIdController,
+              decoration: const InputDecoration(
+                labelText: 'Staff ID (optional)',
+                hintText: 'Staff identifier',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone (optional)',
+                hintText: 'Phone number',
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -463,6 +517,9 @@ class _EditMemberDialog extends StatefulWidget {
 class _EditMemberDialogState extends State<_EditMemberDialog> {
   late String _role;
   late Set<String> _selectedPermissions;
+  late TextEditingController _nameController;
+  late TextEditingController _staffIdController;
+  late TextEditingController _phoneController;
 
   @override
   void initState() {
@@ -472,6 +529,23 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _selectedPermissions = {
       if (perms is List) ...perms.map((e) => e.toString()),
     };
+    _nameController = TextEditingController(
+      text: (widget.member['name'] ?? '').toString().trim(),
+    );
+    _staffIdController = TextEditingController(
+      text: (widget.member['staff_id'] ?? '').toString().trim(),
+    );
+    _phoneController = TextEditingController(
+      text: (widget.member['phone'] ?? '').toString().trim(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _staffIdController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 
   bool get _canSubmit {
@@ -486,11 +560,20 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final userId = (widget.member['user_id'] ?? widget.member['id'] ?? '').toString();
     if (userId.isEmpty) return;
     final perms = _role == 'staff' ? _selectedPermissions.toList() : <String>[];
+    final name = _nameController.text.trim();
+    final staffId = _staffIdController.text.trim();
+    final phone = _phoneController.text.trim();
     try {
       await NeyvoPulseApi.updateMember(
         userId,
         role: _role,
         permissions: perms,
+        name: name.isEmpty ? null : name,
+        staffId: staffId.isEmpty ? null : staffId,
+        phone: phone.isEmpty ? null : phone,
+        email: (widget.member['email'] ?? '').toString().trim().isEmpty
+            ? null
+            : (widget.member['email'] ?? '').toString().trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -527,6 +610,35 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
                   style: NeyvoTextStyles.bodyPrimary,
                 ),
               ),
+            TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'Full name',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _staffIdController,
+              decoration: const InputDecoration(
+                labelText: 'Staff ID (optional)',
+                hintText: 'Staff identifier',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone (optional)',
+                hintText: 'Phone number',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
             DropdownButtonFormField<String>(
               value: _role,
               decoration: const InputDecoration(labelText: 'Role'),
