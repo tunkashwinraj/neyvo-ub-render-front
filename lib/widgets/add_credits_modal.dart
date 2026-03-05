@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../ui/components/billing/credits_info_icon.dart';
 
 /// Shows the Add Credits modal. [wallet] is the billing/wallet map for bonus display.
 /// [successUrl] and [cancelUrl] override redirect URLs (e.g. for Wallet vs Settings).
@@ -140,9 +141,16 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Add credits',
-              style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Add credits',
+                  style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(width: 8),
+                const CreditsInfoIcon(),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -158,9 +166,21 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
             const SizedBox(height: 24),
             const Divider(color: NeyvoTheme.border),
             const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Custom amount (\$20 – \$100,000)',
+                  style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(width: 8),
+                const CreditsInfoIcon(),
+              ],
+            ),
+            const SizedBox(height: 4),
             Text(
-              'Custom amount (\$20 – \$100,000)',
-              style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+              '\$1 = 100 credits.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             _CustomAmountRow(
@@ -216,22 +236,22 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
                       name,
                       style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       bonusCredits > 0
                           ? '${_formatCredits(totalCredits)} credits '
-                              '(${_formatCredits(baseCredits)} base + ${_formatCredits(bonusCredits)} bonus) '
-                              '· ~$approxMin min'
-                          : '${_formatCredits(totalCredits)} credits · ~$approxMin min',
-                      style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.teal),
+                              '(${_formatCredits(baseCredits)} base + ${_formatCredits(bonusCredits)} bonus)'
+                          : '${_formatCredits(totalCredits)} credits',
+                      style: NeyvoType.titleMedium.copyWith(
+                        color: NeyvoTheme.teal,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '~$approxMin min · \$$price one-time',
+                      style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
                     ),
                   ],
-                ),
-              ),
-              Text(
-                '\$$price',
-                style: NeyvoType.titleMedium.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(width: 12),

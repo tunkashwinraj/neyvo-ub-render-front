@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_detail_page.dart';
 import 'plan_selector_page.dart';
@@ -169,7 +170,14 @@ class _WalletPageState extends State<WalletPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text('Wallet', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text('Wallet', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                          const SizedBox(width: 8),
+                          const CreditsInfoIcon(),
+                        ],
+                      ),
                     ),
                     InkWell(
                       onTap: () => Navigator.of(context).push(
@@ -333,7 +341,7 @@ class _WalletPageState extends State<WalletPage> {
         children: [
           SizedBox(width: 100, child: Text('Date', style: NeyvoTextStyles.label)),
           SizedBox(width: 72, child: Text('Type', style: NeyvoTextStyles.label)),
-          SizedBox(width: 72, child: Text('Amount', style: NeyvoTextStyles.label)),
+          SizedBox(width: 100, child: Text('Amount', style: NeyvoTextStyles.label)),
           Expanded(child: Text('Reason', style: NeyvoTextStyles.label)),
           const SizedBox(width: 90),
         ],
@@ -396,13 +404,25 @@ class _WalletPageState extends State<WalletPage> {
               ),
             ),
             SizedBox(
-              width: 72,
-              child: Text(
-                '${isCredit ? '+' : ''}$creditsVal',
-                style: NeyvoTextStyles.body.copyWith(
-                  color: isCredit ? NeyvoColors.success : NeyvoColors.error,
-                  fontWeight: FontWeight.w600,
-                ),
+              width: 100,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${isCredit ? '+' : ''}$creditsVal credits',
+                    style: NeyvoTextStyles.body.copyWith(
+                      color: isCredit ? NeyvoColors.success : NeyvoColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '(${creditsToDollarsDisplay(creditsVal.abs())})',
+                    style: NeyvoTextStyles.micro.copyWith(
+                      color: NeyvoColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(

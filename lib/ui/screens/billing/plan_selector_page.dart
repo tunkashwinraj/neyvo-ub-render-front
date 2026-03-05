@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../components/billing/credits_info_icon.dart';
 
 class PlanSelectorPage extends StatefulWidget {
   const PlanSelectorPage({super.key});
@@ -104,7 +105,14 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Subscription plans', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('Subscription plans', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 8),
+                    const CreditsInfoIcon(),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Choose the right plan for University of Bridgeport. Plans debit credits monthly from your wallet.',
@@ -121,7 +129,8 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
                           child: _planCard(
                             id: 'free',
                             name: 'Free',
-                            price: '\$0',
+                            creditsPerMonth: 0,
+                            dollarsDisplay: '\$0',
                             tagline: 'Start experimenting with Neyvo.',
                             benefits: const [
                               '1 included line',
@@ -138,7 +147,8 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
                           child: _planCard(
                             id: 'pro',
                             name: 'Pro',
-                            price: '\$29 / mo',
+                            creditsPerMonth: 2900,
+                            dollarsDisplay: '\$29 / mo',
                             tagline: 'Grow with more lines and better routing.',
                             benefits: const [
                               '3 included lines',
@@ -153,7 +163,8 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
                         child: _planCard(
                           id: 'business',
                           name: 'Business',
-                          price: '\$79 / mo',
+                          creditsPerMonth: 7900,
+                          dollarsDisplay: '\$79 / mo',
                           tagline: 'Designed for UB-scale deployment.',
                           benefits: const [
                             '10 included lines',
@@ -183,7 +194,8 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
   Widget _planCard({
     required String id,
     required String name,
-    required String price,
+    required int creditsPerMonth,
+    required String dollarsDisplay,
     required String tagline,
     required List<String> benefits,
     required String currentTier,
@@ -191,6 +203,9 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
   }) {
     final isCurrent = currentTier == id;
     final isUpdating = _updatingTo == id;
+    final creditsLine = creditsPerMonth == 0
+        ? '0 credits / mo'
+        : '${formatCredits(creditsPerMonth)} credits / mo';
 
     return Card(
       color: highlighted ? NeyvoColors.bgRaised : NeyvoColors.bgBase,
@@ -223,7 +238,9 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(price, style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.teal)),
+            Text(creditsLine, style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.teal)),
+            const SizedBox(height: 4),
+            Text(dollarsDisplay, style: NeyvoTextStyles.body),
             const SizedBox(height: 4),
             Text(tagline, style: NeyvoTextStyles.body),
             const SizedBox(height: 12),

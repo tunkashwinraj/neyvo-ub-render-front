@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import 'plan_selector_page.dart';
 
@@ -120,7 +121,14 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Voice tier', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('Voice tier', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 8),
+                    const CreditsInfoIcon(),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Choose the voice quality for all operators. Billed per minute from your wallet.',
@@ -212,7 +220,8 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
     required bool isUnlocked,
   }) {
     final isUpdating = _updatingTier == id;
-    final avg3Min = (usdPerMin * 3).toStringAsFixed(2);
+    final avg3Credits = cpm * 3;
+    final avg3Dollars = (usdPerMin * 3).toStringAsFixed(2);
 
     return Card(
       color: NeyvoColors.bgRaised,
@@ -230,22 +239,14 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
           children: [
             Text(name, style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '\$${usdPerMin.toStringAsFixed(2)}',
-                  style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.teal),
-                ),
-                const SizedBox(width: 4),
-                Text('/ min', style: NeyvoTextStyles.body),
-              ],
+            Text(
+              '$cpm credits / min',
+              style: NeyvoTextStyles.display.copyWith(color: NeyvoColors.teal),
             ),
             const SizedBox(height: 4),
-            Text('$cpm credits per minute', style: NeyvoTextStyles.body),
+            Text('\$${usdPerMin.toStringAsFixed(2)} / min', style: NeyvoTextStyles.body),
             const SizedBox(height: 4),
-            Text('Avg 3-min call ≈ \$$avg3Min', style: NeyvoTextStyles.label),
+            Text('Avg 3-min call ≈ $avg3Credits credits (\$$avg3Dollars)', style: NeyvoTextStyles.label),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

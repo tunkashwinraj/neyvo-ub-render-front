@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../widgets/add_credits_modal.dart';
 import 'plan_selector_page.dart';
@@ -103,7 +104,7 @@ class _BillingPageState extends State<BillingPage> {
     final monthlyCost = (_numbers?['monthly_number_cost'] ?? _numbers?['monthly_cost'])
             ?.toString() ??
         '\$0.00';
-    final perNumber = numbers.isEmpty ? '—' : '\$1.15/mo';
+    final perNumber = numbers.isEmpty ? '—' : '115 credits/mo (\$1.15)';
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -143,7 +144,14 @@ class _BillingPageState extends State<BillingPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _sectionTitle('Wallet'),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _sectionTitle('Wallet'),
+                    const SizedBox(width: 8),
+                    const CreditsInfoIcon(),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
                   glowing: credits < 500,
@@ -248,7 +256,14 @@ class _BillingPageState extends State<BillingPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _sectionTitle('Voice tier'),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _sectionTitle('Voice tier'),
+                    const SizedBox(width: 8),
+                    const CreditsInfoIcon(),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
                   child: _VoiceTierBlock(
