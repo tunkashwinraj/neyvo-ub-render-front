@@ -207,7 +207,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
           // On permission-denied, cancel so we don't keep logging; wallet stays from API.
           _walletSubscription?.cancel();
           _walletSubscription = null;
-          debugPrint('Wallet subscription error: $error');
+          // Real-time org updates require Firestore read access to the org doc; wallet data still comes from API.
+          debugPrint('Real-time wallet updates unavailable (using API data).');
         },
       );
     }
