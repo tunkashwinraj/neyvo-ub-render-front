@@ -93,6 +93,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Future<void> _generateReportCsv(Set<String> sections) async {
     Navigator.of(context).pop();
     final sb = StringBuffer();
+    sb.writeln('Insights Report,Generated ${DateTime.now().toIso8601String().substring(0, 19)}');
+    sb.writeln('Date range,$_dateRange');
+    sb.writeln('');
+    if (sections.contains('overview')) {
+      final d = _overview ?? {};
+      sb.writeln('Section,Overview');
+      sb.writeln('Total Calls,${d['total_calls'] ?? d['calls_this_period'] ?? 0}');
+      sb.writeln('Credits Consumed,${d['total_credits_consumed'] ?? d['credits_consumed'] ?? 0}');
+      sb.writeln('Wallet Balance,${d['wallet_credits'] ?? d['credits'] ?? _wallet?['credits'] ?? 0}');
+      sb.writeln('TTS Minutes,${d['total_tts_minutes'] ?? d['tts_minutes'] ?? 0}');
+      sb.writeln('');
+    }
     if (sections.contains('calls')) {
       sb.writeln('Section,Calls Summary');
       sb.writeln('Total Calls,${(_comms?['total_calls'] ?? 0)}');
@@ -172,9 +184,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Header: title + date range + prominent Download button
           Row(
             children: [
-              const Expanded(child: SizedBox()),
+              Text(
+                'Insights',
+                style: NeyvoTextStyles.title.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: NeyvoColors.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 24),
               _dateChip('Today', 'today'),
               const SizedBox(width: 8),
               _dateChip('7d', '7d'),
@@ -182,12 +202,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               _dateChip('30d', '30d'),
               const SizedBox(width: 8),
               _dateChip('90d', '90d'),
-              const SizedBox(width: 16),
+              const Spacer(),
               FilledButton.icon(
                 onPressed: _openDownloadReportDialog,
-                icon: const Icon(Icons.download_outlined, size: 18),
+                icon: const Icon(Icons.download_outlined, size: 20),
                 label: const Text('Download report'),
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                style: FilledButton.styleFrom(
+                  backgroundColor: NeyvoColors.teal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
               ),
             ],
           ),
@@ -818,18 +841,31 @@ class _InsightsReportDownloadSheet extends StatefulWidget {
 }
 
 class _InsightsReportDownloadSheetState extends State<_InsightsReportDownloadSheet> {
-  final Set<String> _selected = {'calls', 'campaigns', 'students', 'operators', 'lines', 'wallet', 'pulse', 'callbacks'};
+  final Set<String> _selected = {
+    'overview', 'calls', 'campaigns', 'students', 'operators', 'lines', 'wallet', 'pulse', 'callbacks',
+  };
 
   static const _options = [
-    ('calls', 'Calls summary & list'),
-    ('campaigns', 'Campaigns summary & list'),
-    ('students', 'Students summary'),
-    ('operators', 'Operators performance'),
-    ('lines', 'Lines (numbers) summary'),
-    ('wallet', 'Wallet & transactions summary'),
-    ('pulse', 'Pulse insights'),
-    ('callbacks', 'Callbacks analytics'),
+    ('overview', 'Overview', 'Total calls, credits consumed, wallet balance, TTS minutes'),
+    ('calls', 'Calls', 'Call volume, resolved/unresolved counts'),
+    ('campaigns', 'Campaigns', 'Campaign list with name, status, total planned'),
+    ('students', 'Students', 'Student count summary'),
+    ('operators', 'Operators', 'Per-operator calls and credits used'),
+    ('lines', 'Lines', 'Phone numbers count'),
+    ('wallet', 'Wallet & Billing', 'Balance and recent transactions'),
+    ('pulse', 'Pulse Insights', 'Success rate and recommendations'),
+    ('callbacks', 'Callbacks', 'Scheduled and completed callbacks'),
   ];
+
+  void _selectAll() {
+    setState(() {
+      for (final e in _options) _selected.add(e.$1);
+    });
+  }
+
+  void _clearAll() {
+    setState(() => _selected.clear());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -839,28 +875,73 @@ class _InsightsReportDownloadSheetState extends State<_InsightsReportDownloadShe
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Download report',
-            style: NeyvoTextStyles.heading,
+          Row(
+            children: [
+              Icon(Icons.download_outlined, size: 28, color: NeyvoColors.teal),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Download report',
+                      style: NeyvoTextStyles.heading,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choose what to include in your CSV report. You can select one or more sections.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              TextButton(
+                onPressed: _selectAll,
+                child: const Text('Select all'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _clearAll,
+                child: const Text('Clear all'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Select sections to include in the CSV report.',
-            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: _options.map((e) {
+                  final id = e.$1;
+                  final label = e.$2;
+                  final desc = e.$3;
+                  return CheckboxListTile(
+                    value: _selected.contains(id),
+                    onChanged: (v) {
+                      setState(() {
+                        if (v == true) _selected.add(id);
+                        else _selected.remove(id);
+                      });
+                    },
+                    title: Text(label, style: NeyvoTextStyles.bodyPrimary),
+                    subtitle: desc.isNotEmpty
+                        ? Text(desc, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted, fontSize: 12))
+                        : null,
+                    activeColor: NeyvoColors.teal,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  );
+                }).toList(),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
-          ..._options.map((e) => CheckboxListTile(
-                value: _selected.contains(e.$1),
-                onChanged: (v) {
-                  setState(() {
-                    if (v == true) _selected.add(e.$1);
-                    else _selected.remove(e.$1);
-                  });
-                },
-                title: Text(e.$2, style: NeyvoTextStyles.body),
-                activeColor: NeyvoColors.teal,
-              )),
-          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -869,13 +950,14 @@ class _InsightsReportDownloadSheetState extends State<_InsightsReportDownloadShe
                 child: const Text('Cancel'),
               ),
               const SizedBox(width: 12),
-              FilledButton(
+              FilledButton.icon(
                 onPressed: () {
                   if (_selected.isEmpty) return;
                   widget.onGenerate(_selected);
                 },
+                icon: const Icon(Icons.download_outlined, size: 18),
                 style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                child: const Text('Generate report'),
+                label: const Text('Generate & download'),
               ),
             ],
           ),
