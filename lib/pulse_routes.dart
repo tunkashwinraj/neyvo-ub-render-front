@@ -70,6 +70,7 @@ class PulseRouter {
       case PulseRouteNames.billing:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
       case PulseRouteNames.wallet:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.wallet));
       case PulseRouteNames.usage:
       case PulseRouteNames.voiceTier:
       case PulseRouteNames.subscriptionPlan:

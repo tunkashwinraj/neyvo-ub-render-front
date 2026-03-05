@@ -23,7 +23,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
   final _defaultLateFee = TextEditingController();
   final _currency = TextEditingController();
   String _timezoneValue = 'America/New_York';
-  String _primaryIndustry = 'Healthcare';
   final _vapiPhoneNumberId = TextEditingController();
   final _primaryPhoneController = TextEditingController();
   bool _verifyingPhone = false;
@@ -129,7 +128,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
         _schoolName.text = s['school_name']?.toString() ?? '';
         _defaultLateFee.text = s['default_late_fee']?.toString() ?? '';
         _currency.text = s['currency']?.toString() ?? 'USD';
-        _primaryIndustry = s['primary_industry']?.toString() ?? 'Healthcare';
         final tz = (s['timezone']?.toString() ?? '').trim();
         _timezoneValue = tz.isNotEmpty ? tz : 'America/New_York';
         _vapiPhoneNumberId.text = s['vapi_phone_number_id']?.toString() ?? '';
@@ -274,7 +272,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
             Tab(text: 'Organization'),
             Tab(text: 'Team'),
             Tab(text: 'Security'),
-            Tab(text: 'Telephony'),
+            Tab(text: 'Advanced'),
           ],
         ),
         Expanded(
@@ -321,6 +319,31 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                  child: const Text('Open'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: NeyvoSpacing.sm),
+        Card(
+          color: NeyvoTheme.bgCard,
+          child: Padding(
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Wallet', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                      const SizedBox(height: 4),
+                      Text('View balance and transaction history.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.wallet),
                   child: const Text('Open'),
                 ),
               ],
@@ -499,23 +522,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                 ),
                 const SizedBox(height: NeyvoSpacing.md),
                 DropdownButtonFormField<String>(
-                  value: _primaryIndustry,
-                  decoration: const InputDecoration(
-                    labelText: 'Primary Industry',
-                    prefixIcon: Icon(Icons.category_outlined),
-                  ),
-                  items: const [
-                    'Healthcare', 'Education', 'Automotive', 'Real Estate',
-                    'Finance', 'Retail', 'Sales', 'Recruitment', 'Logistics',
-                    'Hospitality', 'Insurance', 'Government', 'Home Services',
-                    'Telecom', 'Custom',
-                  ]
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _primaryIndustry = v ?? 'Healthcare'),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
-                DropdownButtonFormField<String>(
                   value: _timezoneValue,
                   decoration: const InputDecoration(
                     labelText: 'Timezone',
@@ -556,31 +562,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: NeyvoSpacing.md),
-                Text(
-                  'Voice / Vapi',
-                  style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textSecondary),
-                ),
-                const SizedBox(height: NeyvoSpacing.sm),
-                TextField(
-                  controller: _vapiAssistantId,
-                  decoration: const InputDecoration(
-                    labelText: 'Vapi Assistant ID',
-                    hintText: 'e.g. from Vapi dashboard',
-                    prefixIcon: Icon(Icons.smart_toy_outlined),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: NeyvoSpacing.sm),
-                TextField(
-                  controller: _vapiPhoneNumberId,
-                  decoration: const InputDecoration(
-                    labelText: 'Vapi Phone Number ID',
-                    hintText: 'Optional',
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
                 DropdownButtonFormField<String>(
                   value: _defaultAgentId,
                   decoration: const InputDecoration(
@@ -608,6 +589,80 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
                   ),
                   secondary: const Icon(Icons.call_received_outlined),
                 ),
+                const SizedBox(height: NeyvoSpacing.md),
+                ExpansionTile(
+                  title: Text('Advanced', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                  initiallyExpanded: _showAdvanced,
+                  onExpansionChanged: (v) => setState(() => _showAdvanced = v),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: NeyvoSpacing.md, right: NeyvoSpacing.lg, bottom: NeyvoSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Voice / Vapi',
+                            style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          TextField(
+                            controller: _vapiAssistantId,
+                            decoration: const InputDecoration(
+                              labelText: 'Vapi Assistant ID',
+                              hintText: 'e.g. from Vapi dashboard',
+                              prefixIcon: Icon(Icons.smart_toy_outlined),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          TextField(
+                            controller: _vapiPhoneNumberId,
+                            decoration: const InputDecoration(
+                              labelText: 'Vapi Phone Number ID',
+                              hintText: 'Optional',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Text('Templates & voice profiles', style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textSecondary)),
+                          const SizedBox(height: 4),
+                          Text('Seed the template library or voice profiles if the operator wizard shows no options.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('Seed templates'),
+                                onPressed: () async {
+                                  try {
+                                    await NeyvoPulseApi.seedTemplates();
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Templates seeded.')));
+                                  } catch (e) {
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                icon: const Icon(Icons.record_voice_over, size: 18),
+                                label: const Text('Seed voice profiles'),
+                                onPressed: () async {
+                                  try {
+                                    await NeyvoPulseApi.seedVoiceProfiles();
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice profiles seeded.')));
+                                  } catch (e) {
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -628,155 +683,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> with SingleTicker
         ),
         
         const SizedBox(height: NeyvoSpacing.lg),
-        
-        // Data integration (link to Integrations tab)
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: ListTile(
-            leading: const Icon(Icons.integration_instructions_outlined, color: NeyvoTheme.textSecondary),
-            title: Text('Data integration', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-            subtitle: Text('Connect your data: webhook, CSV upload, API pull', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _tabController.animateTo(3),
-          ),
-        ),
-        const SizedBox(height: NeyvoSpacing.md),
 
-        // Seed templates (run once if agent wizard shows no templates)
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Templates & voice profiles', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
-                const SizedBox(height: NeyvoSpacing.sm),
-                Text('If the operator wizard shows no use-case options, seed the template library once.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                const SizedBox(height: NeyvoSpacing.sm),
-                Row(
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Seed templates'),
-                      onPressed: () async {
-                        try {
-                          await NeyvoPulseApi.seedTemplates();
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Templates seeded.')));
-                        } catch (e) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      icon: const Icon(Icons.record_voice_over, size: 18),
-                      label: const Text('Seed voice profiles'),
-                      onPressed: () async {
-                        try {
-                          await NeyvoPulseApi.seedVoiceProfiles();
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice profiles seeded.')));
-                        } catch (e) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: NeyvoSpacing.md),
-        if (_isEducationOrg) ...[
-          Text('Student Data Integration', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
-          const SizedBox(height: NeyvoSpacing.xs),
-          Text(
-            'Sync student and payment data automatically from your school system.',
-            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-          ),
-          const SizedBox(height: NeyvoSpacing.md),
-          Card(
-            color: NeyvoTheme.bgCard,
-            child: Padding(
-              padding: const EdgeInsets.all(NeyvoSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    value: _schoolIntegration?['enabled'] == true,
-                    onChanged: (v) async {
-                      try {
-                        await NeyvoPulseApi.patchSchoolIntegration(enabled: v);
-                        _load();
-                      } catch (e) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                      }
-                    },
-                    title: const Text('Enable Integration'),
-                  ),
-                  if (_schoolIntegration?['enabled'] == true) ...[
-                    const Divider(),
-                    ListTile(
-                      title: Text('Webhook URL', style: NeyvoType.labelLarge),
-                      subtitle: SelectableText('${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.copy),
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('URL copied')));
-                        },
-                      ),
-                    ),
-                    ListTile(
-                      title: Text('Webhook Token', style: NeyvoType.labelLarge),
-                      subtitle: Text(_schoolTokenVisible ? (_schoolIntegration?['token'] ?? '••••••••') : '••••••••••••••••'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() => _schoolTokenVisible = !_schoolTokenVisible),
-                            child: Text(_schoolTokenVisible ? 'Hide' : 'Reveal'),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              try {
-                                final res = await NeyvoPulseApi.regenerateSchoolIntegrationToken();
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('New token: ${res['token'] ?? 'saved'} (copy it now; it won\'t be shown again)')));
-                                  _load();
-                                }
-                              } catch (e) {
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                              }
-                            },
-                            child: const Text('Regenerate'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Regenerating will break existing integrations until you update the token.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
-                    const SizedBox(height: NeyvoSpacing.md),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.send, size: 18),
-                      label: const Text('Send Test Event'),
-                      onPressed: () async {
-                        try {
-                          await NeyvoPulseApi.sendSchoolWebhookTest();
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✓ Test received — integration is working')));
-                        } catch (e) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Test failed: $e')));
-                        }
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: NeyvoSpacing.lg),
-        ],
         // System Info
         Card(
           color: NeyvoTheme.bgCard,

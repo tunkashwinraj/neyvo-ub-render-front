@@ -371,6 +371,10 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> listCalls({String? studentId}) async =>
       _get('/api/pulse/calls', params: studentId != null ? {'student_id': studentId} : null);
 
+  /// GET /api/pulse/calls/by-id/<call_id> – single call by vapi_call_id (for Wallet → Call detail).
+  static Future<Map<String, dynamic>> getCallById(String callId) async =>
+      _get('/api/pulse/calls/by-id/${Uri.encodeComponent(callId)}');
+
   /// Phase D: Resolution/success summary for dashboard
   static Future<Map<String, dynamic>> getCallsSuccessSummary() async =>
       _get('/api/pulse/calls/success-summary');

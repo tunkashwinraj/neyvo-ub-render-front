@@ -25,6 +25,7 @@ import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
 import '../ui/screens/calls/test_call_page.dart';
 import '../ui/screens/billing/billing_page.dart';
+import '../ui/screens/billing/wallet_page.dart';
 import '../ui/screens/integrations/integrations_page.dart';
 import '../ui/screens/voice_studio/voice_studio_page.dart';
 import '../ui/components/calls/incoming_call_overlay.dart';
@@ -87,6 +88,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       const _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics),
       const _NavItem('Integrations', Icons.hub_outlined, PulseRouteNames.integrations),
       const _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing),
+      const _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet),
       const _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings),
     ];
 
@@ -764,6 +766,8 @@ extension on _PulseShellState {
         return const IntegrationsPage();
       case PulseRouteNames.billing:
         return const BillingPage();
+      case PulseRouteNames.wallet:
+        return const WalletPage();
       case PulseRouteNames.settings:
         return const PulseSettingsPage();
       case PulseRouteNames.agency:
