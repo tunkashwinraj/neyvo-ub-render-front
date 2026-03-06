@@ -83,6 +83,58 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> aiSuggest(String profileId, String message) async =>
       _post('/api/managed-profiles/$profileId/ai-suggest', {'message': message});
 
+  /// UB operator: AI suggest edits to custom prompt and voicemail.
+  static Future<Map<String, dynamic>> aiSuggestPrompt(String profileId, {String? message}) async =>
+      _post('/api/managed-profiles/$profileId/ai-suggest-prompt', {
+        if (message != null && message.isNotEmpty) 'message': message,
+      });
+
+  /// Preview a sentence with variable values substituted (e.g. for display in wizard).
+  static Future<Map<String, dynamic>> previewVariableSentence({
+    required String template,
+    required Map<String, String> variableValues,
+  }) async =>
+      _post('/api/managed-profiles/preview-variable-sentence', {
+        'template': template,
+        'variable_values': variableValues,
+      });
+
+  /// UB wizard: fetch department list (id, name, role_summary).
+  static Future<Map<String, dynamic>> getUbDepartments({bool descriptions = true}) async {
+    final params = <String, dynamic>{'descriptions': descriptions};
+    return _get('/api/ub/departments', params: params);
+  }
+
+  /// UB wizard: AI suggest tools and variables from department + work_goals.
+  static Future<Map<String, dynamic>> aiSuggestTools({
+    required String department,
+    required String workGoals,
+    String universityName = 'University of Bridgeport',
+  }) async =>
+      _post('/api/managed-profiles/ai-suggest-tools', {
+        'department': department,
+        'work_goals': workGoals,
+        'university_name': universityName,
+      });
+
+  /// UB wizard: AI craft system prompt, voicemail, and operator summary.
+  static Future<Map<String, dynamic>> aiCraftPrompt({
+    required String department,
+    required String workGoals,
+    String universityName = 'University of Bridgeport',
+    List<String> selectedToolKeys = const [],
+    List<Map<String, String>> promptVariables = const [],
+    String? departmentPhone,
+  }) async =>
+      _post('/api/managed-profiles/ai-craft-prompt', {
+        'department': department,
+        'work_goals': workGoals,
+        'university_name': universityName,
+        'selected_tool_keys': selectedToolKeys,
+        'prompt_variables': promptVariables,
+        if (departmentPhone != null && departmentPhone.isNotEmpty) 'department_phone': departmentPhone,
+      });
+
   static Future<Map<String, dynamic>> getProfileCalls(String profileId, {int limit = 20, String? cursor}) async {
     final params = <String, dynamic>{'limit': limit};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;

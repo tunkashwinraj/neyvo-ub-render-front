@@ -37,10 +37,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _roleCtrl = TextEditingController();
   final _goalCtrl = TextEditingController();
   final _promptCtrl = TextEditingController();
+  final _voicemailCtrl = TextEditingController();
+  final _aiSuggestMessageCtrl = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
   bool _handoffEnabled = true;
+  bool _aiSuggestLoading = false;
+  Map<String, dynamic>? _aiSuggestResult;
+  List<Map<String, String>> _promptVariables = [];
+  bool _variablePreviewLoading = false;
+  String? _variablePreviewSentence;
 
   @override
   void initState() {
@@ -56,8 +63,14 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _roleCtrl.dispose();
     _goalCtrl.dispose();
     _promptCtrl.dispose();
+    _voicemailCtrl.dispose();
+    _aiSuggestMessageCtrl.dispose();
     super.dispose();
   }
+
+  bool get _isUbOperator =>
+      (_profile['custom_system_prompt'] ?? '').toString().trim().isNotEmpty ||
+      (_profile['department'] ?? '').toString().trim().isNotEmpty;
 
   String get _attachedNumberId {
     return (_profile['attached_phone_number_id'] ??
@@ -87,8 +100,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
       _nameCtrl.text = (profile['profile_name'] ?? profile['name'] ?? '').toString();
       _roleCtrl.text = (profile['role'] ?? '').toString();
-      _goalCtrl.text = (profile['goal'] ?? '').toString();
-      _promptCtrl.text = (profile['system_prompt'] ?? profile['prompt'] ?? '').toString();
+      _goalCtrl.text = (profile['work_goals'] ?? profile['goal'] ?? '').toString();
+      _promptCtrl.text = (profile['custom_system_prompt'] ?? profile['system_prompt'] ?? profile['prompt'] ?? '').toString();
+      _voicemailCtrl.text = (profile['voicemail_message'] ?? '').toString();
+      final pv = profile['prompt_variables'];
+      _promptVariables = (pv is List)
+          ? (pv.map((e) => Map<String, String>.from((e is Map ? e : {}).map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))).toList())
+          : [];
 
       final convo = profile['conversation_profile'];
       if (convo is Map) {
@@ -130,6 +148,12 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         'behavior': {'interrupt_enabled': _interruptEnabled},
         'guardrails': {'handoff_enabled': _handoffEnabled},
       };
+      if (_isUbOperator) {
+        body['custom_system_prompt'] = _promptCtrl.text.trim();
+        body['work_goals'] = _goalCtrl.text.trim();
+        body['voicemail_message'] = _voicemailCtrl.text.trim();
+        body['prompt_variables'] = _promptVariables;
+      }
       final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
       if (!mounted) return;
       setState(() {
@@ -403,35 +427,307 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Widget _tabPrompt() {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        NeyvoGlassPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('System prompt', style: NeyvoTextStyles.heading),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _promptCtrl,
-                maxLines: 18,
-                decoration: const InputDecoration(
-                  hintText: 'Define the operator\'s instructions, style, constraints, and tools.',
-                ),
+    final children = <Widget>[
+      NeyvoGlassPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('System prompt', style: NeyvoTextStyles.heading),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _promptCtrl,
+              maxLines: 18,
+              decoration: const InputDecoration(
+                hintText: 'Define the operator\'s instructions, style, constraints, and tools.',
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => setState(() => _promptCtrl.text = _promptCtrl.text.trim()),
-                  icon: const Icon(Icons.auto_fix_high, size: 18),
-                  label: const Text('Clean up whitespace'),
+            ),
+            if (_isUbOperator) ...[
+              const SizedBox(height: 16),
+              Text('Voicemail message', style: NeyvoTextStyles.label),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _voicemailCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Message left when the call goes to voicemail. Use {{variableName}} for personalization.',
                 ),
               ),
             ],
-          ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _promptCtrl.text = _promptCtrl.text.trim()),
+                icon: const Icon(Icons.auto_fix_high, size: 18),
+                label: const Text('Clean up whitespace'),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    ];
+    if (_isUbOperator) {
+      children.add(const SizedBox(height: 16));
+      children.add(_buildAiStudioCard());
+      children.add(const SizedBox(height: 16));
+      children.add(_buildVariablesCard());
+    }
+    return ListView(padding: const EdgeInsets.all(24), children: children);
+  }
+
+  Widget _buildAiStudioCard() {
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('AI Studio', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 6),
+          Text(
+            'Improve or edit this operator\'s prompt with AI. Suggestions keep your placeholders and tone.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _aiSuggestMessageCtrl,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              hintText: 'E.g. Make the opening warmer, or add a line about deadlines.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              FilledButton(
+                onPressed: _aiSuggestLoading ? null : _runAiSuggestPrompt,
+                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                child: _aiSuggestLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Get AI suggestion'),
+              ),
+              if (_aiSuggestResult != null) ...[
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _applyAiSuggestResult,
+                  child: const Text('Apply'),
+                ),
+              ],
+            ],
+          ),
+          if (_aiSuggestResult != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: NeyvoColors.borderDefault),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Explanation', style: NeyvoTextStyles.label),
+                  const SizedBox(height: 4),
+                  Text(
+                    (_aiSuggestResult!['explanation'] ?? '').toString(),
+                    style: NeyvoTextStyles.body,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runAiSuggestPrompt() async {
+    setState(() => _aiSuggestLoading = true);
+    try {
+      final res = await ManagedProfileApiService.aiSuggestPrompt(
+        widget.profileId,
+        message: _aiSuggestMessageCtrl.text.trim().isEmpty ? null : _aiSuggestMessageCtrl.text.trim(),
+      );
+      if (mounted) setState(() {
+        _aiSuggestResult = Map<String, dynamic>.from(res);
+        _aiSuggestLoading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() {
+        _aiSuggestLoading = false;
+        _aiSuggestResult = null;
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  void _applyAiSuggestResult() {
+    if (_aiSuggestResult == null) return;
+    final prompt = (_aiSuggestResult!['custom_system_prompt'] ?? '').toString();
+    final voicemail = (_aiSuggestResult!['voicemail_message'] ?? '').toString();
+    if (prompt.isNotEmpty) _promptCtrl.text = prompt;
+    if (voicemail.isNotEmpty) _voicemailCtrl.text = voicemail;
+    setState(() => _aiSuggestResult = null);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Applied. Save to update the operator.')));
+  }
+
+  static Map<String, String> _sampleValuesForVariables(List<Map<String, String>> variables) {
+    final out = <String, String>{};
+    for (final v in variables) {
+      final key = (v['key'] ?? '').trim();
+      if (key.isEmpty) continue;
+      final lower = key.toLowerCase();
+      if (lower.contains('name') && !lower.contains('balance')) out[key] = 'Ashwin';
+      else if (lower.contains('balance')) out[key] = '50';
+      else if (lower.contains('fee') || lower.contains('late')) out[key] = '10';
+      else if (lower.contains('deadline') || lower.contains('date')) out[key] = 'April 5th';
+      else if (lower.contains('phone')) out[key] = '203-576-4000';
+      else if (lower.contains('email')) out[key] = 'student@bridgeport.edu';
+      else out[key] = 'Sample';
+    }
+    return out;
+  }
+
+  Future<void> _loadVariablePreview() async {
+    final template = _voicemailCtrl.text.trim().isNotEmpty
+        ? _voicemailCtrl.text.trim()
+        : _promptVariables.isEmpty
+            ? ''
+            : '{{${_promptVariables.first['key'] ?? ''}}} has a balance due.';
+    if (template.isEmpty) return;
+    setState(() {
+      _variablePreviewLoading = true;
+      _variablePreviewSentence = null;
+    });
+    try {
+      final sampleValues = _sampleValuesForVariables(_promptVariables);
+      final res = await ManagedProfileApiService.previewVariableSentence(
+        template: template,
+        variableValues: sampleValues,
+      );
+      if (mounted) {
+        setState(() {
+          _variablePreviewSentence = (res['sentence'] ?? '').toString();
+          _variablePreviewLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _variablePreviewSentence = null;
+          _variablePreviewLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildVariablesCard() {
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Prompt variables', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 6),
+          Text(
+            'Variables like {{studentName}} used in the prompt. When making outbound calls, pass values for these.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          if (_promptVariables.isEmpty)
+            Text('None', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _promptVariables.map((v) {
+                final label = v['label'] ?? v['key'] ?? '';
+                final key = v['key'] ?? '';
+                return Chip(
+                  label: Text(label.isNotEmpty ? '$label ($key)' : key),
+                  onDeleted: () => setState(() {
+                    _promptVariables.removeWhere((e) => (e['key'] ?? '') == key);
+                    _variablePreviewSentence = null;
+                  }),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _addPromptVariable,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add variable'),
+          ),
+          if (_promptVariables.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Preview with sample values', style: NeyvoTextStyles.label),
+            const SizedBox(height: 6),
+            Text(
+              'See how the script will sound with example data (e.g. name, balance).',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            if (_variablePreviewLoading)
+              const SizedBox(height: 24, child: Center(child: CircularProgressIndicator()))
+            else if (_variablePreviewSentence != null && _variablePreviewSentence!.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: NeyvoColors.bgRaised,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: NeyvoColors.borderDefault),
+                ),
+                child: Text(
+                  'Example: $_variablePreviewSentence',
+                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                ),
+              )
+            else
+              OutlinedButton(
+                onPressed: _loadVariablePreview,
+                child: const Text('Show example'),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addPromptVariable() async {
+    final keyCtrl = TextEditingController();
+    final labelCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add variable'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: keyCtrl,
+              decoration: const InputDecoration(labelText: 'Key (e.g. studentName)'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: labelCtrl,
+              decoration: const InputDecoration(labelText: 'Label (e.g. Student name)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final key = keyCtrl.text.trim();
+              if (key.isNotEmpty) {
+                final label = labelCtrl.text.trim().isEmpty ? key : labelCtrl.text.trim();
+                Navigator.of(ctx).pop();
+                setState(() => _promptVariables.add({'key': key, 'label': label}));
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     );
   }
 

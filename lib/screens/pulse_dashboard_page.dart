@@ -8,6 +8,7 @@ import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../features/agents/create_agent_wizard.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
 
@@ -41,6 +42,19 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     'IT Help Desk Operator',
     'General Front Desk Operator',
   ];
+
+  /// Map dashboard label to UB department id for wizard deep-link.
+  static String? _departmentIdForLabel(String label) {
+    const map = {
+      'Admissions Operator': 'admissions',
+      'Student Financial Services Operator': 'student_financial_services',
+      'Registrar Operator': 'registrar',
+      'Housing Operator': 'residential_life_and_housing',
+      'IT Help Desk Operator': 'information_technology_help_desk',
+      'General Front Desk Operator': null,
+    };
+    return map[label];
+  }
 
   @override
   void initState() {
@@ -181,8 +195,22 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                               for (var i = 0; i < _recommendedOperators.length; i++) ...[
                                 if (i > 0) const SizedBox(height: 10),
                                 FilledButton(
-                                  onPressed: () => Navigator.of(context, rootNavigator: true)
-                                      .pushNamed(PulseRouteNames.managedProfiles),
+                                  onPressed: () async {
+                                    final deptId = _departmentIdForLabel(_recommendedOperators[i]);
+                                    if (deptId != null) {
+                                      final created = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
+                                      );
+                                      if (created == true && mounted) {
+                                        Navigator.of(context, rootNavigator: true)
+                                            .pushNamed(PulseRouteNames.managedProfiles);
+                                      }
+                                    } else {
+                                      Navigator.of(context, rootNavigator: true)
+                                          .pushNamed(PulseRouteNames.managedProfiles);
+                                    }
+                                  },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: i == 0 ? NeyvoColors.teal : NeyvoColors.bgRaised,
                                     foregroundColor: i == 0 ? Colors.white : NeyvoColors.textPrimary,
