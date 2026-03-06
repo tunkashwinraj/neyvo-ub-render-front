@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
-import '../../screens/voice_library_modal.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
@@ -46,6 +46,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   bool _handoffEnabled = true;
   bool _aiSuggestLoading = false;
   final List<_AiStudioMessage> _chatMessages = [];
+
+  // Voice catalog state for inline picker in Voice tab.
+  bool _voiceCatalogLoading = false;
+  String? _voiceCatalogError;
+  List<Map<String, dynamic>> _voicesForTier = const [];
+  String? _playingVoiceId;
+
   List<Map<String, String>> _promptVariables = [];
   bool _variablePreviewLoading = false;
   String? _variablePreviewSentence;
@@ -129,6 +136,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _wallet = walletRes;
         _loading = false;
       });
+      // After wallet is available, load curated voices for the effective tier.
+      await _loadVoiceCatalogForTier();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -257,6 +266,47 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     return (w['voice_tier'] ?? w['tier'] ?? 'ultra').toString().toLowerCase();
   }
 
+  Future<void> _loadVoiceCatalogForTier() async {
+    // Requires wallet so we know which tier to request.
+    if (_wallet == null) return;
+    final tier = _effectiveTier;
+    setState(() {
+      _voiceCatalogLoading = true;
+      _voiceCatalogError = null;
+    });
+    try {
+      final res = await NeyvoPulseApi.getVoices(tier: tier);
+      final List<Map<String, dynamic>> list = [];
+      if (res is List) {
+        for (final v in res) {
+          if (v is Map) list.add(Map<String, dynamic>.from(v));
+        }
+      } else if (res is Map) {
+        if (res['voices'] is List) {
+          for (final v in (res['voices'] as List)) {
+            if (v is Map) list.add(Map<String, dynamic>.from(v));
+          }
+        } else if (res[tier] is List) {
+          for (final v in (res[tier] as List)) {
+            if (v is Map) list.add(Map<String, dynamic>.from(v));
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _voicesForTier = list;
+        _voiceCatalogLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _voiceCatalogError = e.toString();
+        _voiceCatalogLoading = false;
+        _voicesForTier = const [];
+      });
+    }
+  }
+
   String _tierDisplay(String tier) {
     switch (tier.toLowerCase()) {
       case 'neutral':
@@ -279,44 +329,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
   String get _currentVoiceId => (_profile['voice_id'] ?? '').toString().trim();
 
-  Future<void> _openVoiceLibrary() async {
-    final currentTier = _unlockedTiers.contains(_effectiveTier) ? _effectiveTier : _unlockedTiers.first;
-    final selected = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: NeyvoColors.bgBase,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => VoiceLibraryModal(
-        currentTier: currentTier,
-        currentVoiceId: _currentVoiceId.isEmpty ? null : _currentVoiceId,
-        currentProvider: _currentVoiceProvider,
-        unlockedTiers: _unlockedTiers,
-      ),
-    );
-    if (selected == null || !mounted) return;
-    final provider = (selected['provider'] ?? '').toString().trim();
-    final voiceId = (selected['voice_id'] ?? '').toString().trim();
-    if (provider.isEmpty || voiceId.isEmpty) return;
-
-    setState(() => _saving = true);
-    try {
-      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, {
-        'voice_provider': provider,
-        'voice_id': voiceId,
-      });
-      if (!mounted) return;
-      setState(() {
-        _profile = updated;
-        _saving = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice updated')));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+  String? get _currentVoiceName {
+    final id = _currentVoiceId;
+    if (id.isEmpty) return null;
+    for (final v in _voicesForTier) {
+      final vid = (v['voice_id'] ?? '').toString();
+      if (vid == id) {
+        final name = (v['name'] ?? '').toString();
+        return name.isNotEmpty ? name : vid;
+      }
     }
+    return null;
   }
 
   @override
@@ -520,8 +543,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(height: 16),
         if (_isUbOperator) ...[
           _buildAiStudioCard(),
-          const SizedBox(height: 16),
-          _buildVariablesCard(),
         ] else
           NeyvoGlassPanel(
             child: Text(
@@ -554,7 +575,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             ),
             const SizedBox(height: 12),
             ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 160, maxHeight: 320),
+              constraints: const BoxConstraints(minHeight: 200, maxHeight: 480),
               child: Container(
                 decoration: BoxDecoration(
                   color: NeyvoColors.bgRaised,
@@ -753,6 +774,68 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         setState(() => _aiSuggestLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  Future<void> _playVoiceSample(Map<String, dynamic> voice) async {
+    final voiceId = (voice['voice_id'] ?? '').toString();
+    final provider = (voice['provider'] ?? '').toString();
+    if (voiceId.isEmpty || provider.isEmpty) return;
+    setState(() => _playingVoiceId = voiceId);
+    try {
+      final res = await NeyvoPulseApi.postVoicePreview(
+        voiceId: voiceId,
+        provider: provider,
+        text: (voice['sample_text'] ?? '').toString().trim().isEmpty
+            ? null
+            : (voice['sample_text'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      final url = (res['audio_url'] ?? '').toString();
+      if (url.isNotEmpty) {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Opening sample…')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Preview failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _playingVoiceId = null);
+      }
+    }
+  }
+
+  Future<void> _selectVoice(Map<String, dynamic> voice) async {
+    final voiceId = (voice['voice_id'] ?? '').toString();
+    final provider = (voice['provider'] ?? '').toString();
+    if (voiceId.isEmpty || provider.isEmpty || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, {
+        'voice_provider': provider,
+        'voice_id': voiceId,
+      });
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Voice updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -965,8 +1048,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   Widget _tabVoice() {
     final sub = (_wallet?['subscription_tier'] ?? '').toString().toLowerCase();
     final tier = _effectiveTier;
-    final provider = _currentVoiceProvider.toLowerCase();
     final voiceId = _currentVoiceId;
+    final currentName = _currentVoiceName;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -982,17 +1065,98 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
               const SizedBox(height: 6),
               Text(
-                voiceId.isEmpty ? 'Using your plan default voice.' : 'Selected voice: $provider · $voiceId',
+                voiceId.isEmpty
+                    ? 'Using your default voice for this tier.'
+                    : 'Selected voice: ${currentName ?? 'Custom voice'}',
                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: _saving ? null : _openVoiceLibrary,
-                  child: const Text('Choose voice (listen to sample)'),
+              if (_voiceCatalogLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal)),
+                )
+              else if (_voiceCatalogError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                  child: Text(
+                    'Voice catalog is unavailable right now. Please try again later.',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                )
+              else if (_voicesForTier.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                  child: Text(
+                    'No curated voices available for this tier yet.',
+                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                )
+              else ...[
+                Text(
+                  'Choose a voice for this operator. You can listen to a short sample before selecting.',
+                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
                 ),
-              ),
+                const SizedBox(height: 12),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _voicesForTier.length,
+                  itemBuilder: (context, index) {
+                    final v = _voicesForTier[index];
+                    final vid = (v['voice_id'] ?? '').toString();
+                    final name = (v['name'] ?? '').toString().isNotEmpty
+                        ? (v['name'] ?? '').toString()
+                        : vid;
+                    final vtier = (v['tier'] ?? tier).toString();
+                    final isSelected = voiceId.isNotEmpty && voiceId == vid;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? NeyvoColors.bgRaised.withOpacity(0.75) : NeyvoColors.bgRaised,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? NeyvoColors.teal : NeyvoColors.borderSubtle,
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          isSelected ? Icons.check_circle : Icons.record_voice_over_outlined,
+                          color: isSelected ? NeyvoColors.teal : NeyvoColors.textSecondary,
+                        ),
+                        title: Text(
+                          name,
+                          style: NeyvoTextStyles.bodyPrimary,
+                        ),
+                        subtitle: Text(
+                          _tierDisplay(vtier),
+                          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                        ),
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            IconButton(
+                              icon: _playingVoiceId == vid
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.play_circle_outline),
+                              tooltip: 'Play sample',
+                              onPressed: () => _playVoiceSample(v),
+                            ),
+                            FilledButton.tonal(
+                              onPressed: _saving ? null : () => _selectVoice(v),
+                              child: Text(isSelected ? 'Selected' : 'Select'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -1029,6 +1193,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        _buildVariablesCard(),
         const SizedBox(height: 16),
         NeyvoGlassPanel(
           child: Column(
