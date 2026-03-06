@@ -84,9 +84,16 @@ class ManagedProfileApiService {
       _post('/api/managed-profiles/$profileId/ai-suggest', {'message': message});
 
   /// UB operator: AI suggest edits to custom prompt and voicemail.
-  static Future<Map<String, dynamic>> aiSuggestPrompt(String profileId, {String? message}) async =>
+  /// Pass [conversationHistory] for multi-turn context (list of {role, content}).
+  static Future<Map<String, dynamic>> aiSuggestPrompt(
+    String profileId, {
+    String? message,
+    List<Map<String, String>>? conversationHistory,
+  }) async =>
       _post('/api/managed-profiles/$profileId/ai-suggest-prompt', {
         if (message != null && message.isNotEmpty) 'message': message,
+        if (conversationHistory != null && conversationHistory.isNotEmpty)
+          'conversation_history': conversationHistory,
       });
 
   /// Preview a sentence with variable values substituted (e.g. for display in wizard).

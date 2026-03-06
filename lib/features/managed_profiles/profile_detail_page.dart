@@ -755,10 +755,24 @@ class _AiStudioMessage {
       _aiSuggestLoading = true;
       _chatMessages.add(_AiStudioMessage.user(text));
     });
+    // Build conversation history for multi-turn context (last 6 messages).
+    final history = <Map<String, String>>[];
+    for (final msg in _chatMessages) {
+      if (msg.isUser) {
+        history.add({'role': 'user', 'content': msg.text});
+      } else {
+        history.add({'role': 'assistant', 'content': msg.text});
+      }
+    }
+    // Exclude the current user message we just added.
+    if (history.isNotEmpty && history.last['role'] == 'user') {
+      history.removeLast();
+    }
     try {
       final res = await ManagedProfileApiService.aiSuggestPrompt(
         widget.profileId,
         message: text,
+        conversationHistory: history.isNotEmpty ? history : null,
       );
       _aiSuggestMessageCtrl.clear();
       final ok = res['ok'] == true;
