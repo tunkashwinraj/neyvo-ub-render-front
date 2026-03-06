@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import '../../utils/voice_preview_player.dart';
 
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
@@ -275,16 +276,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       _voiceCatalogError = null;
     });
     try {
-      // First, try fetching curated voices for the effective tier.
-      final primaryRes = await NeyvoPulseApi.getVoices(tier: tier);
-      List<Map<String, dynamic>> list = _extractVoicesFromResponse(primaryRes, preferredTier: tier);
-
-      // If nothing came back for this tier (e.g. misconfigured library),
-      // fall back to the full catalog so operators always have choices.
-      if (list.isEmpty) {
-        final fallbackRes = await NeyvoPulseApi.getVoices(tier: 'all');
-        list = _extractVoicesFromResponse(fallbackRes, preferredTier: tier);
-      }
+      // Always fetch full catalog (tier=all) so we show all ElevenLabs + OpenAI voices.
+      // The backend returns grouped { neutral, natural, ultra }; we flatten and prioritize current tier.
+      final res = await NeyvoPulseApi.getVoices(tier: 'all');
+      List<Map<String, dynamic>> list = _extractVoicesFromResponse(res, preferredTier: tier);
 
       if (!mounted) return;
       setState(() {
@@ -932,14 +927,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             : (voice['sample_text'] ?? '').toString(),
       );
       if (!mounted) return;
-      final url = (res['audio_url'] ?? '').toString();
-      if (url.isNotEmpty) {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
+      await playVoicePreview(res);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Opening sample…')),
+          const SnackBar(content: Text('Playing sample…')),
         );
       }
     } catch (e) {

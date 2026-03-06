@@ -2,8 +2,9 @@
 // Voice Library: filter by tier, play sample via /api/voices/preview, select and return profile.
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../neyvo_pulse_api.dart';
+import '../utils/voice_preview_player.dart';
 import '../theme/neyvo_theme.dart';
 
 class VoiceLibraryModal extends StatefulWidget {
@@ -42,18 +43,25 @@ class _VoiceLibraryModalState extends State<VoiceLibraryModal> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await NeyvoPulseApi.getVoices(tier: _filterTier);
+      // Always fetch full catalog (tier=all) so we show all voices.
+      final res = await NeyvoPulseApi.getVoices(tier: 'all');
       List<dynamic> list = [];
       if (res is List) {
         list = List<dynamic>.from(res);
       } else if (res is Map && res['voices'] is List) {
         list = List<dynamic>.from(res['voices'] as List);
       } else if (res is Map && res['neutral'] is List) {
-        list = [
+        final all = [
           ...(res['neutral'] as List),
           ...(res['natural'] as List? ?? []),
           ...(res['ultra'] as List? ?? []),
         ];
+        if (_filterTier == 'all') {
+          list = all;
+        } else {
+          final t = _filterTier.toLowerCase();
+          list = all.where((v) => ((v as Map)['tier'] ?? '').toString().toLowerCase() == t).toList();
+        }
       }
       if (mounted) setState(() {
         _voices = list;
@@ -88,16 +96,12 @@ class _VoiceLibraryModalState extends State<VoiceLibraryModal> {
         text: profile['sample_text'] as String?,
       );
       if (!mounted) return;
-      final url = res['audio_url'] as String?;
-      if (url != null && url.isNotEmpty) {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
+      await playVoicePreview(res);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Playing sample…')),
+        );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening sample…')),
-      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

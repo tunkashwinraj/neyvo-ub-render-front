@@ -5,8 +5,9 @@
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../api/spearia_api.dart';
+import '../utils/voice_preview_player.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 
@@ -544,18 +545,11 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
                         provider: provider,
                         text: 'Hi! This is your Neyvo voice sample.',
                       );
-                      final url = res['audio_url'] as String?;
-                      if (url != null && url.isNotEmpty) {
-                        final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                      } else {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Preview generated.')),
-                          );
-                        }
+                      await playVoicePreview(res);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Playing sample…')),
+                        );
                       }
                     } catch (e) {
                       if (mounted) {

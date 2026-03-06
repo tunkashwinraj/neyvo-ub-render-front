@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../neyvo_pulse_api.dart';
+import '../../../utils/voice_preview_player.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
@@ -118,15 +118,10 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
             : (voice['sample_text'] ?? '').toString(),
       );
       if (!mounted) return;
-      final url = (res['audio_url'] ?? '').toString();
-      if (url.isNotEmpty) {
-        final uri = Uri.parse(url);
-        // We intentionally let the browser handle playback via new tab.
-        // This keeps the implementation simple and consistent with other surfaces.
-        // ignore: deprecated_member_use
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await playVoicePreview(res);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Opening sample…')),
+          const SnackBar(content: Text('Playing sample…')),
         );
       }
     } catch (e) {

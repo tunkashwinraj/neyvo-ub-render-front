@@ -46,6 +46,7 @@ dependencies:
   # HTTP / utilities
   http: ^1.2.2
   url_launcher: ^6.3.1
+  audioplayers: ^6.0.0
   file_picker: ^8.1.6
   intl: ^0.20.2
   shared_preferences: ^2.2.2
