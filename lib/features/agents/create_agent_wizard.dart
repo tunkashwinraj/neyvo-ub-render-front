@@ -1,5 +1,5 @@
 // lib/features/agents/create_agent_wizard.dart
-// UB Operator Wizard: department → work goals → AI suggest tools → confirm → AI craft prompt → overview → create.
+// UB Operator Wizard: work goals → overview → create. Department fixed to Student Financial Services.
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +8,20 @@ import '../../neyvo_pulse_api.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../pulse_route_names.dart';
 import '../managed_profiles/managed_profile_api_service.dart';
+
+/// Default tools for UB operator when none selected (backend uses same default).
+const List<String> _defaultToolKeys = [
+  'get_business_info@1.0',
+  'create_callback@1.0',
+  'send_confirmation@1.0',
+];
+
+/// Friendly labels for Overview abilities (no raw tool keys shown).
+const Map<String, String> _toolKeyToFriendlyLabel = {
+  'get_business_info@1.0': 'Answer questions about the department',
+  'create_callback@1.0': 'Schedule callbacks',
+  'send_confirmation@1.0': 'Send confirmations',
+};
 
 class CreateAgentWizard extends StatefulWidget {
   const CreateAgentWizard({super.key, this.initialDepartmentId});
@@ -19,19 +33,18 @@ class CreateAgentWizard extends StatefulWidget {
 }
 
 class _CreateAgentWizardState extends State<CreateAgentWizard> {
-  static const int _totalSteps = 7;
+  static const int _totalSteps = 3;
   int _step = 0;
   bool _loading = false;
   bool _saving = false;
   String? _error;
 
+  static const String _fixedDepartmentId = 'student_financial_services';
+  static const String _fixedDepartmentName = 'Student Financial Services';
+  static const String _fixedDepartmentPhone = '203-576-4568';
+
   List<Map<String, dynamic>> _departments = [];
-  String _selectedDepartmentId = '';
-  String _selectedDepartmentName = '';
   final _workGoalsCtrl = TextEditingController();
-  List<String> _suggestedToolKeys = [];
-  List<Map<String, String>> _suggestedVariables = [];
-  final Set<String> _selectedToolKeys = {};
   List<Map<String, String>> _promptVariables = [];
   String _systemPrompt = '';
   String _voicemailMessage = '';
@@ -43,9 +56,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialDepartmentId != null && widget.initialDepartmentId!.isNotEmpty) {
-      _selectedDepartmentId = widget.initialDepartmentId!;
-    }
+    _profileNameCtrl.text = 'Student Financial Services Operator';
     _loadDepartments();
   }
 
@@ -68,18 +79,6 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         setState(() {
           _departments = list;
           _loading = false;
-          if (_selectedDepartmentId.isEmpty && list.isNotEmpty) {
-            final first = list.first;
-            _selectedDepartmentId = (first['id'] ?? '').toString();
-            _selectedDepartmentName = (first['name'] ?? '').toString();
-          } else if (_selectedDepartmentId.isNotEmpty) {
-            for (final d in list) {
-              if ((d['id'] ?? '').toString() == _selectedDepartmentId) {
-                _selectedDepartmentName = (d['name'] ?? '').toString();
-                break;
-              }
-            }
-          }
         });
       }
     } catch (e) {
@@ -92,7 +91,8 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     }
   }
 
-  Future<void> _fetchSuggestedTools() async {
+  /// Call ai-craft-prompt with fixed department and default tools; store prompt/summary/voicemail for create.
+  Future<void> _fetchCraftedPromptForOverview() async {
     if (_workGoalsCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Enter work goals first.');
       return;
@@ -102,26 +102,23 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       _error = null;
     });
     try {
-      final res = await ManagedProfileApiService.aiSuggestTools(
-        department: _selectedDepartmentId.isNotEmpty ? _selectedDepartmentId : _selectedDepartmentName,
+      final res = await ManagedProfileApiService.aiCraftPrompt(
+        department: _fixedDepartmentId,
         workGoals: _workGoalsCtrl.text.trim(),
+        selectedToolKeys: _defaultToolKeys,
+        promptVariables: _promptVariables,
+        departmentPhone: _fixedDepartmentPhone,
       );
       if (!mounted) return;
-      final tools = (res['suggested_tool_keys'] as List?)?.map((e) => e.toString()).toList() ?? [];
-      final vars = (res['suggested_variables'] as List?)
-          ?.map((e) => Map<String, String>.from({
-                'key': (e is Map ? e['key'] : null)?.toString() ?? '',
-                'label': (e is Map ? e['label'] : null)?.toString() ?? '',
-              }))
-          .toList() ?? [];
       setState(() {
-        _suggestedToolKeys = tools;
-        _suggestedVariables = vars;
-        _selectedToolKeys.clear();
-        _selectedToolKeys.addAll(tools);
-        _promptVariables = List.from(vars);
+        _systemPrompt = (res['system_prompt'] ?? '').toString();
+        _voicemailMessage = (res['voicemail_message'] ?? '').toString();
+        _operatorSummary = (res['operator_summary'] ?? '').toString();
         _loading = false;
+        _step = 1;
+        _overviewExampleSentence = null;
       });
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverviewExampleIfNeeded());
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -150,7 +147,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
   }
 
   Future<void> _loadOverviewExampleIfNeeded() async {
-    if (_step != 5 || _promptVariables.isEmpty || _voicemailMessage.isEmpty ||
+    if (_step != 1 || _promptVariables.isEmpty || _voicemailMessage.isEmpty ||
         _overviewExampleSentence != null || _overviewExampleLoading) return;
     setState(() => _overviewExampleLoading = true);
     try {
@@ -158,7 +155,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         template: _voicemailMessage,
         variableValues: _overviewSampleValues(_promptVariables),
       );
-      if (mounted && _step == 5) {
+      if (mounted && _step == 1) {
         setState(() {
           _overviewExampleSentence = (res['sentence'] ?? '').toString();
           _overviewExampleLoading = false;
@@ -169,47 +166,11 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     }
   }
 
-  String? get _selectedDepartmentPhone {
-    for (final d in _departments) {
-      if ((d['id'] ?? '').toString() == _selectedDepartmentId) {
-        final p = d['phone'];
-        return p != null && p.toString().trim().isNotEmpty ? p.toString().trim() : null;
-      }
-    }
-    return null;
-  }
-
-  Future<void> _fetchCraftedPrompt() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ManagedProfileApiService.aiCraftPrompt(
-        department: _selectedDepartmentId.isNotEmpty ? _selectedDepartmentId : _selectedDepartmentName,
-        workGoals: _workGoalsCtrl.text.trim(),
-        selectedToolKeys: _selectedToolKeys.toList(),
-        promptVariables: _promptVariables,
-        departmentPhone: _selectedDepartmentPhone,
-      );
-      if (!mounted) return;
-      setState(() {
-        _systemPrompt = (res['system_prompt'] ?? '').toString();
-        _voicemailMessage = (res['voicemail_message'] ?? '').toString();
-        _operatorSummary = (res['operator_summary'] ?? '').toString();
-        _loading = false;
-        if (_profileNameCtrl.text.trim().isEmpty) {
-          _profileNameCtrl.text = '$_selectedDepartmentName Operator';
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
-    }
+  /// Friendly ability labels for the default tools (Overview step).
+  List<String> get _overviewAbilityLabels {
+    return _defaultToolKeys
+        .map((k) => _toolKeyToFriendlyLabel[k] ?? k.replaceAll('@1.0', '').replaceAll('_', ' '))
+        .toList();
   }
 
   Future<void> _create() async {
@@ -218,27 +179,26 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       setState(() => _error = 'Enter an operator name.');
       return;
     }
-    if (_systemPrompt.isEmpty) {
-      setState(() => _error = 'System prompt is missing. Go back and generate it.');
-      return;
-    }
     setState(() {
       _saving = true;
       _error = null;
     });
+    final payload = <String, dynamic>{
+      'schema_version': 2,
+      'profile_name': profileName,
+      'department': _fixedDepartmentId,
+      'work_goals': _workGoalsCtrl.text.trim(),
+      'prompt_variables': _promptVariables,
+      'operator_summary': _operatorSummary.isNotEmpty ? _operatorSummary : null,
+      'enabled_tool_keys': _defaultToolKeys,
+      'direction': 'outbound',
+    };
+    if (_systemPrompt.isNotEmpty) {
+      payload['custom_system_prompt'] = _systemPrompt;
+      if (_voicemailMessage.isNotEmpty) payload['voicemail_message'] = _voicemailMessage;
+    }
     try {
-      final res = await ManagedProfileApiService.createProfile({
-        'schema_version': 2,
-        'profile_name': profileName,
-        'department': _selectedDepartmentId.isNotEmpty ? _selectedDepartmentId : _selectedDepartmentName,
-        'work_goals': _workGoalsCtrl.text.trim(),
-        'custom_system_prompt': _systemPrompt,
-        'voicemail_message': _voicemailMessage.isNotEmpty ? _voicemailMessage : null,
-        'prompt_variables': _promptVariables,
-        'operator_summary': _operatorSummary.isNotEmpty ? _operatorSummary : null,
-        'enabled_tool_keys': _selectedToolKeys.toList(),
-        'direction': 'outbound',
-      });
+      final res = await ManagedProfileApiService.createProfile(payload);
       if (!mounted) return;
       final err = res['error'];
       if (err != null) {
@@ -267,18 +227,10 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
   String get _stepTitle {
     switch (_step) {
       case 0:
-        return 'Select department';
-      case 1:
         return 'What should this operator do?';
-      case 2:
-        return 'Suggested tools & variables';
-      case 3:
-        return 'Confirm tools and variables';
-      case 4:
-        return 'Generate prompt';
-      case 5:
+      case 1:
         return 'Overview';
-      case 6:
+      case 2:
         return 'Create operator';
       default:
         return 'Create operator';
@@ -316,13 +268,9 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
                   child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
                 )
               else ...[
-                if (_step == 0) _buildDepartmentStep(),
-                if (_step == 1) _buildWorkGoalsStep(),
-                if (_step == 2) _buildSuggestToolsStep(),
-                if (_step == 3) _buildConfirmToolsStep(),
-                if (_step == 4) _buildCraftPromptStep(),
-                if (_step == 5) _buildOverviewStep(),
-                if (_step == 6) _buildCreateStep(),
+                if (_step == 0) _buildWorkGoalsStep(),
+                if (_step == 1) _buildOverviewStep(),
+                if (_step == 2) _buildCreateStep(),
               ],
               const SizedBox(height: 24),
               Row(
@@ -334,74 +282,18 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
                       child: const Text('Back'),
                     ),
                   const SizedBox(width: 8),
-                  if (_step < _totalSteps - 1) ...[
-                    if (_step == 1)
-                      FilledButton(
-                        onPressed: _workGoalsCtrl.text.trim().isEmpty ? null : () => setState(() {
-                          _step++;
-                          _overviewExampleSentence = null;
-                        }),
-                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                        child: const Text('Continue'),
-                      )
-                    else if (_step == 2)
-                      Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => setState(() {
-                              _step++;
-                              _overviewExampleSentence = null;
-                            }),
-                            child: const Text('Continue without suggestions'),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: () async {
-                              await _fetchSuggestedTools();
-                              if (mounted && _error == null) setState(() {
+                  if (_step < _totalSteps - 1)
+                    FilledButton(
+                      onPressed: _step == 0
+                          ? (_workGoalsCtrl.text.trim().isEmpty ? null : () => _fetchCraftedPromptForOverview())
+                          : () => setState(() {
                                 _step++;
                                 _overviewExampleSentence = null;
-                              });
-                            },
-                            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                            child: const Text('Get suggestions'),
-                          ),
-                        ],
-                      )
-                    else if (_step == 3)
-                      FilledButton(
-                        onPressed: () => setState(() {
-                          _step++;
-                          _overviewExampleSentence = null;
-                        }),
-                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                        child: const Text('Continue'),
-                      )
-                    else if (_step == 4)
-                      FilledButton(
-                        onPressed: () async {
-                          await _fetchCraftedPrompt();
-                          if (mounted && _error == null) {
-                            setState(() {
-                              _step++;
-                              _overviewExampleSentence = null;
-                            });
-                            WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverviewExampleIfNeeded());
-                          }
-                        },
-                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                        child: const Text('Generate prompt'),
-                      )
-                    else
-                      FilledButton(
-                        onPressed: () => setState(() {
-                          _step++;
-                          _overviewExampleSentence = null;
-                        }),
-                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                        child: const Text('Continue'),
-                      ),
-                  ] else
+                              }),
+                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                      child: Text(_step == 0 ? 'Continue' : 'Continue'),
+                    )
+                  else
                     FilledButton(
                       onPressed: _saving ? null : _create,
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
@@ -418,58 +310,22 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     );
   }
 
-  Widget _buildDepartmentStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Choose the department this operator will represent.',
-          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-        ),
-        const SizedBox(height: 16),
-        if (_departments.isEmpty)
-          const Text('Loading departments…')
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _departments.map((d) {
-              final id = (d['id'] ?? '').toString();
-              final name = (d['name'] ?? '').toString();
-              final selected = _selectedDepartmentId == id;
-              return InkWell(
-                onTap: () => setState(() {
-                  _selectedDepartmentId = id;
-                  _selectedDepartmentName = name;
-                }),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: selected ? NeyvoColors.teal.withOpacity(0.15) : NeyvoColors.bgRaised,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: selected ? NeyvoColors.teal : NeyvoColors.borderDefault),
-                  ),
-                  child: Text(name, style: NeyvoTextStyles.label.copyWith(color: selected ? NeyvoColors.teal : null)),
-                ),
-              );
-            }).toList(),
-          ),
-      ],
-    );
-  }
-
   Widget _buildWorkGoalsStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
+          'Department: $_fixedDepartmentName',
+          style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal),
+        ),
+        const SizedBox(height: 12),
+        Text(
           'Describe what this operator should do (e.g. remind students about federal loan acceptance, guide them through the portal, offer callback).',
           style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: NeyvoColors.bgRaised.withOpacity(0.6),
             borderRadius: BorderRadius.circular(8),
@@ -478,16 +334,11 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Tips', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
-              const SizedBox(height: 4),
-              Text(
-                'Include: what to remind or explain (e.g. federal loan acceptance, portal steps), how to guide (one step at a time), and what to offer (e.g. callback if busy).',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-              ),
+              Text('Example (copy and edit if you like)', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
               const SizedBox(height: 6),
-              Text(
-                'Example: "Remind students to accept or decline federal loans for this year; guide them through UB Portal → Self-Service → Financial Aid → View and Accept My Awards; offer to schedule a callback if they\'re busy."',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted, fontStyle: FontStyle.italic),
+              SelectableText(
+                'Remind students to accept or decline federal student loans for this year; guide them through UB Portal → Self-Service → Financial Aid → View and Accept My Awards; offer to schedule a callback if they\'re busy. Provide department number 203-576-4568.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
               ),
             ],
           ),
@@ -497,7 +348,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
           controller: _workGoalsCtrl,
           maxLines: 4,
           decoration: const InputDecoration(
-            hintText: 'E.g. Remind students to accept or decline federal loans, guide one step at a time in the portal, schedule callbacks if they\'re busy.',
+            hintText: 'Paste or type work goals…',
             border: OutlineInputBorder(),
             alignLabelWithHint: true,
           ),
@@ -507,127 +358,12 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
     );
   }
 
-  bool _isVariableSelected(Map<String, String> v) {
-    final key = v['key'] ?? '';
-    return _promptVariables.any((e) => (e['key'] ?? '') == key);
-  }
-
-  void _toggleVariable(Map<String, String> v, bool selected) {
-    final key = v['key'] ?? '';
-    if (selected) {
-      if (!_promptVariables.any((e) => (e['key'] ?? '') == key)) {
-        _promptVariables.add(Map<String, String>.from(v));
-      }
-    } else {
-      _promptVariables.removeWhere((e) => (e['key'] ?? '') == key);
-    }
-  }
-
-  Widget _buildSuggestToolsStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_suggestedToolKeys.isEmpty && _suggestedVariables.isEmpty)
-          Text(
-            'Click "Get suggestions" to load AI-recommended tools and variables based on your department and work goals, or "Continue without suggestions" to skip.',
-            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-          )
-        else ...[
-          if (_suggestedToolKeys.isNotEmpty) ...[
-            Text('Select the tools this operator can use:', style: NeyvoTextStyles.label),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: _suggestedToolKeys.map((key) {
-                final selected = _selectedToolKeys.contains(key);
-                final label = key.replaceAll('@1.0', '').replaceAll('_', ' ');
-                return FilterChip(
-                  label: Text(label),
-                  selected: selected,
-                  onSelected: (v) => setState(() {
-                    if (v) _selectedToolKeys.add(key);
-                    else _selectedToolKeys.remove(key);
-                  }),
-                );
-              }).toList(),
-            ),
-          ],
-          if (_suggestedVariables.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('Select prompt variables (used in the script):', style: NeyvoTextStyles.label),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: _suggestedVariables.map((v) {
-                final label = v['label'] ?? v['key'] ?? '';
-                final selected = _isVariableSelected(v);
-                return FilterChip(
-                  label: Text(label),
-                  selected: selected,
-                  onSelected: (sel) => setState(() => _toggleVariable(v, sel)),
-                );
-              }).toList(),
-            ),
-          ],
-        ],
-      ],
-    );
-  }
-
-  Widget _buildConfirmToolsStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Tools: ${_selectedToolKeys.join(", ")}', style: NeyvoTextStyles.body),
-        const SizedBox(height: 8),
-        Text('Variables: ${_promptVariables.map((v) => v['label'] ?? v['key']).join(", ")}', style: NeyvoTextStyles.body),
-      ],
-    );
-  }
-
-  Widget _buildCraftPromptStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_selectedDepartmentPhone != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Department number will be included in the script when available.',
-              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.teal),
-            ),
-          ),
-        if (_operatorSummary.isNotEmpty) ...[
-          Text('Summary:', style: NeyvoTextStyles.label),
-          const SizedBox(height: 4),
-          Text(_operatorSummary, style: NeyvoTextStyles.body),
-          const SizedBox(height: 16),
-        ],
-        if (_systemPrompt.isNotEmpty) ...[
-          Text('Generated prompt (preview):', style: NeyvoTextStyles.label),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: NeyvoColors.bgRaised,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: NeyvoColors.borderDefault),
-            ),
-            child: Text(
-              _systemPrompt.length > 400 ? '${_systemPrompt.substring(0, 400)}…' : _systemPrompt,
-              style: NeyvoTextStyles.micro,
-              maxLines: 8,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildOverviewStep() {
+    final summary = _operatorSummary.isNotEmpty ? _operatorSummary : _workGoalsCtrl.text.trim();
+    final abilities = _overviewAbilityLabels;
+    final variablesStr = _promptVariables.isEmpty
+        ? 'None'
+        : _promptVariables.map((v) => v['label'] ?? v['key']).join(', ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -639,10 +375,10 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
           ),
         ),
         const SizedBox(height: 16),
-        _overviewRow('Department', _selectedDepartmentName),
-        _overviewRow('Summary', _operatorSummary.isNotEmpty ? _operatorSummary : _workGoalsCtrl.text.trim()),
-        _overviewRow('Tools', _selectedToolKeys.join(', ')),
-        _overviewRow('Variables', _promptVariables.map((v) => v['label'] ?? v['key']).join(', ')),
+        _overviewRow('Department', _fixedDepartmentName),
+        _overviewRow('Summary', summary.isEmpty ? '—' : summary),
+        _overviewRow('Abilities', abilities.isEmpty ? '—' : abilities.join(', ')),
+        _overviewRow('Variables', variablesStr),
         if (_promptVariables.isNotEmpty && _voicemailMessage.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text('Example sentence', style: NeyvoTextStyles.label),
