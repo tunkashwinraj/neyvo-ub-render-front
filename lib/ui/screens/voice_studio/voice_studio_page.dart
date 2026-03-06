@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../theme/neyvo_theme.dart';
@@ -368,7 +369,7 @@ class _VoiceCardState extends State<_VoiceCard> with SingleTickerProviderStateMi
                 Row(
                   children: [
                     NeyvoAIOrb(
-                      state: widget.isPlaying ? NeyvoAIOrbState.talking : NeyvoAIOrbState.idle,
+                      state: widget.isPlaying ? NeyvoAIOrbState.speaking : NeyvoAIOrbState.idle,
                       size: 32,
                     ),
                     const SizedBox(width: 8),
