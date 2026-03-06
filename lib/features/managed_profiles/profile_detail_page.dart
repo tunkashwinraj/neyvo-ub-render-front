@@ -598,7 +598,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Conversation', style: NeyvoTextStyles.heading),
+          Text('AI Studio workspace', style: NeyvoTextStyles.heading),
           const SizedBox(height: 6),
           if (!canUse)
             Text(
@@ -607,23 +607,47 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             )
           else ...[
             Text(
-              'Tell the AI how you want this operator to speak. It will propose changes to the script and voicemail.',
+              'On the left, chat with AI about how you want this operator to sound. On the right, preview the updated script and voicemail before applying.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
-            const SizedBox(height: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 200, maxHeight: 480),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: NeyvoColors.bgRaised,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: NeyvoColors.borderSubtle),
-                ),
-                child: _buildAiStudioChatList(),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 420,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left: conversation
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Conversation', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: NeyvoColors.bgRaised,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: NeyvoColors.borderSubtle),
+                            ),
+                            child: _buildAiStudioChatList(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildAiStudioInputRow(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Right: suggestion preview
+                  Expanded(
+                    flex: 2,
+                    child: _buildAiStudioSuggestionPanel(),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            _buildAiStudioInputRow(),
           ],
         ],
       ),
@@ -694,35 +718,115 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   msg.text,
                   style: NeyvoTextStyles.bodyPrimary,
                 ),
-                if (msg.hasSuggestion && !msg.applied && !msg.rejected) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => _rejectSuggestion(index),
-                        child: const Text('Reject'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: _aiSuggestLoading ? null : () => _applySuggestion(index),
-                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
-                        child: const Text('Apply to operator'),
-                      ),
-                    ],
-                  ),
-                ] else if (msg.applied) ...[
-                  const SizedBox(height: 8),
-                  Text('Applied and synced to operator.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
-                ] else if (msg.rejected) ...[
-                  const SizedBox(height: 8),
-                  Text('Suggestion rejected.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
-                ],
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAiStudioSuggestionPanel() {
+    final latestIndex = _chatMessages.lastIndexWhere((m) => m.hasSuggestion);
+    if (latestIndex == -1) {
+      return Container(
+        decoration: BoxDecoration(
+          color: NeyvoColors.bgRaised,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: NeyvoColors.borderSubtle),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Suggested script preview', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+            const SizedBox(height: 8),
+            Text(
+              'When AI proposes changes, you’ll see the updated system prompt and voicemail here. '
+              'Send a message on the left to get started.',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final msg = _chatMessages[latestIndex];
+    return Container(
+      decoration: BoxDecoration(
+        color: NeyvoColors.bgRaised,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NeyvoColors.borderSubtle),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Suggested script preview', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+          const SizedBox(height: 8),
+          Expanded(
+            child: DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  const TabBar(
+                    labelColor: NeyvoColors.teal,
+                    unselectedLabelColor: NeyvoColors.textSecondary,
+                    indicatorColor: NeyvoColors.teal,
+                    tabs: [
+                      Tab(text: 'System prompt'),
+                      Tab(text: 'Voicemail'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        SingleChildScrollView(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            msg.proposedPrompt ?? _promptCtrl.text,
+                            style: NeyvoTextStyles.bodyPrimary,
+                          ),
+                        ),
+                        SingleChildScrollView(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            msg.proposedVoicemail ?? _voicemailCtrl.text,
+                            style: NeyvoTextStyles.bodyPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (msg.applied) ...[
+            Text('Applied and synced to operator.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+          ] else if (msg.rejected) ...[
+            Text('Suggestion rejected.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: () => _rejectSuggestion(latestIndex),
+                  child: const Text('Reject'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  child: const Text('Apply to operator'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
