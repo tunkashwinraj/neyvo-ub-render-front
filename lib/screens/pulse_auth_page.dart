@@ -20,7 +20,6 @@ class PulseAuthPage extends StatefulWidget {
 class _PulseAuthPageState extends State<PulseAuthPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _isSignUp = false;
   bool _loading = false;
   String? _error;
 
@@ -44,10 +43,6 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     }
     if (password.isEmpty) {
       setState(() => _error = 'Please enter your password');
-      return false;
-    }
-    if (_isSignUp && password.length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters');
       return false;
     }
     return true;
@@ -179,22 +174,15 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     final email = _email.text.trim();
     final password = _password.text;
     try {
-      if (_isSignUp) {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      } else {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      }
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       if (!mounted) return;
       // Auth state stream in main will rebuild and show PulseShell
     } on FirebaseAuthException catch (e) {
       setState(() {
-        _error = e.code == 'email-already-in-use' ? 'Email already in use' : (e.message ?? e.code);
+        _error = e.message ?? e.code;
         _loading = false;
       });
     } catch (e) {
@@ -260,7 +248,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              _isSignUp ? 'Create account' : 'Sign in',
+                              'Sign in',
                               style: NeyvoType.headlineMedium.copyWith(
                                 color: NeyvoTheme.textPrimary,
                               ),
@@ -298,30 +286,14 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                                       width: 24,
                                       child: CircularProgressIndicator(strokeWidth: 2),
                                     )
-                                  : Text(_isSignUp ? 'Create account' : 'Sign in'),
+                                  : const Text('Sign in'),
                             ),
-                            if (!_isSignUp) ...[
-                              const SizedBox(height: NeyvoSpacing.sm),
-                              TextButton(
-                                onPressed: _loading ? null : _showForgotPasswordDialog,
-                                child: Text(
-                                  'Forgot password?',
-                                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: NeyvoSpacing.md),
+                            const SizedBox(height: NeyvoSpacing.sm),
                             TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => setState(() {
-                                        _isSignUp = !_isSignUp;
-                                        _error = null;
-                                      }),
+                              onPressed: _loading ? null : _showForgotPasswordDialog,
                               child: Text(
-                                _isSignUp
-                                    ? 'Already have an account? Sign in'
-                                    : 'Need an account? Sign up',
+                                'Forgot password?',
+                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                               ),
                             ),
                           ],

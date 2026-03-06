@@ -28,6 +28,7 @@ class _TeamPageState extends State<TeamPage> {
   String? _myEmail;
   String? _myName;
   String? _myUserId;
+  List<String>? _myPermissions;
   String? _currentAccountId;
   List<String> _orgAccountIds = [];
   List<Map<String, dynamic>> _members = [];
@@ -63,6 +64,10 @@ class _TeamPageState extends State<TeamPage> {
           .where((s) => s != null && s.isNotEmpty)
           .cast<String>()
           .toList();
+      final permsRaw = roleRes['permissions'];
+      final permsList = permsRaw is List
+          ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
+          : null;
       setState(() {
         _myRole = roleRes['role']?.toString();
         _myEmail = roleRes['email']?.toString();
@@ -70,6 +75,7 @@ class _TeamPageState extends State<TeamPage> {
             ? roleRes['name']?.toString().trim()
             : null;
         _myUserId = roleRes['user_id']?.toString();
+        _myPermissions = permsList;
         _members = List<Map<String, dynamic>>.from(
           membersRes['members'] as List? ?? [],
         );
@@ -202,7 +208,7 @@ class _TeamPageState extends State<TeamPage> {
           ),
         ],
         const SizedBox(height: NeyvoSpacing.lg),
-        if (_myRole == 'admin') ...[
+        if (_myRole == 'admin' || (_myPermissions?.contains('team') ?? false)) ...[
           OutlinedButton.icon(
             onPressed: _openAddMember,
             icon: const Icon(Icons.person_add_outlined, size: 18),
@@ -221,7 +227,7 @@ class _TeamPageState extends State<TeamPage> {
         const SizedBox(height: NeyvoSpacing.sm),
         if (_members.isEmpty)
           Text(
-            'No team members yet. Add members above (admin only).',
+            'No team members yet. Add members above if you have permission.',
             style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
           )
         else
