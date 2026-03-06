@@ -450,9 +450,9 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: searching || purchasing ? null : () => search(setInner),
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                 icon: searching
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Icon(Icons.search, size: 18),
                 label: Text(searching ? 'Searching…' : 'Search'),
               ),
@@ -489,9 +489,9 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: (selectedE164 == null || purchasing) ? null : () => purchase(setInner),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: purchasing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                       : const Text('Purchase selected number'),
                 ),
               ],

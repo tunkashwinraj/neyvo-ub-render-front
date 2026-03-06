@@ -46,7 +46,7 @@
       return MaterialApp(
         title: 'Neyvo',
         debugShowCheckedModeBanner: false,
-        theme: NeyvoThemeData.dark(),
+        theme: NeyvoThemeData.light(),
         home: StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {

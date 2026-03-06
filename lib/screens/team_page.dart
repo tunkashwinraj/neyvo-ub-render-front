@@ -239,7 +239,6 @@ class _TeamPageState extends State<TeamPage> {
             final email = rawEmail == null ? '' : rawEmail.toString().trim();
             final userId = m['user_id'] ?? m['id'] ?? '?';
             final role = m['role']?.toString() ?? '—';
-            final accountNumber = (m['account_number'] ?? '').toString().trim();
             final perms = m['permissions'];
             final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
             String display;
@@ -265,9 +264,9 @@ class _TeamPageState extends State<TeamPage> {
                     vertical: NeyvoSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: NeyvoColors.bgRaised.withOpacity(0.5),
+                    color: NeyvoTheme.surface.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: NeyvoColors.borderSubtle),
+                    border: Border.all(color: NeyvoTheme.borderSubtle),
                   ),
                   child: Row(
                     children: [
@@ -283,10 +282,9 @@ class _TeamPageState extends State<TeamPage> {
                             const SizedBox(height: 2),
                             Text(
                               'Role: $role'
-                                  + (accountNumber.isNotEmpty ? ' · #$accountNumber' : '')
                                   + (permList.isNotEmpty ? ' · ${permList.join(", ")}' : ''),
                               style: NeyvoTextStyles.micro.copyWith(
-                                color: NeyvoColors.textMuted,
+                                color: NeyvoTheme.textMuted,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,

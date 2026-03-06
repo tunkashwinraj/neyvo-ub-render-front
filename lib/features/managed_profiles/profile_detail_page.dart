@@ -194,7 +194,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
               child: const Text('Purchase number'),
             ),
           ],
@@ -232,7 +232,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
             child: const Text('Attach'),
           ),
         ],
@@ -442,15 +442,15 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                               else
                                 FilledButton(
                                   onPressed: _attaching ? null : _attachToNumber,
-                                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                                   child: const Text('Attach to number'),
                                 ),
                               const SizedBox(width: 8),
                               FilledButton(
                                 onPressed: _saving ? null : _save,
-                                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                                 child: _saving
-                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                                     : const Text('Save'),
                               ),
                             ],
@@ -833,7 +833,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: const Text('Apply to operator'),
                 ),
               ],
@@ -861,9 +861,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(width: 8),
         FilledButton(
           onPressed: _aiSuggestLoading ? null : _sendAiStudioMessage,
-          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
           child: _aiSuggestLoading
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
               : const Text('Send'),
         ),
       ],
@@ -1395,7 +1395,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),
@@ -1492,7 +1492,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),

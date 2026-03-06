@@ -3,11 +3,10 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
-import '../ui/components/ai_orb/neyvo_ai_orb.dart';
-import '../ui/components/backgrounds/neyvo_neural_background.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
 class PulseAuthPage extends StatefulWidget {
@@ -196,55 +195,51 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: NeyvoColors.bgVoid,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: NeyvoNeuralBackground()),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.3),
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.6),
-                  ],
-                ),
-              ),
-            ),
+      backgroundColor: NeyvoColors.bgLight,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              NeyvoColors.white,
+              Color(0xFFFAF8FC),
+              Color(0xFFF5F0FA),
+            ],
           ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xxl),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: NeyvoSpacing.lg),
-                      const NeyvoAIOrb(
-                        state: NeyvoAIOrbState.idle,
-                        size: 140,
-                      ),
-                      const SizedBox(height: NeyvoSpacing.lg),
-                      Text(
-                        'Neyvo Voice OS',
-                        style: NeyvoType.displayLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: NeyvoSpacing.sm),
-                      Text(
-                        'Enter your autonomous voice intelligence environment.',
-                        style: NeyvoType.bodySmall,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: NeyvoSpacing.section),
-                      NeyvoGlassPanel(
-                        glowing: true,
-                        child: Column(
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xxl),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: NeyvoSpacing.xxl),
+                    SvgPicture.asset(
+                      'assets/ub_logo/ub_logo_horizontal_purple.svg',
+                      fit: BoxFit.contain,
+                      height: 48,
+                    ),
+                    const SizedBox(height: NeyvoSpacing.xl),
+                    Text(
+                      'Neyvo',
+                      style: NeyvoType.displayLargeLight,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: NeyvoSpacing.sm),
+                    Text(
+                      'Sign in to access your voice intelligence platform.',
+                      style: NeyvoType.bodySmallLight,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: NeyvoSpacing.section),
+                    NeyvoCard(
+                      padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                      glowing: false,
+                      child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
@@ -272,9 +267,16 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             ),
                             if (_error != null) ...[
                               const SizedBox(height: NeyvoSpacing.md),
-                              Text(
-                                _error!,
-                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                              Container(
+                                padding: const EdgeInsets.all(NeyvoSpacing.sm),
+                                decoration: BoxDecoration(
+                                  color: NeyvoColors.error.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(NeyvoRadius.sm),
+                                ),
+                                child: Text(
+                                  _error!,
+                                  style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error),
+                                ),
                               ),
                             ],
                             const SizedBox(height: NeyvoSpacing.xl),
@@ -299,14 +301,13 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: NeyvoSpacing.section),
-                    ],
-                  ),
+                    const SizedBox(height: NeyvoSpacing.section),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -213,7 +213,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                   },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: i == 0 ? NeyvoColors.teal : NeyvoColors.bgRaised,
-                                    foregroundColor: i == 0 ? Colors.white : NeyvoColors.textPrimary,
+                                    foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
                                     padding: const EdgeInsets.symmetric(vertical: 14),
                                   ),
                                   child: Text(

@@ -1565,7 +1565,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       CircleAvatar(
                         radius: 16,
                         backgroundColor: active ? NeyvoTheme.teal : (done ? NeyvoTheme.teal : NeyvoTheme.bgCard),
-                        child: Text('${i + 1}', style: TextStyle(color: active || done ? Colors.white : NeyvoTheme.textMuted, fontSize: 12)),
+                        child: Text('${i + 1}', style: TextStyle(color: active || done ? NeyvoColors.white : NeyvoTheme.textMuted, fontSize: 12)),
                       ),
                       if (i < steps.length - 1) Expanded(child: Divider(color: done ? NeyvoTheme.teal : NeyvoTheme.border)),
                     ],

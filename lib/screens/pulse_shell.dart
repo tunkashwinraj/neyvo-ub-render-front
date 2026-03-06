@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -359,18 +360,19 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — height 52px (match top bar)
-                SizedBox(
-                  height: 52,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Image.asset(
-                        'assets/ub_logo/ub_logo_horizontal_white.png',
-                        fit: BoxFit.contain,
-                        height: 40,
-                      ),
+                // Logo area — UB horizontal logo (purple on white per style guide)
+                Container(
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: NeyvoColors.ubPurple,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SvgPicture.asset(
+                      'assets/ub_logo/ub_logo_horizontal_white.svg',
+                      fit: BoxFit.contain,
+                      height: 36,
                     ),
                   ),
                 ),
@@ -731,7 +733,7 @@ extension on _PulseShellState {
                       },
                 style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                 child: working
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Text('Switch'),
               ),
             ],

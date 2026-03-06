@@ -858,7 +858,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                       onPressed: _saving ? null : _savePersonality,
                       style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
                       child: _saving
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                           : const Text('Save'),
                     ),
                   ],

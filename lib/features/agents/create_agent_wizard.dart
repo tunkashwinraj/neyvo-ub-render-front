@@ -298,7 +298,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
                       onPressed: _saving ? null : _create,
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                       child: _saving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                           : const Text('Create Operator'),
                     ),
                 ],

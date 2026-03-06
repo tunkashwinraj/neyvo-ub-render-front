@@ -64,7 +64,7 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: NeyvoColors.bgBase,
+        backgroundColor: NeyvoTheme.bgSurface,
         title: const Text('Remove team member'),
         content: Text(
           'Remove $displayLabel from this team?',
@@ -111,7 +111,6 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
     final office = (_member['office'] ?? '').toString().trim();
     final extension = (_member['extension'] ?? '').toString().trim();
     final campus = (_member['campus'] ?? '').toString().trim();
-    final accountNumber = (_member['account_number'] ?? '').toString().trim();
     final role = (_member['role'] ?? '—').toString();
     final perms = _member['permissions'];
     final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
@@ -150,7 +149,6 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
           _detailCard(
             'Role & Position',
             [
-              if (accountNumber.isNotEmpty) _detailRow('Account number', accountNumber),
               _detailRow('Role', role),
               if (title.isNotEmpty) _detailRow('Title', title),
               if (department.isNotEmpty) _detailRow('Department', department),
@@ -170,16 +168,16 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
     return Container(
       padding: const EdgeInsets.all(NeyvoSpacing.lg),
       decoration: BoxDecoration(
-        color: NeyvoColors.bgRaised.withOpacity(0.5),
+        color: NeyvoTheme.surface.withOpacity(0.8),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeyvoColors.borderSubtle),
+        border: Border.all(color: NeyvoTheme.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             title,
-            style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
+            style: NeyvoTextStyles.heading.copyWith(color: NeyvoTheme.textPrimary),
           ),
           const SizedBox(height: NeyvoSpacing.md),
           ...children,
@@ -196,7 +194,7 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
         children: [
           Text(
             label,
-            style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted),
+            style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted),
           ),
           const SizedBox(height: 2),
           Text(
@@ -236,7 +234,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _officeController;
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
-  late TextEditingController _accountNumberController;
 
   @override
   void initState() {
@@ -271,9 +268,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _campusController = TextEditingController(
       text: (widget.member['campus'] ?? '').toString().trim(),
     );
-    _accountNumberController = TextEditingController(
-      text: (widget.member['account_number'] ?? '').toString().trim(),
-    );
   }
 
   @override
@@ -286,7 +280,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _officeController.dispose();
     _extensionController.dispose();
     _campusController.dispose();
-    _accountNumberController.dispose();
     super.dispose();
   }
 
@@ -310,7 +303,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final office = _officeController.text.trim();
     final extension = _extensionController.text.trim();
     final campus = _campusController.text.trim();
-    final accountNumber = _accountNumberController.text.trim();
     try {
       await NeyvoPulseApi.updateMember(
         userId,
@@ -344,7 +336,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: NeyvoColors.bgBase,
+      backgroundColor: NeyvoTheme.bgSurface,
       title: Text(
         'Edit team member',
         style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary),
@@ -363,15 +355,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Name',
                 hintText: 'Full name',
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _accountNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Account number (optional)',
-                hintText: 'e.g. 281720-0001',
               ),
               onChanged: (_) => setState(() {}),
             ),
