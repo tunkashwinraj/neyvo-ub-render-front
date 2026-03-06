@@ -186,7 +186,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         builder: (ctx) => AlertDialog(
           backgroundColor: NeyvoColors.bgBase,
           title: const Text('No phone number'),
-          content: const Text(
+          content: Text(
             'You don\'t have a phone number yet. Tap "Purchase number" to go to the Phone Numbers page. After you add or purchase a number there, come back to this operator and tap "Attach to number" again to attach it.',
             style: NeyvoTextStyles.body,
           ),

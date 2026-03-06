@@ -47,6 +47,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   bool _filterOverdueOnly = false;
   /// Selected operator: "agent:uuid" or "profile:uuid" (used for campaign create).
   String? _selectedOperatorValue;
+  /// Raw agent id when editing (campaign.agent_id); used with _selectedOperatorValue.
+  String? _selectedAgentId;
   String? _selectedTemplateId;
   DateTime? _scheduledAt;
   bool _scheduleNow = true;
