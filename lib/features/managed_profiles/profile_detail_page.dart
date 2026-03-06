@@ -275,23 +275,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       _voiceCatalogError = null;
     });
     try {
-      final res = await NeyvoPulseApi.getVoices(tier: tier);
-      final List<Map<String, dynamic>> list = [];
-      if (res is List) {
-        for (final v in res) {
-          if (v is Map) list.add(Map<String, dynamic>.from(v));
-        }
-      } else if (res is Map) {
-        if (res['voices'] is List) {
-          for (final v in (res['voices'] as List)) {
-            if (v is Map) list.add(Map<String, dynamic>.from(v));
-          }
-        } else if (res[tier] is List) {
-          for (final v in (res[tier] as List)) {
-            if (v is Map) list.add(Map<String, dynamic>.from(v));
-          }
-        }
+      // First, try fetching curated voices for the effective tier.
+      final primaryRes = await NeyvoPulseApi.getVoices(tier: tier);
+      List<Map<String, dynamic>> list = _extractVoicesFromResponse(primaryRes, preferredTier: tier);
+
+      // If nothing came back for this tier (e.g. misconfigured library),
+      // fall back to the full catalog so operators always have choices.
+      if (list.isEmpty) {
+        final fallbackRes = await NeyvoPulseApi.getVoices(tier: 'all');
+        list = _extractVoicesFromResponse(fallbackRes, preferredTier: tier);
       }
+
       if (!mounted) return;
       setState(() {
         _voicesForTier = list;
@@ -305,6 +299,49 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _voicesForTier = const [];
       });
     }
+  }
+
+  /// Normalize /api/voices response into a flat list of voice profiles.
+  /// Handles:
+  /// - tier-specific: { voices: [...] }
+  /// - all tiers: { neutral: [...], natural: [...], ultra: [...] }
+  /// - raw list: [ {...}, {...} ]
+  List<Map<String, dynamic>> _extractVoicesFromResponse(dynamic res, {String? preferredTier}) {
+    final List<Map<String, dynamic>> out = [];
+
+    void addFromList(List<dynamic> raw) {
+      for (final v in raw) {
+        if (v is Map) out.add(Map<String, dynamic>.from(v));
+      }
+    }
+
+    if (res is List) {
+      addFromList(res);
+    } else if (res is Map) {
+      if (res['voices'] is List) {
+        addFromList(res['voices'] as List);
+      } else {
+        // Grouped by tier (tier == "all").
+        final neutral = res['neutral'];
+        final natural = res['natural'];
+        final ultra = res['ultra'];
+
+        // If a preferred tier is specified, prioritize that tier's list,
+        // but still include others so users can browse alternatives.
+        if (preferredTier != null) {
+          final t = preferredTier.toLowerCase();
+          if (t == 'neutral' && neutral is List) addFromList(neutral);
+          if (t == 'natural' && natural is List) addFromList(natural);
+          if (t == 'ultra' && ultra is List) addFromList(ultra);
+        }
+
+        if (neutral is List) addFromList(neutral);
+        if (natural is List) addFromList(natural);
+        if (ultra is List) addFromList(ultra);
+      }
+    }
+
+    return out;
   }
 
   String _tierDisplay(String tier) {
