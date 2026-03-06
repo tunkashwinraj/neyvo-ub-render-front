@@ -32,6 +32,8 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   String? _playingVoiceId;
 
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _goalController = TextEditingController();
+  final TextEditingController _toneController = TextEditingController();
   final TextEditingController _systemPromptController = TextEditingController();
   final TextEditingController _openingMessageController = TextEditingController();
   final TextEditingController _voicemailMessageController = TextEditingController();
@@ -43,6 +45,8 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _goalController.dispose();
+    _toneController.dispose();
     _systemPromptController.dispose();
     _openingMessageController.dispose();
     _voicemailMessageController.dispose();
@@ -71,6 +75,9 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
       if (agentRes != null && (agentRes['ok'] != false)) {
         final agentData = agentRes['agent'] as Map<String, dynamic>? ?? agentRes;
         _nameController.text = (agentData['name'] as String?) ?? '';
+        final customFields = agentData['custom_fields'] as Map<String, dynamic>?;
+        _goalController.text = (customFields?['goal'] ?? agentData['goal'])?.toString() ?? '';
+        _toneController.text = (customFields?['tone'] ?? agentData['tone'])?.toString() ?? '';
         _systemPromptController.text = (agentData['system_prompt'] as String?) ?? '';
         _openingMessageController.text = (agentData['opening_message'] as String?) ?? '';
         _voicemailMessageController.text = (agentData['voicemail_message'] as String?) ?? '';
@@ -412,6 +419,44 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     }
   }
 
+  /// Save personality (name, status, goal, tone). Syncs to VAPI.
+  Future<void> _savePersonality() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final name = _nameController.text.trim();
+      final goal = _goalController.text.trim();
+      final tone = _toneController.text.trim();
+      final status = (_agent?['status'] as String?)?.toLowerCase();
+      final effectiveStatus = status == 'paused' ? 'paused' : 'active';
+      final existingCustom = Map<String, dynamic>.from(_agent?['custom_fields'] as Map? ?? {});
+      existingCustom['goal'] = goal.isEmpty ? null : goal;
+      existingCustom['tone'] = tone.isEmpty ? null : tone;
+      existingCustom.removeWhere((_, v) => v == null);
+      final payload = <String, dynamic>{
+        'name': name.isEmpty ? null : name,
+        'status': effectiveStatus,
+        if (existingCustom.isNotEmpty) 'custom_fields': existingCustom,
+      };
+      payload.removeWhere((_, v) => v == null);
+      await NeyvoPulseApi.updateAgent(widget.agentId, payload);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Personality saved and synced to operator')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _saveSystemPrompt() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -731,8 +776,8 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
         padding: const EdgeInsets.all(NeyvoSpacing.xl),
         children: [
           _sectionCard(
-            'Basics',
-            'Name, status, and metadata for this operator.',
+            'Personality',
+            'Operator name, goal, tone, and status. Save to sync to your voice operator.',
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -758,12 +803,29 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                         style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton.tonal(
-                      onPressed: _saving ? null : _saveName,
-                      child: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save name'),
-                    ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _goalController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Goal',
+                    hintText: 'What should this operator achieve (e.g. book appointments, answer FAQs)?',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _toneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tone',
+                    hintText: 'e.g. professional, friendly, warm',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
                 ),
                 const SizedBox(height: 12),
                 Text('Status', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
@@ -788,6 +850,19 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                   if (templateId != null) _detailRow('Template', templateId),
                   if (phoneNumber != null) _detailRow('Phone', phoneNumber),
                 ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    FilledButton(
+                      onPressed: _saving ? null : _savePersonality,
+                      style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+                      child: _saving
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text('Save'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

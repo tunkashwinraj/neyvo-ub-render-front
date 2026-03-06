@@ -57,11 +57,11 @@ class PulseRouter {
       case PulseRouteNames.managedProfiles:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
       case PulseRouteNames.managedProfileDetail:
-        // Stay inside Pulse shell: open Voice Profiles and show detail in the shell's nested Navigator.
+        // Open Pulse shell on Operators tab and push profile detail (use .agents so shell selects Operators, not Home).
         final profileId = settings.arguments as String?;
         return MaterialPageRoute(
           builder: (_) => PulseShell(
-            initialRouteName: PulseRouteNames.managedProfiles,
+            initialRouteName: PulseRouteNames.agents,
             initialProfileId: profileId,
           ),
         );
