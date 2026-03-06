@@ -936,7 +936,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Preview failed: $e')),
+          const SnackBar(content: Text('Preview unavailable for this voice. Try another.')),
         );
       }
     } finally {
@@ -1197,10 +1197,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
               const SizedBox(height: 6),
               Text(
-                voiceId.isEmpty
-                    ? 'Using your default voice for this tier.'
-                    : 'Selected voice: ${currentName ?? 'Custom voice'}',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                'Currently using: ${voiceId.isEmpty ? 'Default (Sarah) for ${_tierDisplay(tier)}' : (currentName ?? 'Custom voice')}',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
               ),
               const SizedBox(height: 12),
               if (_voiceCatalogLoading)

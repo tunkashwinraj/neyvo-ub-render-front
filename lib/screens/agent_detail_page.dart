@@ -599,7 +599,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Preview failed: $e')),
+          const SnackBar(content: Text('Preview unavailable for this voice. Try another.')),
         );
       }
     } finally {
@@ -950,6 +950,11 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                       style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textTertiary),
                     ),
                   ),
+                const SizedBox(height: 12),
+                Text(
+                  'Currently using: ${_currentVoiceId.isEmpty ? 'Default (Sarah) for ${_tierDisplay(_effectiveTier)}' : (_currentVoiceName ?? _voiceProfileName ?? 'Custom voice')}',
+                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                ),
                 const SizedBox(height: 24),
                 Text('Voice personality', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
                 const SizedBox(height: 8),

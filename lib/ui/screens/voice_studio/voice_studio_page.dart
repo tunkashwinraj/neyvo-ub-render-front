@@ -127,7 +127,7 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Preview failed: $e')),
+        const SnackBar(content: Text('Preview unavailable for this voice. Try another.')),
       );
     } finally {
       if (mounted) {

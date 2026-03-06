@@ -554,7 +554,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Preview failed: $e')),
+                          const SnackBar(content: Text('Preview unavailable for this voice. Try another.')),
                         );
                       }
                     }
