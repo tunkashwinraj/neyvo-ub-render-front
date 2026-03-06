@@ -464,8 +464,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> setMemberRole(String userId, String role) async =>
       _patch('/api/pulse/members/$userId', {'role': role});
 
-  /// Update member role, permissions, name, staff_id, phone (admin only).
-  /// PATCH /api/pulse/members/<user_id> body: { role?, permissions?, name?, staff_id?, phone?, email? }
+  /// Update member role, permissions, name, staff_id, phone, department, title, office, extension, campus, account_number (admin only).
   static Future<Map<String, dynamic>> updateMember(
     String userId, {
     String? role,
@@ -474,6 +473,12 @@ class NeyvoPulseApi {
     String? staffId,
     String? phone,
     String? email,
+    String? department,
+    String? title,
+    String? office,
+    String? extension,
+    String? campus,
+    String? accountNumber,
   }) async {
     final body = <String, dynamic>{};
     if (role != null && role.isNotEmpty) body['role'] = role;
@@ -482,6 +487,12 @@ class NeyvoPulseApi {
     if (staffId != null) body['staff_id'] = staffId.trim();
     if (phone != null) body['phone'] = phone.trim();
     if (email != null && email.trim().isNotEmpty) body['email'] = email.trim();
+    if (department != null && department.trim().isNotEmpty) body['department'] = department.trim();
+    if (title != null && title.trim().isNotEmpty) body['title'] = title.trim();
+    if (office != null && office.trim().isNotEmpty) body['office'] = office.trim();
+    if (extension != null && extension.trim().isNotEmpty) body['extension'] = extension.trim();
+    if (campus != null && campus.trim().isNotEmpty) body['campus'] = campus.trim();
+    if (accountNumber != null && accountNumber.trim().isNotEmpty) body['account_number'] = accountNumber.trim();
     return _patch('/api/pulse/members/$userId', body);
   }
 
@@ -495,8 +506,8 @@ class NeyvoPulseApi {
       _get('/api/pulse/members/me');
 
   /// Invite a team member by email with role and optional permissions.
-  /// Name is required; staff_id and phone are optional. Backend sends invite email when send_invite_email is true.
-  /// POST /api/pulse/members/invite body: { name, email, role, staff_id?, phone?, permissions?, send_invite_email }.
+  /// Name is required; staff_id, phone, department, title, office, extension, campus, account_number are optional.
+  /// Backend auto-generates account_number if not provided.
   static Future<Map<String, dynamic>> inviteMember({
     required String name,
     required String email,
@@ -504,6 +515,12 @@ class NeyvoPulseApi {
     List<String>? permissions,
     String? staffId,
     String? phone,
+    String? department,
+    String? title,
+    String? office,
+    String? extension,
+    String? campus,
+    String? accountNumber,
     bool sendInviteEmail = true,
   }) async {
     final body = <String, dynamic>{
@@ -520,6 +537,24 @@ class NeyvoPulseApi {
     }
     if (phone != null && phone.trim().isNotEmpty) {
       body['phone'] = phone.trim();
+    }
+    if (department != null && department.trim().isNotEmpty) {
+      body['department'] = department.trim();
+    }
+    if (title != null && title.trim().isNotEmpty) {
+      body['title'] = title.trim();
+    }
+    if (office != null && office.trim().isNotEmpty) {
+      body['office'] = office.trim();
+    }
+    if (extension != null && extension.trim().isNotEmpty) {
+      body['extension'] = extension.trim();
+    }
+    if (campus != null && campus.trim().isNotEmpty) {
+      body['campus'] = campus.trim();
+    }
+    if (accountNumber != null && accountNumber.trim().isNotEmpty) {
+      body['account_number'] = accountNumber.trim();
     }
     return _post('/api/pulse/members/invite', body);
   }
