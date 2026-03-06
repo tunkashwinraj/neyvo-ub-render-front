@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import 'member_detail_page.dart';
 
 /// Permission keys and display labels for staff role.
 const List<MapEntry<String, String>> kTeamPermissions = [
@@ -238,6 +239,7 @@ class _TeamPageState extends State<TeamPage> {
             final email = rawEmail == null ? '' : rawEmail.toString().trim();
             final userId = m['user_id'] ?? m['id'] ?? '?';
             final role = m['role']?.toString() ?? '—';
+            final accountNumber = (m['account_number'] ?? '').toString().trim();
             final perms = m['permissions'];
             final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
             String display;
@@ -254,59 +256,51 @@ class _TeamPageState extends State<TeamPage> {
             }
             return Padding(
               padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: NeyvoSpacing.md,
-                  vertical: NeyvoSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: NeyvoColors.bgRaised.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: NeyvoColors.borderSubtle),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            display,
-                            style: NeyvoTextStyles.bodyPrimary,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Role: $role'
-                                + (permList.isNotEmpty ? ' · ${permList.join(", ")}' : ''),
-                            style: NeyvoTextStyles.micro.copyWith(
-                              color: NeyvoColors.textMuted,
+              child: InkWell(
+                onTap: () => _openMemberDetail(m),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: NeyvoSpacing.md,
+                    vertical: NeyvoSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: NeyvoColors.bgRaised.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: NeyvoColors.borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              display,
+                              style: NeyvoTextStyles.bodyPrimary,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            Text(
+                              'Role: $role'
+                                  + (accountNumber.isNotEmpty ? ' · #$accountNumber' : '')
+                                  + (permList.isNotEmpty ? ' · ${permList.join(", ")}' : ''),
+                              style: NeyvoTextStyles.micro.copyWith(
+                                color: NeyvoColors.textMuted,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (_myRole == 'admin' &&
-                        _myUserId != null &&
-                        userId.toString() != _myUserId)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            tooltip: 'Edit',
-                            onPressed: () => _openEditMember(m),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            tooltip: 'Remove',
-                            onPressed: () => _confirmRemoveMember(m),
-                          ),
-                        ],
+                      Icon(
+                        Icons.chevron_right,
+                        color: NeyvoColors.textMuted,
+                        size: 20,
                       ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -315,63 +309,22 @@ class _TeamPageState extends State<TeamPage> {
     );
   }
 
-  void _openEditMember(Map<String, dynamic> member) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => _EditMemberDialog(
-        member: member,
-        onSaved: () {
-          Navigator.of(ctx).pop();
-          _load();
-        },
-        onCancel: () => Navigator.of(ctx).pop(),
+  void _openMemberDetail(Map<String, dynamic> member) {
+    final canEdit = _myRole == 'admin' &&
+        _myUserId != null &&
+        (member['user_id'] ?? member['id'] ?? '').toString() != _myUserId;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MemberDetailPage(
+          member: member,
+          canEdit: canEdit,
+          onUpdated: canEdit ? _load : null,
+        ),
       ),
     );
   }
 
-  Future<void> _confirmRemoveMember(Map<String, dynamic> member) async {
-    final userId = (member['user_id'] ?? member['id'] ?? '').toString();
-    if (userId.isEmpty) return;
-    final name = (member['name'] ?? '').toString().trim();
-    final email = (member['email'] ?? '').toString().trim();
-    final displayLabel = name.isNotEmpty ? name : (email.isNotEmpty ? email : userId);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: NeyvoColors.bgBase,
-        title: const Text('Remove team member'),
-        content: Text(
-          'Remove $displayLabel from this team?',
-          style: NeyvoTextStyles.body,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      await NeyvoPulseApi.deleteMember(userId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Team member removed')),
-      );
-      _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    }
-  }
 }
 
 class _AddMemberDialog extends StatefulWidget {
@@ -392,6 +345,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   final _emailController = TextEditingController();
   final _staffIdController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _officeController = TextEditingController();
+  final _extensionController = TextEditingController();
+  final _campusController = TextEditingController();
   String _role = 'staff';
   final Set<String> _selectedPermissions = {};
 
@@ -401,6 +359,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     _emailController.dispose();
     _staffIdController.dispose();
     _phoneController.dispose();
+    _departmentController.dispose();
+    _titleController.dispose();
+    _officeController.dispose();
+    _extensionController.dispose();
+    _campusController.dispose();
     super.dispose();
   }
 
@@ -420,6 +383,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     final email = _emailController.text.trim();
     final staffId = _staffIdController.text.trim();
     final phone = _phoneController.text.trim();
+    final department = _departmentController.text.trim();
+    final title = _titleController.text.trim();
+    final office = _officeController.text.trim();
+    final extension = _extensionController.text.trim();
+    final campus = _campusController.text.trim();
     final list = _selectedPermissions.toList();
     list.sort();
     final permissions = _role == 'staff' ? list : null;
@@ -431,6 +399,11 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         permissions: permissions,
         staffId: staffId.isEmpty ? null : staffId,
         phone: phone.isEmpty ? null : phone,
+        department: department.isEmpty ? null : department,
+        title: title.isEmpty ? null : title,
+        office: office.isEmpty ? null : office,
+        extension: extension.isEmpty ? null : extension,
+        campus: campus.isEmpty ? null : campus,
         sendInviteEmail: true,
       );
       if (!mounted) return;
@@ -497,6 +470,55 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Phone (optional)',
                 hintText: 'Phone number',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _departmentController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Department (optional)',
+                hintText: 'e.g. Computer Science',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _titleController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Title (optional)',
+                hintText: 'e.g. Professor, Advisor, Lecturer',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _officeController,
+              decoration: const InputDecoration(
+                labelText: 'Office (optional)',
+                hintText: 'e.g. Room 204, Building A',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _extensionController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Extension (optional)',
+                hintText: 'Internal phone extension',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _campusController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Campus (optional)',
+                hintText: 'e.g. Main Campus, North Campus',
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -588,11 +610,17 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _nameController;
   late TextEditingController _staffIdController;
   late TextEditingController _phoneController;
+  late TextEditingController _departmentController;
+  late TextEditingController _titleController;
+  late TextEditingController _officeController;
+  late TextEditingController _extensionController;
+  late TextEditingController _campusController;
 
   @override
   void initState() {
     super.initState();
-    _role = (widget.member['role']?.toString() ?? 'staff').toLowerCase();
+    final raw = (widget.member['role']?.toString() ?? 'staff').toLowerCase();
+    _role = raw == 'viewer' ? 'staff' : raw;
     final perms = widget.member['permissions'];
     _selectedPermissions = {
       if (perms is List) ...perms.map((e) => e.toString()),
@@ -606,6 +634,21 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _phoneController = TextEditingController(
       text: (widget.member['phone'] ?? '').toString().trim(),
     );
+    _departmentController = TextEditingController(
+      text: (widget.member['department'] ?? '').toString().trim(),
+    );
+    _titleController = TextEditingController(
+      text: (widget.member['title'] ?? '').toString().trim(),
+    );
+    _officeController = TextEditingController(
+      text: (widget.member['office'] ?? '').toString().trim(),
+    );
+    _extensionController = TextEditingController(
+      text: (widget.member['extension'] ?? '').toString().trim(),
+    );
+    _campusController = TextEditingController(
+      text: (widget.member['campus'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -613,6 +656,11 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _nameController.dispose();
     _staffIdController.dispose();
     _phoneController.dispose();
+    _departmentController.dispose();
+    _titleController.dispose();
+    _officeController.dispose();
+    _extensionController.dispose();
+    _campusController.dispose();
     super.dispose();
   }
 
@@ -631,6 +679,11 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final name = _nameController.text.trim();
     final staffId = _staffIdController.text.trim();
     final phone = _phoneController.text.trim();
+    final department = _departmentController.text.trim();
+    final title = _titleController.text.trim();
+    final office = _officeController.text.trim();
+    final extension = _extensionController.text.trim();
+    final campus = _campusController.text.trim();
     try {
       await NeyvoPulseApi.updateMember(
         userId,
@@ -639,6 +692,11 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         name: name.isEmpty ? null : name,
         staffId: staffId.isEmpty ? null : staffId,
         phone: phone.isEmpty ? null : phone,
+        department: department.isEmpty ? null : department,
+        title: title.isEmpty ? null : title,
+        office: office.isEmpty ? null : office,
+        extension: extension.isEmpty ? null : extension,
+        campus: campus.isEmpty ? null : campus,
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
@@ -707,13 +765,61 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _departmentController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Department (optional)',
+                hintText: 'e.g. Computer Science',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _titleController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Title (optional)',
+                hintText: 'e.g. Professor, Advisor, Lecturer',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _officeController,
+              decoration: const InputDecoration(
+                labelText: 'Office (optional)',
+                hintText: 'e.g. Room 204, Building A',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _extensionController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Extension (optional)',
+                hintText: 'Internal phone extension',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _campusController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Campus (optional)',
+                hintText: 'e.g. Main Campus, North Campus',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
             DropdownButtonFormField<String>(
               value: _role,
               decoration: const InputDecoration(labelText: 'Role'),
               items: const [
                 DropdownMenuItem(value: 'admin', child: Text('Admin')),
                 DropdownMenuItem(value: 'staff', child: Text('Staff')),
-                DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
               ],
               onChanged: (v) => setState(() => _role = v ?? 'staff'),
             ),
