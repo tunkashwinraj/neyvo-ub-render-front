@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
+import '../../screens/voice_library_modal.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
@@ -30,11 +31,11 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
   Map<String, dynamic> _profile = const {};
   List<Map<String, dynamic>> _numbers = const [];
+  Map<String, dynamic>? _wallet;
 
   late TabController _tabs;
 
   final _nameCtrl = TextEditingController();
-  final _roleCtrl = TextEditingController();
   final _goalCtrl = TextEditingController();
   final _promptCtrl = TextEditingController();
   final _voicemailCtrl = TextEditingController();
@@ -52,7 +53,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 7, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -60,7 +61,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   void dispose() {
     _tabs.dispose();
     _nameCtrl.dispose();
-    _roleCtrl.dispose();
     _goalCtrl.dispose();
     _promptCtrl.dispose();
     _voicemailCtrl.dispose();
@@ -92,14 +92,15 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       final results = await Future.wait([
         ManagedProfileApiService.getProfile(widget.profileId),
         NeyvoPulseApi.listNumbers(),
+        NeyvoPulseApi.getBillingWallet(),
       ]);
       final profile = Map<String, dynamic>.from(results[0] as Map);
       final numbersRes = results[1] as Map<String, dynamic>;
+      final walletRes = results[2] as Map<String, dynamic>?;
       final raw = (numbersRes['numbers'] as List?) ?? const [];
       final numbers = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
       _nameCtrl.text = (profile['profile_name'] ?? profile['name'] ?? '').toString();
-      _roleCtrl.text = (profile['role'] ?? '').toString();
       _goalCtrl.text = (profile['work_goals'] ?? profile['goal'] ?? '').toString();
       _promptCtrl.text = (profile['custom_system_prompt'] ?? profile['system_prompt'] ?? profile['prompt'] ?? '').toString();
       _voicemailCtrl.text = (profile['voicemail_message'] ?? '').toString();
@@ -125,6 +126,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       setState(() {
         _profile = profile;
         _numbers = numbers;
+        _wallet = walletRes;
         _loading = false;
       });
     } catch (e) {
@@ -141,9 +143,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     try {
       final body = <String, dynamic>{
         'profile_name': _nameCtrl.text.trim(),
-        'role': _roleCtrl.text.trim(),
         'goal': _goalCtrl.text.trim(),
-        'system_prompt': _promptCtrl.text,
         'conversation_profile': {'tone': _tone},
         'behavior': {'interrupt_enabled': _interruptEnabled},
         'guardrails': {'handoff_enabled': _handoffEnabled},
@@ -242,6 +242,83 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     }
   }
 
+  List<String> get _unlockedTiers {
+    final w = _wallet;
+    final tiers =
+        (w?['unlocked_tiers'] as List<dynamic>?)?.map((e) => e.toString().toLowerCase()).toList();
+    if (tiers != null && tiers.isNotEmpty) return tiers;
+    final sub = (w?['subscription_tier'] ?? '').toString().toLowerCase();
+    if (sub == 'free') return const ['neutral'];
+    return const ['neutral', 'natural', 'ultra'];
+  }
+
+  String get _effectiveTier {
+    final w = _wallet ?? const {};
+    return (w['voice_tier'] ?? w['tier'] ?? 'ultra').toString().toLowerCase();
+  }
+
+  String _tierDisplay(String tier) {
+    switch (tier.toLowerCase()) {
+      case 'neutral':
+        return 'Neutral Human';
+      case 'natural':
+        return 'Natural Human';
+      case 'ultra':
+        return 'Ultra Real Human';
+      default:
+        return tier;
+    }
+  }
+
+  String get _currentVoiceProvider {
+    final v = (_profile['voice_provider'] ?? '').toString().trim();
+    if (v.isNotEmpty) return v;
+    // Fall back to plan default.
+    return _effectiveTier == 'neutral' ? 'openai' : '11labs';
+  }
+
+  String get _currentVoiceId => (_profile['voice_id'] ?? '').toString().trim();
+
+  Future<void> _openVoiceLibrary() async {
+    final currentTier = _unlockedTiers.contains(_effectiveTier) ? _effectiveTier : _unlockedTiers.first;
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NeyvoColors.bgBase,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => VoiceLibraryModal(
+        currentTier: currentTier,
+        currentVoiceId: _currentVoiceId.isEmpty ? null : _currentVoiceId,
+        currentProvider: _currentVoiceProvider,
+        unlockedTiers: _unlockedTiers,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final provider = (selected['provider'] ?? '').toString().trim();
+    final voiceId = (selected['voice_id'] ?? '').toString().trim();
+    if (provider.isEmpty || voiceId.isEmpty) return;
+
+    setState(() => _saving = true);
+    try {
+      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, {
+        'voice_provider': provider,
+        'voice_id': voiceId,
+      });
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Voice updated')));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = _nameCtrl.text.trim().isEmpty ? 'Operator' : _nameCtrl.text.trim();
@@ -330,12 +407,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       indicatorColor: NeyvoColors.teal,
                       tabs: const [
                         Tab(text: 'Personality'),
-                        Tab(text: 'Prompt editor'),
-                        Tab(text: 'Guardrails'),
+                        Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
-                        Tab(text: 'Behavior'),
-                        Tab(text: 'Tool integrations'),
-                        Tab(text: 'Testing'),
+                        Tab(text: 'Additional settings'),
                       ],
                     ),
                   ),
@@ -344,12 +418,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       controller: _tabs,
                       children: [
                         _tabPersonality(),
-                        _tabPrompt(),
-                        _tabGuardrails(),
+                        _tabAiStudio(),
                         _tabVoice(),
-                        _tabBehavior(),
-                        _tabTools(),
-                        _tabTesting(),
+                        _tabAdditionalSettings(),
                       ],
                     ),
                   ),
@@ -385,6 +456,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Widget _tabPersonality() {
+    final department = (_profile['department'] ?? '').toString().trim();
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -396,10 +468,12 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               const SizedBox(height: 6),
               TextField(controller: _nameCtrl, decoration: const InputDecoration(hintText: 'e.g. Neyvo Receptionist')),
               const SizedBox(height: 12),
-              Text('Role', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-              const SizedBox(height: 6),
-              TextField(controller: _roleCtrl, decoration: const InputDecoration(hintText: 'e.g. support / booking / sales')),
-              const SizedBox(height: 12),
+              if (department.isNotEmpty) ...[
+                Text('Department', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                const SizedBox(height: 6),
+                Text(department, style: NeyvoTextStyles.bodyPrimary),
+                const SizedBox(height: 12),
+              ],
               Text('Tone', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
@@ -412,7 +486,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 onChanged: (v) => setState(() => _tone = (v ?? 'warm_friendly')),
               ),
               const SizedBox(height: 12),
-              Text('Goal', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+              Text(_isUbOperator ? 'Work goals' : 'Goal', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
               const SizedBox(height: 6),
               TextField(
                 controller: _goalCtrl,
@@ -426,56 +500,42 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     );
   }
 
-  Widget _tabPrompt() {
-    final children = <Widget>[
-      NeyvoGlassPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('System prompt', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _promptCtrl,
-              maxLines: 18,
-              decoration: const InputDecoration(
-                hintText: 'Define the operator\'s instructions, style, constraints, and tools.',
-              ),
-            ),
-            if (_isUbOperator) ...[
-              const SizedBox(height: 16),
-              Text('Voicemail message', style: NeyvoTextStyles.label),
+  Widget _tabAiStudio() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('AI Studio', style: NeyvoTextStyles.heading),
               const SizedBox(height: 6),
-              TextField(
-                controller: _voicemailCtrl,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: 'Message left when the call goes to voicemail. Use {{variableName}} for personalization.',
-                ),
+              Text(
+                'Update the operator’s behavior and voicemail using AI. You don’t need to edit the raw prompt.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
               ),
             ],
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => _promptCtrl.text = _promptCtrl.text.trim()),
-                icon: const Icon(Icons.auto_fix_high, size: 18),
-                label: const Text('Clean up whitespace'),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-    ];
-    if (_isUbOperator) {
-      children.add(const SizedBox(height: 16));
-      children.add(_buildAiStudioCard());
-      children.add(const SizedBox(height: 16));
-      children.add(_buildVariablesCard());
-    }
-    return ListView(padding: const EdgeInsets.all(24), children: children);
+        const SizedBox(height: 16),
+        if (_isUbOperator) ...[
+          _buildAiStudioCard(),
+          const SizedBox(height: 16),
+          _buildVariablesCard(),
+        ] else
+          NeyvoGlassPanel(
+            child: Text(
+              'AI Studio is available for UB operators that use a custom prompt.',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildAiStudioCard() {
+    final sub = (_wallet?['subscription_tier'] ?? '').toString().toLowerCase();
+    final canUse = sub != 'free';
     return NeyvoGlassPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -483,7 +543,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           Text('AI Studio', style: NeyvoTextStyles.heading),
           const SizedBox(height: 6),
           Text(
-            'Improve or edit this operator\'s prompt with AI. Suggestions keep your placeholders and tone.',
+            canUse
+                ? 'Improve the operator\'s script with AI. Suggestions keep your placeholders and tone.'
+                : 'AI Studio requires a Pro or Business plan.',
             style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
           ),
           const SizedBox(height: 12),
@@ -498,7 +560,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           Row(
             children: [
               FilledButton(
-                onPressed: _aiSuggestLoading ? null : _runAiSuggestPrompt,
+                onPressed: (!canUse || _aiSuggestLoading) ? null : _runAiSuggestPrompt,
                 style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                 child: _aiSuggestLoading
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -756,6 +818,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Widget _tabVoice() {
+    final sub = (_wallet?['subscription_tier'] ?? '').toString().toLowerCase();
+    final tier = _effectiveTier;
+    final provider = _currentVoiceProvider.toLowerCase();
+    final voiceId = _currentVoiceId;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -766,15 +832,111 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               Text('Voice', style: NeyvoTextStyles.heading),
               const SizedBox(height: 8),
               Text(
-                'Voice selection and tiers are managed in Billing and Voice Studio.',
-                style: NeyvoTextStyles.body,
+                'Current tier: ${_tierDisplay(tier)}${sub.isNotEmpty ? ' · Plan: ${sub[0].toUpperCase()}${sub.substring(1)}' : ''}',
+                style: NeyvoTextStyles.bodyPrimary,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                voiceId.isEmpty ? 'Using your plan default voice.' : 'Selected voice: $provider · $voiceId',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
               ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                  child: const Text('Open Billing'),
+                  onPressed: _saving ? null : _openVoiceLibrary,
+                  child: const Text('Choose voice (listen to sample)'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tabAdditionalSettings() {
+    final allowed = (_profile['allowed_actions'] as List?)?.map((e) => e.toString()).toList() ?? const <String>[];
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Guardrails', style: NeyvoTextStyles.heading),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _handoffEnabled,
+                onChanged: (v) => setState(() => _handoffEnabled = v),
+                title: Text('Allow human handoff', style: NeyvoTextStyles.bodyPrimary),
+                subtitle: Text('Enable transferring callers to a human fallback.', style: NeyvoTextStyles.micro),
+              ),
+              const SizedBox(height: 6),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _interruptEnabled,
+                onChanged: (v) => setState(() => _interruptEnabled = v),
+                title: Text('Interrupt enabled', style: NeyvoTextStyles.bodyPrimary),
+                subtitle: Text('Allow callers to interrupt the operator mid-sentence.', style: NeyvoTextStyles.micro),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Tool integrations', style: NeyvoTextStyles.heading),
+              const SizedBox(height: 8),
+              Text(
+                allowed.isEmpty ? 'No tools enabled.' : 'Enabled tools:',
+                style: NeyvoTextStyles.body,
+              ),
+              const SizedBox(height: 8),
+              if (allowed.isNotEmpty)
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: allowed.map((t) => _metric('Tool', t)).toList(),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        NeyvoGlassPanel(
+          glowing: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const NeyvoAIOrb(state: NeyvoAIOrbState.listening, size: 56),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Testing', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Place a real outbound call using the Dialer.',
+                          style: NeyvoTextStyles.body,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                  child: const Text('Open Dialer'),
                 ),
               ),
             ],
