@@ -685,47 +685,6 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     );
   }
 
-  Future<void> _openVoiceLibrary() async {
-    final selected = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: NeyvoTheme.bgCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => VoiceLibraryModal(
-        currentTier: _effectiveTier,
-        currentVoiceId: _agent?['voice_id'] as String?,
-        currentProvider: _agent?['voice_provider'] as String?,
-        unlockedTiers: _unlockedTiers,
-      ),
-    );
-    if (selected == null || !mounted) return;
-    setState(() => _saving = true);
-    try {
-      await NeyvoPulseApi.updateAgent(widget.agentId, {
-        'voice_tier_override': selected['tier'] as String?,
-        'voice_profile_id': selected['id'] as String?,
-        'voice_provider': selected['provider'] as String?,
-        'voice_id': selected['voice_id'] as String?,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Voice updated')),
-        );
-        _load();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading && _agent == null) {
@@ -1068,7 +1027,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                                 margin: const EdgeInsets.only(bottom: 8),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? NeyvoTheme.bgSurfaceElevated
+                                      ? NeyvoTheme.bgCard
                                       : NeyvoTheme.bgSurface,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
