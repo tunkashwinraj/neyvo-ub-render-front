@@ -829,6 +829,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> createCampaign({
     required String name,
     String? agentId,
+    String? profileId,
     String? templateId,
     List<String>? studentIds,
     Map<String, dynamic>? filters,
@@ -838,6 +839,7 @@ class NeyvoPulseApi {
     final body = <String, dynamic>{
       'name': name,
       if (agentId != null && agentId.isNotEmpty) 'agent_id': agentId,
+      if (profileId != null && profileId.isNotEmpty) 'profile_id': profileId,
       if (templateId != null) 'template_id': templateId,
       if (studentIds != null) 'student_ids': studentIds,
       if (filters != null) 'filters': filters,
@@ -847,11 +849,12 @@ class NeyvoPulseApi {
     return _post('/api/pulse/campaigns', body);
   }
 
-  /// Update campaign (name, agentId, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
+  /// Update campaign (name, agentId, profileId, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
   static Future<Map<String, dynamic>> updateCampaign(
     String campaignId, {
     String? name,
     String? agentId,
+    String? profileId,
     String? templateId,
     List<String>? studentIds,
     Map<String, dynamic>? filters,
@@ -860,6 +863,7 @@ class NeyvoPulseApi {
     final body = <String, dynamic>{'account_id': _defaultAccountId};
     if (name != null) body['name'] = name;
     if (agentId != null) body['agent_id'] = agentId.isEmpty ? null : agentId;
+    if (profileId != null) body['profile_id'] = profileId.isEmpty ? null : profileId;
     if (templateId != null) body['template_id'] = templateId;
     if (studentIds != null) body['student_ids'] = studentIds;
     if (filters != null) body['filters'] = filters;

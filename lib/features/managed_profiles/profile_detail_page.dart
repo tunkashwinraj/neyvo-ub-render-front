@@ -181,9 +181,28 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   Future<void> _attachToNumber() async {
     final available = _numbers;
     if (available.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No numbers yet. Add one in Numbers Hub.')),
+      final goPurchase = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: NeyvoColors.bgBase,
+          title: const Text('No phone number'),
+          content: const Text(
+            'You don\'t have a phone number yet. Tap "Purchase number" to go to the Phone Numbers page. After you add or purchase a number there, come back to this operator and tap "Attach to number" again to attach it.',
+            style: NeyvoTextStyles.body,
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+              child: const Text('Purchase number'),
+            ),
+          ],
+        ),
       );
+      if (goPurchase == true && mounted) {
+        Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers);
+      }
       return;
     }
 

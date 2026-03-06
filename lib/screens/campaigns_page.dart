@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api/spearia_api.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
@@ -21,6 +22,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   List<Map<String, dynamic>> _campaigns = [];
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _agents = [];
+  /// Combined list for operator dropdown: each has 'value' (agent:id or profile:id), 'name', 'type' (agent|profile).
+  List<Map<String, dynamic>> _operatorsForCampaign = [];
   List<Map<String, dynamic>> _templates = [];
   bool _loading = true;
   String? _error;
@@ -42,7 +45,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   final _balanceMinController = TextEditingController();
   final _balanceMaxController = TextEditingController();
   bool _filterOverdueOnly = false;
-  String? _selectedAgentId;
+  /// Selected operator: "agent:uuid" or "profile:uuid" (used for campaign create).
+  String? _selectedOperatorValue;
   String? _selectedTemplateId;
   DateTime? _scheduledAt;
   bool _scheduleNow = true;
@@ -91,10 +95,27 @@ class _CampaignsPageState extends State<CampaignsPage> {
       final agentsList = agentsRes['agents'] as List? ?? [];
       final agents = agentsList.cast<Map<String, dynamic>>();
       final isEdu = agents.any((a) => (a['industry']?.toString().toLowerCase() ?? '') == 'education');
+      // Load managed profiles (operators) and combine with unified agents for campaign operator dropdown.
+      List<Map<String, dynamic>> operators = [];
+      try {
+        final profilesRes = await ManagedProfileApiService.listProfiles();
+        final profilesList = (profilesRes['profiles'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        for (final p in profilesList) {
+          final id = (p['profile_id'] ?? p['id'] ?? '').toString();
+          final name = (p['profile_name'] ?? p['name'] ?? 'Unnamed operator').toString();
+          if (id.isNotEmpty) operators.add({'value': 'profile:$id', 'name': name, 'type': 'profile'});
+        }
+      } catch (_) {}
+      for (final a in agents) {
+        final id = (a['id'] ?? '').toString();
+        final name = (a['name'] ?? 'Unnamed operator').toString();
+        if (id.isNotEmpty) operators.add({'value': 'agent:$id', 'name': name, 'type': 'agent'});
+      }
       final studentsRes = await NeyvoPulseApi.listStudents();
       final studentsList = studentsRes['students'] as List? ?? [];
       _students = studentsList.cast<Map<String, dynamic>>();
       _agents = agents;
+      _operatorsForCampaign = operators;
       _templates = await _loadTemplates();
       _campaigns = await _loadCampaigns();
       // Check if account has a number: from account info (primary) or from GET /api/numbers
@@ -341,10 +362,20 @@ class _CampaignsPageState extends State<CampaignsPage> {
       await _saveCampaignEdit(name: name, studentIds: ids, useFilters: useFilters);
       return;
     }
+    String? agentId;
+    String? profileId;
+    if (_selectedOperatorValue != null && _selectedOperatorValue!.isNotEmpty) {
+      if (_selectedOperatorValue!.startsWith('profile:')) {
+        profileId = _selectedOperatorValue!.substring(8);
+      } else if (_selectedOperatorValue!.startsWith('agent:')) {
+        agentId = _selectedOperatorValue!.substring(6);
+      }
+    }
     try {
       await NeyvoPulseApi.createCampaign(
         name: name,
-        agentId: _selectedAgentId,
+        agentId: agentId,
+        profileId: profileId,
         studentIds: useFilters ? null : ids,
         templateId: _useTemplate ? _selectedTemplateId : null,
         audienceType: useFilters ? 'filters' : 'contact_list',
@@ -364,7 +395,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
           _showCreateWizard = false;
           _wizardStep = 0;
           _nameController.clear();
-          _selectedAgentId = null;
+          _selectedOperatorValue = null;
           _selectedStudentIds.clear();
           _selectAll = false;
           _manualAudienceSelection = false;
@@ -652,11 +683,21 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   Future<void> _saveCampaignEdit({required String name, required List<String> studentIds, bool useFilters = false}) async {
     final id = _editingCampaignId!;
+    String? agentId;
+    String? profileId;
+    if (_selectedOperatorValue != null && _selectedOperatorValue!.isNotEmpty) {
+      if (_selectedOperatorValue!.startsWith('profile:')) {
+        profileId = _selectedOperatorValue!.substring(8);
+      } else if (_selectedOperatorValue!.startsWith('agent:')) {
+        agentId = _selectedOperatorValue!.substring(6);
+      }
+    }
     try {
       await NeyvoPulseApi.updateCampaign(
         id,
         name: name,
-        agentId: _selectedAgentId,
+        agentId: agentId,
+        profileId: profileId,
         templateId: _useTemplate ? _selectedTemplateId : null,
         studentIds: useFilters ? null : studentIds,
         filters: useFilters ? {
@@ -678,6 +719,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
           _wizardStep = 0;
           _nameController.clear();
           _selectedAgentId = null;
+          _selectedOperatorValue = null;
           _selectedStudentIds.clear();
           _selectAll = false;
           _manualAudienceSelection = false;
@@ -856,7 +898,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
                             tooltip: 'Edit campaign',
                             onPressed: () {
                               _nameController.text = c['name']?.toString() ?? '';
-                              _selectedAgentId = c['agent_id']?.toString();
+                              final aid = (c['agent_id'] ?? '').toString().trim();
+                              final pid = (c['profile_id'] ?? '').toString().trim();
+                              _selectedAgentId = aid.isNotEmpty ? aid : null;
+                              _selectedOperatorValue = pid.isNotEmpty ? 'profile:$pid' : (aid.isNotEmpty ? 'agent:$aid' : null);
                               _selectedTemplateId = c['template_id']?.toString();
                               _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
                               _selectedStudentIds = {};
@@ -1802,24 +1847,24 @@ class _CampaignsPageState extends State<CampaignsPage> {
             Text('Conversation script', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: NeyvoSpacing.sm),
             Text(
-              'Use an agent for voice, prompt, and settings. You can optionally apply a script template for labeling or structured reminders.',
+              'Use an operator for voice, prompt, and settings. You can optionally apply a script template for labeling or structured reminders.',
               style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
             ),
             const SizedBox(height: NeyvoSpacing.md),
             DropdownButtonFormField<String>(
-              value: _selectedAgentId ?? (_agents.isNotEmpty ? null : null),
+              value: _selectedOperatorValue,
               decoration: const InputDecoration(
                 labelText: 'Operator',
-                hintText: 'Select an agent (recommended)',
+                hintText: 'Select an operator (recommended)',
               ),
               items: [
-                const DropdownMenuItem<String>(value: null, child: Text('— No agent —')),
-                ..._agents.map((a) => DropdownMenuItem<String>(
-                  value: a['id']?.toString(),
-                  child: Text(a['name']?.toString() ?? 'Unnamed agent'),
+                const DropdownMenuItem<String>(value: null, child: Text('— No operator —')),
+                ..._operatorsForCampaign.map((o) => DropdownMenuItem<String>(
+                  value: o['value'] as String?,
+                  child: Text(o['name']?.toString() ?? 'Unnamed operator'),
                 )),
               ],
-              onChanged: (v) => setState(() => _selectedAgentId = v),
+              onChanged: (v) => setState(() => _selectedOperatorValue = v),
             ),
             const SizedBox(height: NeyvoSpacing.lg),
             SwitchListTile(
@@ -1947,8 +1992,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
               title: const Text('Operator'),
               trailing: Text(
                 () {
-                  if (_selectedAgentId != null && _selectedAgentId!.isNotEmpty) {
-                    final list = _agents.where((a) => a['id']?.toString() == _selectedAgentId).toList();
+                  if (_selectedOperatorValue != null && _selectedOperatorValue!.isNotEmpty) {
+                    final list = _operatorsForCampaign.where((o) => o['value'] == _selectedOperatorValue).toList();
                     if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
                   }
                   return '—';
