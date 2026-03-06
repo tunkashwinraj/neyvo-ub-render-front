@@ -242,60 +242,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     }
   }
 
-  // Simple message model for AI Studio chat
-  // Kept local to this file as it is purely UI state.
-  }
-
-class _AiStudioMessage {
-  final bool isUser;
-  final String text;
-  final String? proposedPrompt;
-  final String? proposedVoicemail;
-  final bool applied;
-  final bool rejected;
-
-  const _AiStudioMessage({
-    required this.isUser,
-    required this.text,
-    this.proposedPrompt,
-    this.proposedVoicemail,
-    this.applied = false,
-    this.rejected = false,
-  });
-
-  bool get hasSuggestion => !isUser && (proposedPrompt != null && proposedPrompt!.isNotEmpty);
-
-  _AiStudioMessage copyWith({
-    bool? applied,
-    bool? rejected,
-  }) {
-    return _AiStudioMessage(
-      isUser: isUser,
-      text: text,
-      proposedPrompt: proposedPrompt,
-      proposedVoicemail: proposedVoicemail,
-      applied: applied ?? this.applied,
-      rejected: rejected ?? this.rejected,
-    );
-  }
-
-  factory _AiStudioMessage.user(String text) {
-    return _AiStudioMessage(isUser: true, text: text);
-  }
-
-  factory _AiStudioMessage.assistant(
-    String text, {
-    String? proposedPrompt,
-    String? proposedVoicemail,
-  }) {
-    return _AiStudioMessage(
-      isUser: false,
-      text: text,
-      proposedPrompt: proposedPrompt,
-      proposedVoicemail: proposedVoicemail,
-    );
-  }
-
   List<String> get _unlockedTiers {
     final w = _wallet;
     final tiers =
@@ -1239,6 +1185,59 @@ class _AiStudioMessage {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Simple message model for AI Studio chat.
+// Kept local to this file as it is purely UI state.
+class _AiStudioMessage {
+  final bool isUser;
+  final String text;
+  final String? proposedPrompt;
+  final String? proposedVoicemail;
+  final bool applied;
+  final bool rejected;
+
+  const _AiStudioMessage({
+    required this.isUser,
+    required this.text,
+    this.proposedPrompt,
+    this.proposedVoicemail,
+    this.applied = false,
+    this.rejected = false,
+  });
+
+  bool get hasSuggestion => !isUser && (proposedPrompt != null && proposedPrompt!.isNotEmpty);
+
+  _AiStudioMessage copyWith({
+    bool? applied,
+    bool? rejected,
+  }) {
+    return _AiStudioMessage(
+      isUser: isUser,
+      text: text,
+      proposedPrompt: proposedPrompt,
+      proposedVoicemail: proposedVoicemail,
+      applied: applied ?? this.applied,
+      rejected: rejected ?? this.rejected,
+    );
+  }
+
+  factory _AiStudioMessage.user(String text) {
+    return _AiStudioMessage(isUser: true, text: text);
+  }
+
+  factory _AiStudioMessage.assistant(
+    String text, {
+    String? proposedPrompt,
+    String? proposedVoicemail,
+  }) {
+    return _AiStudioMessage(
+      isUser: false,
+      text: text,
+      proposedPrompt: proposedPrompt,
+      proposedVoicemail: proposedVoicemail,
     );
   }
 }
