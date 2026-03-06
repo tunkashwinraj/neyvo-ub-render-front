@@ -45,7 +45,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   bool _interruptEnabled = true;
   bool _handoffEnabled = true;
   bool _aiSuggestLoading = false;
-  Map<String, dynamic>? _aiSuggestResult;
+  final List<_AiStudioMessage> _chatMessages = [];
   List<Map<String, String>> _promptVariables = [];
   bool _variablePreviewLoading = false;
   String? _variablePreviewSentence;
@@ -240,6 +240,60 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       setState(() => _attaching = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  // Simple message model for AI Studio chat
+  // Kept local to this file as it is purely UI state.
+  }
+
+class _AiStudioMessage {
+  final bool isUser;
+  final String text;
+  final String? proposedPrompt;
+  final String? proposedVoicemail;
+  final bool applied;
+  final bool rejected;
+
+  const _AiStudioMessage({
+    required this.isUser,
+    required this.text,
+    this.proposedPrompt,
+    this.proposedVoicemail,
+    this.applied = false,
+    this.rejected = false,
+  });
+
+  bool get hasSuggestion => !isUser && (proposedPrompt != null && proposedPrompt!.isNotEmpty);
+
+  _AiStudioMessage copyWith({
+    bool? applied,
+    bool? rejected,
+  }) {
+    return _AiStudioMessage(
+      isUser: isUser,
+      text: text,
+      proposedPrompt: proposedPrompt,
+      proposedVoicemail: proposedVoicemail,
+      applied: applied ?? this.applied,
+      rejected: rejected ?? this.rejected,
+    );
+  }
+
+  factory _AiStudioMessage.user(String text) {
+    return _AiStudioMessage(isUser: true, text: text);
+  }
+
+  factory _AiStudioMessage.assistant(
+    String text, {
+    String? proposedPrompt,
+    String? proposedVoicemail,
+  }) {
+    return _AiStudioMessage(
+      isUser: false,
+      text: text,
+      proposedPrompt: proposedPrompt,
+      proposedVoicemail: proposedVoicemail,
+    );
   }
 
   List<String> get _unlockedTiers {
@@ -511,7 +565,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               Text('AI Studio', style: NeyvoTextStyles.heading),
               const SizedBox(height: 6),
               Text(
-                'Update the operator’s behavior and voicemail using AI. You don’t need to edit the raw prompt.',
+                'Chat with AI to refine how this operator sounds. You don’t need to edit the raw prompt.',
                 style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
               ),
             ],
@@ -540,96 +594,36 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('AI Studio', style: NeyvoTextStyles.heading),
+          Text('Conversation', style: NeyvoTextStyles.heading),
           const SizedBox(height: 6),
-          Text(
-            canUse
-                ? 'Improve the operator\'s script with AI. Suggestions keep your placeholders and tone.'
-                : 'AI Studio requires a Pro or Business plan.',
-            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _aiSuggestMessageCtrl,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              hintText: 'E.g. Make the opening warmer, or add a line about deadlines.',
+          if (!canUse)
+            Text(
+              'AI Studio requires a Pro or Business plan.',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            )
+          else ...[
+            Text(
+              'Tell the AI how you want this operator to speak. It will propose changes to the script and voicemail.',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              FilledButton(
-                onPressed: (!canUse || _aiSuggestLoading) ? null : _runAiSuggestPrompt,
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                child: _aiSuggestLoading
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Get AI suggestion'),
-              ),
-              if (_aiSuggestResult != null) ...[
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _applyAiSuggestResult,
-                  child: const Text('Apply'),
-                ),
-              ],
-            ],
-          ),
-          if (_aiSuggestResult != null) ...[
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: NeyvoColors.bgRaised,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: NeyvoColors.borderDefault),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Explanation', style: NeyvoTextStyles.label),
-                  const SizedBox(height: 4),
-                  Text(
-                    (_aiSuggestResult!['explanation'] ?? '').toString(),
-                    style: NeyvoTextStyles.body,
-                  ),
-                ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 160, maxHeight: 320),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: NeyvoColors.bgRaised,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: NeyvoColors.borderSubtle),
+                ),
+                child: _buildAiStudioChatList(),
               ),
             ),
+            const SizedBox(height: 12),
+            _buildAiStudioInputRow(),
           ],
         ],
       ),
     );
-  }
-
-  Future<void> _runAiSuggestPrompt() async {
-    setState(() => _aiSuggestLoading = true);
-    try {
-      final res = await ManagedProfileApiService.aiSuggestPrompt(
-        widget.profileId,
-        message: _aiSuggestMessageCtrl.text.trim().isEmpty ? null : _aiSuggestMessageCtrl.text.trim(),
-      );
-      if (mounted) setState(() {
-        _aiSuggestResult = Map<String, dynamic>.from(res);
-        _aiSuggestLoading = false;
-      });
-    } catch (e) {
-      if (mounted) setState(() {
-        _aiSuggestLoading = false;
-        _aiSuggestResult = null;
-      });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
-
-  void _applyAiSuggestResult() {
-    if (_aiSuggestResult == null) return;
-    final prompt = (_aiSuggestResult!['custom_system_prompt'] ?? '').toString();
-    final voicemail = (_aiSuggestResult!['voicemail_message'] ?? '').toString();
-    if (prompt.isNotEmpty) _promptCtrl.text = prompt;
-    if (voicemail.isNotEmpty) _voicemailCtrl.text = voicemail;
-    setState(() => _aiSuggestResult = null);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Applied. Save to update the operator.')));
   }
 
   static Map<String, String> _sampleValuesForVariables(List<Map<String, String>> variables) {
@@ -647,6 +641,197 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       else out[key] = 'Sample';
     }
     return out;
+  }
+
+  Widget _buildAiStudioChatList() {
+    if (_chatMessages.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(
+          'Describe how you want this operator to sound. For example: '
+          '“Make the opening warmer and mention payment plans if there is a balance.”',
+          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _chatMessages.length,
+      itemBuilder: (context, index) {
+        final msg = _chatMessages[index];
+        final alignEnd = msg.isUser;
+        final bgColor = msg.isUser ? NeyvoColors.teal.withOpacity(0.18) : NeyvoColors.bgOverlay;
+        final borderColor = msg.isUser ? NeyvoColors.tealLight : NeyvoColors.borderDefault;
+        return Align(
+          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.all(12),
+            constraints: const BoxConstraints(maxWidth: 520),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                if (!msg.isUser)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const NeyvoAIOrb(state: NeyvoAIOrbState.listening, size: 18),
+                      const SizedBox(width: 6),
+                      Text('AI Studio', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                    ],
+                  ),
+                if (!msg.isUser) const SizedBox(height: 4),
+                Text(
+                  msg.text,
+                  style: NeyvoTextStyles.bodyPrimary,
+                ),
+                if (msg.hasSuggestion && !msg.applied && !msg.rejected) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => _rejectSuggestion(index),
+                        child: const Text('Reject'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _aiSuggestLoading ? null : () => _applySuggestion(index),
+                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                        child: const Text('Apply to operator'),
+                      ),
+                    ],
+                  ),
+                ] else if (msg.applied) ...[
+                  const SizedBox(height: 8),
+                  Text('Applied and synced to operator.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                ] else if (msg.rejected) ...[
+                  const SizedBox(height: 8),
+                  Text('Suggestion rejected.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAiStudioInputRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _aiSuggestMessageCtrl,
+            maxLines: 3,
+            minLines: 1,
+            decoration: const InputDecoration(
+              hintText: 'E.g. Make the opening warmer, add a line about payment plans, or simplify the closing.',
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton(
+          onPressed: _aiSuggestLoading ? null : _sendAiStudioMessage,
+          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+          child: _aiSuggestLoading
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Send'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _sendAiStudioMessage() async {
+    final text = _aiSuggestMessageCtrl.text.trim();
+    if (text.isEmpty || _aiSuggestLoading) return;
+    setState(() {
+      _aiSuggestLoading = true;
+      _chatMessages.add(_AiStudioMessage.user(text));
+    });
+    try {
+      final res = await ManagedProfileApiService.aiSuggestPrompt(
+        widget.profileId,
+        message: text,
+      );
+      _aiSuggestMessageCtrl.clear();
+      final ok = res['ok'] == true;
+      if (!ok) {
+        final err = (res['error'] ?? 'AI Studio suggestion failed').toString();
+        if (mounted) {
+          setState(() => _aiSuggestLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+        }
+        return;
+      }
+      final explanation = (res['explanation'] ?? '').toString().trim();
+      final proposedPrompt = (res['custom_system_prompt'] ?? '').toString();
+      final proposedVoicemail = (res['voicemail_message'] ?? '').toString();
+      final msgText = explanation.isEmpty
+          ? 'I\'ve prepared an updated script and voicemail based on your request.'
+          : explanation;
+      if (mounted) {
+        setState(() {
+          _aiSuggestLoading = false;
+          _chatMessages.add(
+            _AiStudioMessage.assistant(
+              msgText,
+              proposedPrompt: proposedPrompt.isNotEmpty ? proposedPrompt : null,
+              proposedVoicemail: proposedVoicemail.isNotEmpty ? proposedVoicemail : null,
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _aiSuggestLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _applySuggestion(int index) async {
+    if (index < 0 || index >= _chatMessages.length) return;
+    final msg = _chatMessages[index];
+    if (!msg.hasSuggestion || msg.proposedPrompt == null) return;
+    setState(() => _aiSuggestLoading = true);
+    try {
+      final body = <String, dynamic>{
+        'custom_system_prompt': msg.proposedPrompt,
+        'voicemail_message': msg.proposedVoicemail ?? _voicemailCtrl.text.trim(),
+      };
+      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _promptCtrl.text = (updated['custom_system_prompt'] ?? '').toString();
+        _voicemailCtrl.text = (updated['voicemail_message'] ?? '').toString();
+        _aiSuggestLoading = false;
+        _chatMessages[index] = msg.copyWith(applied: true, rejected: false);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Changes applied and synced to this operator.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _aiSuggestLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  void _rejectSuggestion(int index) {
+    if (index < 0 || index >= _chatMessages.length) return;
+    final msg = _chatMessages[index];
+    if (!msg.hasSuggestion) return;
+    setState(() {
+      _chatMessages[index] = msg.copyWith(applied: false, rejected: true);
+    });
   }
 
   Future<void> _loadVariablePreview() async {
