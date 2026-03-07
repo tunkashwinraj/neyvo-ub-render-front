@@ -12,6 +12,7 @@ import '../../../utils/payment_pending_storage.dart';
 import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_detail_page.dart';
+import '../../../widgets/add_credits_modal.dart';
 import 'plan_selector_page.dart';
 import 'voice_tier_page.dart';
 
@@ -306,19 +307,39 @@ class _WalletPageState extends State<WalletPage> {
                 const SizedBox(height: 16),
                 NeyvoGlassPanel(
                   glowing: credits < 500,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('$credits credits', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-                            const SizedBox(height: 4),
-                            Text('Current balance', style: NeyvoTextStyles.body),
-                          ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$credits',
+                                style: NeyvoTextStyles.heading.copyWith(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: NeyvoColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text('credits · Current balance', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        FilledButton.icon(
+                          onPressed: () => showAddCreditsModal(context, wallet: _wallet, onSuccess: _load),
+                          icon: const Icon(Icons.add, size: 20),
+                          label: const Text('Add credits'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: NeyvoColors.teal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
