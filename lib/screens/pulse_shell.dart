@@ -76,6 +76,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   bool _agencyMode = false;
   Map<String, dynamic>? _incomingCall;
   StreamSubscription<DocumentSnapshot>? _walletSubscription;
+  /// Listens to wallet/{account_id} for real-time wallet_credits (backend writes here after Stripe).
+  StreamSubscription<DocumentSnapshot>? _walletCreditsSubscription;
   late final AnimationController _livePulseCtrl;
   late final Animation<double> _livePulse;
   String? _myRole;
@@ -221,11 +223,33 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         },
       );
     }
+    // Real-time credits: backend writes to wallet/{account_id} after Stripe payment.
+    final accountId = NeyvoPulseApi.defaultAccountId.trim().isNotEmpty ? NeyvoPulseApi.defaultAccountId : _accountIdDisplay?.trim();
+    if ((accountId ?? '').isNotEmpty && user != null) {
+      _walletCreditsSubscription = FirebaseFirestore.instance
+          .collection('wallet')
+          .doc(accountId)
+          .snapshots()
+          .listen(
+        (snap) {
+          if (!mounted) return;
+          final data = snap.data();
+          final credits = (data?['wallet_credits'] as num?)?.toInt();
+          if (credits != null) setState(() => _walletCredits = credits);
+        },
+        onError: (error) {
+          _walletCreditsSubscription?.cancel();
+          _walletCreditsSubscription = null;
+          debugPrint('Real-time wallet credits listener unavailable (using API data).');
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
     _walletSubscription?.cancel();
+    _walletCreditsSubscription?.cancel();
     _livePulseCtrl.dispose();
     super.dispose();
   }

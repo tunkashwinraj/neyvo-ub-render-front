@@ -143,11 +143,13 @@
       if (!_onboardingCompleted) {
         return const UbOnboardingPage();
       }
-      // After Stripe redirect, land on wallet or settings when URL path matches (web).
+      // After Stripe redirect: land on wallet or settings when URL path matches, or when
+      // URL has payment=success/cancelled so the success/cancel popup shows immediately.
       final path = kIsWeb ? Uri.base.path : null;
+      final hasPaymentParam = kIsWeb && (Uri.base.queryParameters['payment'] ?? '').trim().isNotEmpty;
       final initialRoute = (path == PulseRouteNames.wallet || path == PulseRouteNames.settings)
           ? path
-          : null;
+          : (hasPaymentParam ? PulseRouteNames.wallet : null);
       return PulseShell(initialRouteName: initialRoute);
     }
   }

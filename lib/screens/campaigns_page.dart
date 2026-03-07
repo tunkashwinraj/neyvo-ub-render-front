@@ -94,6 +94,14 @@ class _CampaignsPageState extends State<CampaignsPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
+      // Ensure account context so operator list (managed profiles) is scoped to current org
+      if (NeyvoPulseApi.defaultAccountId.isEmpty) {
+        try {
+          final accountRes = await NeyvoPulseApi.getAccountInfo();
+          final accountId = (accountRes['id'] ?? accountRes['account_id'] ?? '').toString().trim();
+          if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
+        } catch (_) {}
+      }
       final agentsRes = await NeyvoPulseApi.listAgents();
       final agentsList = agentsRes['agents'] as List? ?? [];
       final agents = agentsList.cast<Map<String, dynamic>>();
@@ -1851,7 +1859,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ),
             const SizedBox(height: NeyvoSpacing.md),
             DropdownButtonFormField<String>(
-              value: _selectedOperatorValue,
+              value: _operatorsForCampaign.any((o) => o['value'] == _selectedOperatorValue)
+                  ? _selectedOperatorValue
+                  : null,
               decoration: const InputDecoration(
                 labelText: 'Operator',
                 hintText: 'Select an operator (recommended)',
