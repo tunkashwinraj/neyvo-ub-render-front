@@ -7,6 +7,7 @@ import '../api/spearia_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
@@ -250,7 +251,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       sb.writeln('Name,${_escapeCsv(campaign['name']?.toString() ?? '')}');
       sb.writeln('Status,${campaign['status'] ?? ''}');
       sb.writeln('Total Planned,${campaign['total_planned'] ?? ''}');
-      sb.writeln('Created,${campaign['created_at'] ?? ''}');
+      sb.writeln('Created,${UserTimezoneService.format(campaign['created_at'])}');
       sb.writeln('');
       if (agent != null) {
         sb.writeln('Agent');
@@ -1002,11 +1003,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final templateName = templateList.isNotEmpty ? (templateList.first['name']?.toString() ?? templateId) : (templateId ?? '—');
         final created = c['created_at'];
         final started = c['started_at'];
-        String formatDate(dynamic v) {
-          if (v == null) return '—';
-          if (v is String) return v.length > 19 ? v.substring(0, 19) : v;
-          return v.toString();
-        }
+        String formatDate(dynamic v) => UserTimezoneService.format(v);
         int asInt(dynamic v, [int def = 0]) {
           if (v == null) return def;
           if (v is int) return v;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../neyvo_pulse_api.dart';
+import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import '../widgets/neyvo_empty_state.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
@@ -145,7 +146,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       sb.writeln('Date,Type,Amount,Description');
       for (final t in txList.take(100)) {
         final m = Map<String, dynamic>.from(t as Map);
-        sb.writeln('${m['created_at']},${m['type']},${m['amount'] ?? ''},"${(m['description'] ?? '').toString().replaceAll('"', '""')}"');
+        sb.writeln('${UserTimezoneService.format(m['created_at'])},${m['type']},${m['amount'] ?? ''},"${(m['description'] ?? '').toString().replaceAll('"', '""')}"');
       }
       sb.writeln('');
     }

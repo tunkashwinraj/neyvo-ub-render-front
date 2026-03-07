@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
+import '../services/user_timezone_service.dart';
 import '../utils/export_csv.dart';
 import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
@@ -458,7 +459,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final agentName = (call['profile_name'] ?? call['agent_name'] ?? call['managed_profile_name'] ?? '').toString();
                         final numberCalled = (call['number_called'] ?? call['from'] ?? call['phone_number_id'] ?? '').toString();
                         final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '').toString();
-                        final date = (call['created_at_display'] ?? call['created_at'] ?? call['date'] ?? '').toString();
+                        final dateRaw = call['created_at_display'] ?? call['created_at'] ?? call['date'];
+                        final date = dateRaw != null ? UserTimezoneService.format(dateRaw) : '';
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
                         final recordingUrl = call['recording_url']?.toString();

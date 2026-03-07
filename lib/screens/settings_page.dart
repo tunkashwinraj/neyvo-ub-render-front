@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
+import '../services/user_timezone_service.dart';
 import '../utils/payment_result_dialog.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
@@ -127,6 +128,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         _currency.text = s['currency']?.toString() ?? 'USD';
         final tz = (s['timezone']?.toString() ?? '').trim();
         _timezoneValue = tz.isNotEmpty ? tz : 'America/New_York';
+        UserTimezoneService.setTimezone(_timezoneValue);
         _vapiPhoneNumberId.text = s['vapi_phone_number_id']?.toString() ?? '';
         _primaryPhoneController.text = s['primary_phone_e164']?.toString() ?? s['primary_phone']?.toString() ?? '';
         _vapiAssistantId.text = s['vapi_assistant_id']?.toString() ?? '';
@@ -195,6 +197,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         vapiPhoneNumberId: null,
         defaultAgentId: _defaultAgentId,
       );
+      UserTimezoneService.setTimezone(_timezoneValue);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
         setState(() => _saving = false);

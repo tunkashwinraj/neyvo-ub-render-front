@@ -5,8 +5,10 @@
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
   import 'package:shared_preferences/shared_preferences.dart';
+  import 'package:timezone/data/latest.dart' as tz;
 
   import 'api/spearia_api.dart';
+  import 'services/user_timezone_service.dart';
   import 'firebase_options.dart';
   import 'neyvo_pulse_api.dart';
   import 'pulse_route_names.dart';
@@ -39,6 +41,8 @@
 
     SpeariaApi.setBaseUrl('https://ub-neyvo-back.onrender.com');
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
+
+    tz.initializeTimeZones();
 
     runApp(const NeyvoPulseApp());
   }
@@ -106,6 +110,12 @@
         if (ok && accountId != null && accountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(accountId);
         }
+        // Load user timezone from settings for date display
+        try {
+          final settingsRes = await NeyvoPulseApi.getSettings();
+          final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
+          UserTimezoneService.setTimezone(tzStr);
+        } catch (_) {}
         // If API says not completed, check local persistence (so we don't loop when backend doesn't persist)
         bool completed = onboardingFromApi == true;
         if (!completed) {

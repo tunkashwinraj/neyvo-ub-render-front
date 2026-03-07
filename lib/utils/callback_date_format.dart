@@ -1,19 +1,13 @@
 // lib/utils/callback_date_format.dart
-// Format callback_at for display in 12-hour AM/PM.
+// Format callback_at for display in 12-hour AM/PM using user's selected timezone.
 
-import 'package:intl/intl.dart';
+import '../services/user_timezone_service.dart';
 
-/// Formats a callback time (ISO string or DateTime) for display.
+/// Formats a callback time (ISO string or DateTime) for display in user's timezone.
 /// Returns e.g. "Wed, Feb 25, 2026 at 2:00 PM" (12-hour with AM/PM).
 /// Returns empty string if raw is null or unparseable.
 String formatCallbackTime12h(dynamic raw) {
   if (raw == null) return '';
-  try {
-    final dt = raw is DateTime
-        ? raw.toLocal()
-        : DateTime.parse(raw.toString()).toLocal();
-    return DateFormat("EEE, MMM d, yyyy 'at' h:mm a").format(dt);
-  } catch (_) {
-    return raw.toString();
-  }
+  final s = UserTimezoneService.formatCallback12h(raw);
+  return s == '—' ? '' : s;
 }

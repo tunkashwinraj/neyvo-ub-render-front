@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../services/user_timezone_service.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/export_csv.dart';
 import '../../../utils/payment_result_dialog.dart';
@@ -154,13 +155,7 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  static String _formatDate(dynamic v) {
-    if (v == null) return '—';
-    if (v is DateTime) return '${v.year}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')} ${v.hour.toString().padLeft(2, '0')}:${v.minute.toString().padLeft(2, '0')}';
-    final s = v.toString();
-    if (s.length > 19) return s.substring(0, 19).replaceAll('T', ' ');
-    return s;
-  }
+  static String _formatDate(dynamic v) => UserTimezoneService.format(v);
 
   Future<void> _downloadTransactionsReport() async {
     try {

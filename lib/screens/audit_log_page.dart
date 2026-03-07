@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 
 class AuditLogPage extends StatefulWidget {
@@ -74,12 +75,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
         .join(' ');
   }
 
-  String _formatTime(dynamic v) {
-    if (v == null) return '—';
-    final s = v.toString();
-    if (s.length > 19) return s.substring(0, 19).replaceFirst('T', ' ');
-    return s;
-  }
+  String _formatTime(dynamic v) => UserTimezoneService.format(v);
 
   /// Format details as readable key-value pairs (old UI style, but full content).
   String _formatDetails(dynamic details) {

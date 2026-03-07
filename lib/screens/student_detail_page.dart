@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../services/user_timezone_service.dart';
 import '../../api/spearia_api.dart' show ApiException;
 import '../theme/neyvo_theme.dart';
 import '../utils/callback_date_format.dart';
@@ -532,7 +533,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                     ..._payments.map((p) {
                       final amount = p['amount']?.toString() ?? '—';
                       final method = p['method']?.toString() ?? '';
-                      final date = p['created_at']?.toString() ?? p['date']?.toString() ?? '';
+                      final dateRaw = p['created_at'] ?? p['date'];
+                      final date = dateRaw != null ? UserTimezoneService.format(dateRaw) : '';
                       final note = p['note']?.toString() ?? '';
                       return Card(
                         margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
@@ -596,7 +598,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 ..._calls.map((c) {
                   final callMap = Map<String, dynamic>.from(c as Map);
                   final status = callMap['status']?.toString() ?? callMap['outcome']?.toString() ?? 'unknown';
-                  final date = callMap['date']?.toString() ?? callMap['created_at']?.toString() ?? '';
+                  final dateRaw = callMap['date'] ?? callMap['created_at'];
+                  final date = dateRaw != null ? UserTimezoneService.format(dateRaw) : '';
                   final duration = callMap['duration_seconds']?.toString() ?? callMap['duration']?.toString() ?? '';
                   final outcome = callMap['outcome']?.toString() ?? status;
                   final agentName = callMap['agent_name']?.toString() ?? '';

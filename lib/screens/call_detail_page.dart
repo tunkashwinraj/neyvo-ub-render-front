@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 
 class CallDetailPage extends StatelessWidget {
@@ -24,11 +25,7 @@ class CallDetailPage extends StatelessWidget {
     return (d != null && d.isNotEmpty) ? d : '—';
   }
 
-  static String formatDate(dynamic v) {
-    if (v == null) return '—';
-    if (v is String) return v.length > 19 ? v.substring(0, 19).replaceAll('T', ' ') : v;
-    return v.toString();
-  }
+  static String formatDate(dynamic v) => UserTimezoneService.format(v);
 
   @override
   Widget build(BuildContext context) {
