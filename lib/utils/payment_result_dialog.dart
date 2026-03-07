@@ -3,9 +3,18 @@ import 'package:flutter/material.dart';
 import '../theme/neyvo_theme.dart';
 import 'clear_payment_query.dart';
 
+/// Optional details from sessionStorage (web) for success message: pack label, amount, or credits.
+/// Keys: pack (String), amountDollars (num), credits (int).
+typedef PaymentDetails = Map<String, dynamic>;
+
 /// Shows an AlertDialog for payment result and clears ?payment= from URL (web).
 /// [result] is the value of the `payment` query param: success, declined, cancelled, or null/other.
-Future<void> showPaymentResultDialogIfNeeded(BuildContext context, String? result) async {
+/// [paymentDetails] optional: when result is success, show "Your X payment (Y credits) has been added to your wallet."
+Future<void> showPaymentResultDialogIfNeeded(
+  BuildContext context,
+  String? result, {
+  Map<String, dynamic>? paymentDetails,
+}) async {
   if (result == null || result.isEmpty) return;
   final normalized = result.toLowerCase();
   if (normalized != 'success' && normalized != 'declined' && normalized != 'cancelled' && normalized != 'canceled') return;
@@ -16,11 +25,25 @@ Future<void> showPaymentResultDialogIfNeeded(BuildContext context, String? resul
       : (normalized == 'cancelled' || normalized == 'canceled')
           ? 'Payment cancelled'
           : 'Payment declined';
-  final message = normalized == 'success'
-      ? 'Your credits have been added to your account.'
-      : (normalized == 'cancelled' || normalized == 'canceled')
-          ? 'No credits were added. You can try again when ready.'
-          : 'Payment was declined. No credits were added. Please try again or use a different payment method.';
+  String message;
+  if (normalized == 'success') {
+    if (paymentDetails != null && paymentDetails.isNotEmpty) {
+      final amountDollars = paymentDetails['amountDollars'];
+      final pack = paymentDetails['pack'] as String?;
+      final credits = paymentDetails['credits'];
+      final x = amountDollars != null
+          ? '\$${amountDollars is int ? amountDollars : (amountDollars as num).toStringAsFixed(0)}'
+          : (pack ?? '');
+      final y = credits != null ? '$credits credits' : 'credits';
+      message = 'Your $x payment ($y) has been added to your wallet.';
+    } else {
+      message = 'Your credits have been added to your account.';
+    }
+  } else {
+    message = (normalized == 'cancelled' || normalized == 'canceled')
+        ? 'No credits were added. You can try again when ready.'
+        : 'Payment was declined. No credits were added. Please try again or use a different payment method.';
+  }
   final icon = normalized == 'success' ? Icons.check_circle_outline : Icons.info_outline;
   final color = normalized == 'success' ? NeyvoTheme.success : NeyvoTheme.warning;
 

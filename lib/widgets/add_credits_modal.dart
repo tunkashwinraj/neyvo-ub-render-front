@@ -2,8 +2,9 @@
 // Reusable Add Credits bottom sheet: packs + custom amount. Used by Wallet page and Settings → Billing.
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
+import '../utils/payment_pending_storage.dart';
+import '../utils/stripe_launcher.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/billing/credits_info_icon.dart';
 
@@ -73,18 +74,16 @@ class _AddCreditsSheetState extends State<_AddCreditsSheet> {
       );
       final url = res['url'] as String?;
       if (url != null && url.isNotEmpty) {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Opening Stripe Checkout. Complete payment there; credits will appear when you return.',
-                ),
+        setPaymentPending(pack: pack, amountDollars: amountDollars);
+        await openStripeUrl(url);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Opening Stripe Checkout. Complete payment there; credits will appear when you return.',
               ),
-            );
-          }
+            ),
+          );
         }
       } else {
         try {
