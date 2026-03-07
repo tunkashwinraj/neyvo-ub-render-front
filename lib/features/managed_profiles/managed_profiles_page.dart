@@ -212,7 +212,7 @@ class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
                 Row(
                   children: [
                     Icon(
-                      industryId == 'school_financial_aid' ? Icons.school : Icons.content_cut,
+                      industryId == 'school_financial_aid' ? Icons.school : Icons.smart_toy_outlined,
                       size: 28,
                       color: NeyvoColors.teal,
                     ),

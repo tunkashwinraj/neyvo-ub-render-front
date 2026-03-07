@@ -714,7 +714,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                   child: Row(
                     children: [
                       Icon(
-                        iconName == 'school' ? Icons.school : Icons.content_cut,
+                        iconName == 'school' ? Icons.school : Icons.smart_toy_outlined,
                         size: 32,
                         color: selected ? NeyvoColors.teal : NeyvoColors.textSecondary,
                       ),

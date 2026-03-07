@@ -120,22 +120,6 @@ class _BillingPageState extends State<BillingPage> {
                     Expanded(
                       child: Text('Billing', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                     ),
-                    InkWell(
-                      onTap: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.list_alt_outlined, size: 18, color: NeyvoColors.teal),
-                            const SizedBox(width: 6),
-                            Text('View transactions', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                     TextButton.icon(
                       onPressed: _load,
                       icon: const Icon(Icons.refresh, size: 18),
@@ -172,17 +156,35 @@ class _BillingPageState extends State<BillingPage> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      SizedBox(
-                        width: 220,
-                        child: FilledButton(
-                          onPressed: _addCredits,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: NeyvoColors.teal,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: 220,
+                            child: FilledButton(
+                              onPressed: _addCredits,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: NeyvoColors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              child: const Text('Add credits'),
+                            ),
                           ),
-                          child: const Text('Add credits'),
-                        ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: 220,
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: NeyvoColors.teal,
+                                side: const BorderSide(color: NeyvoColors.teal),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              child: const Text('Transactions'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
