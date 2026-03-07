@@ -2,12 +2,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
+import '../ui/components/backgrounds/neyvo_neural_background.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../ui/components/visualizer/neyvo_voice_wave.dart';
 import '../features/agents/create_agent_wizard.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
@@ -33,6 +36,9 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   String? _trainingNumber;
   List<Map<String, dynamic>> _recentCalls = const [];
   Map<String, dynamic>? _perf;
+  Map<String, dynamic>? _ubModel;
+
+  String _timeRange = '7d';
 
   static const List<String> _recommendedOperators = [
     'Admissions Operator',
@@ -138,28 +144,32 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-          return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
-        }
-        if (_error != null) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
-                const SizedBox(height: 16),
-                TextButton(onPressed: _load, child: const Text('Retry')),
-              ],
-            ),
-          );
-        }
+      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            const SizedBox(height: 16),
+            TextButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
 
     final ubReady = _ubStatus == 'ready';
     final showCreateFirstOperator = ubReady && _operatorCount == 0;
 
+    // Keep the dedicated "create first operator" experience for empty state.
     if (showCreateFirstOperator) {
-          return RefreshIndicator(
-            onRefresh: _load,
-            child: ListView(
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: Stack(
+          children: [
+            const Positioned.fill(child: NeyvoNeuralBackground()),
+            ListView(
               padding: const EdgeInsets.all(24),
               children: [
                 Center(
@@ -236,153 +246,411 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                 ),
               ],
             ),
-          );
-        }
+          ],
+        ),
+      );
+    }
 
-        final callOk = _firstCallCompleted;
-        final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
-        const title = 'Your Voice AI is Online';
-        const subtitle = 'System live. Scale confidently.';
+    final callOk = _firstCallCompleted;
+    final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
 
-        return RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: Stack(
+        children: [
+          const Positioned.fill(child: NeyvoNeuralBackground()),
+          ListView(
             padding: const EdgeInsets.all(24),
             children: [
               Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1200),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 8),
-                      Center(child: NeyvoAIOrb(state: orbState, size: 180)),
-                      const SizedBox(height: 14),
-                      Text(
-                        title,
-                        style: NeyvoTextStyles.title.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: NeyvoTextStyles.body,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 6,
-                            child: NeyvoGlassPanel(
-                              glowing: !callOk,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.verified_outlined, color: NeyvoColors.teal),
-                                      const SizedBox(width: 10),
-                                      Text('System status', style: NeyvoTextStyles.heading),
-                                      const Spacer(),
-                                      TextButton.icon(
-                                        onPressed: _load,
-                                        icon: const Icon(Icons.refresh, size: 18),
-                                        label: const Text('Refresh'),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _statusRow('Business Configured', _businessConfigured),
-                                  _statusRow('Operator Attached', _agentAttached),
-                                  _statusRow('Number Live', _numberLive),
-                                  _statusRow('First Call Completed', callOk),
-                                  if (!callOk) ...[
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: FilledButton(
-                                        onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
-                                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                                        child: const Text('Make a test call'),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 6,
-                            child: NeyvoGlassPanel(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.bolt_outlined, color: NeyvoColors.teal),
-                                      const SizedBox(width: 10),
-                                      Text('Quick actions', style: NeyvoTextStyles.heading),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Wrap(
-                                    spacing: 10,
-                                    runSpacing: 10,
-                                    children: [
-                                      _actionButton(
-                                        icon: Icons.phone_in_talk_outlined,
-                                        label: 'Call My AI',
-                                        onTap: _showCallMyAi,
-                                      ),
-                                      _actionButton(
-                                        icon: Icons.call_made_outlined,
-                                        label: 'Start Outbound',
-                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
-                                      ),
-                                      _actionButton(
-                                        icon: Icons.smart_toy_outlined,
-                                        label: 'Edit Operator',
-                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
-                                      ),
-                                      _actionButton(
-                                        icon: Icons.account_balance_wallet_outlined,
-                                        label: 'Add Credits',
-                                        onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (callOk) ...[
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: NeyvoGlassPanel(
-                                child: _performanceSnapshot(),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      NeyvoGlassPanel(
-                        child: _recentCallsTable(),
-                      ),
+                      _buildHeroSection(orbState, callOk),
+                      const SizedBox(height: 24),
+                      _buildInsightsSection(),
+                      const SizedBox(height: 24),
+                      _buildOperationsSection(callOk),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk) {
+    final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ?? _recentCalls.length;
+    final resolutionPct = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
+        (_perf?['resolution_rate'] as num?)?.toDouble();
+    final studentsReached = _computeUniqueStudentsReached();
+    final timeSavedHours = (_perf?['time_saved_hours'] as num?)?.toDouble();
+
+    final totalCoreDepartments = _recommendedOperators.length;
+    final coveredDepartments = _operatorCount.clamp(0, totalCoreDepartments);
+
+    final ubModelStatus = _ubStatus;
+    final envLabel = 'Prod';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 7,
+          child: NeyvoGlassPanel(
+            glowing: !callOk,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'University of Bridgeport Voice OS',
+                      style: NeyvoTextStyles.title.copyWith(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Spacer(),
+                    _TimeRangeSelector(
+                      value: _timeRange,
+                      onChanged: (v) => setState(() {
+                        _timeRange = v;
+                        _load();
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        NeyvoAIOrb(state: orbState, size: 120),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 80,
+                          width: 220,
+                          child: const NeyvoVoiceWave(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _StatusChip(
+                                label: 'Voice OS',
+                                value: callOk ? 'Healthy' : 'Needs attention',
+                                color: callOk ? NeyvoColors.success : NeyvoColors.warning,
+                              ),
+                              _StatusChip(
+                                label: 'Coverage',
+                                value: '$coveredDepartments / $totalCoreDepartments core departments',
+                              ),
+                              _StatusChip(
+                                label: 'UB model',
+                                value: ubModelStatus == 'ready'
+                                    ? 'Ready'
+                                    : ubModelStatus == 'building'
+                                        ? 'Building'
+                                        : 'Missing',
+                                color: ubModelStatus == 'ready'
+                                    ? NeyvoColors.success
+                                    : ubModelStatus == 'building'
+                                        ? NeyvoColors.info
+                                        : NeyvoColors.warning,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 14,
+                            runSpacing: 14,
+                            children: [
+                              _metricChip('Calls handled', callsTotal > 0 ? callsTotal.toString() : '—'),
+                              _metricChip(
+                                'AI answer rate',
+                                resolutionPct == null ? '—' : '${resolutionPct.toStringAsFixed(1)}%',
+                              ),
+                              _metricChip(
+                                'Students reached',
+                                studentsReached > 0 ? studentsReached.toString() : '—',
+                              ),
+                              _metricChip(
+                                'Time saved',
+                                timeSavedHours == null
+                                    ? '—'
+                                    : '≈ ${timeSavedHours.toStringAsFixed(1)} h',
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Last updated just now · $envLabel',
+                            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 5,
+          child: NeyvoGlassPanel(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.lightbulb_outline, color: NeyvoColors.teal),
+                    const SizedBox(width: 10),
+                    Text('Next best actions', style: NeyvoTextStyles.heading),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _NextActionCard(
+                      icon: Icons.person_add_alt_1_outlined,
+                      title: 'Add operator for missing department',
+                      subtitle: 'Some UB departments do not have voice coverage yet.',
+                      label: 'Create operator',
+                      onTap: () => Navigator.of(context, rootNavigator: true)
+                          .pushNamed(PulseRouteNames.managedProfiles),
+                    ),
+                    _NextActionCard(
+                      icon: Icons.campaign_outlined,
+                      title: 'Turn on outbound reminders',
+                      subtitle: 'Reach students with balance and due date reminders.',
+                      label: 'Start campaign',
+                      onTap: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns),
+                    ),
+                    _NextActionCard(
+                      icon: Icons.school_outlined,
+                      title: 'Complete UB onboarding',
+                      subtitle: 'Finish setting up the UB model from bridgeport.edu.',
+                      label: 'View UB model',
+                      onTap: () => Navigator.of(context, rootNavigator: true)
+                          .pushNamed(PulseRouteNames.ubModelOverview),
+                    ),
+                    _NextActionCard(
+                      icon: Icons.analytics_outlined,
+                      title: 'Review call analytics',
+                      subtitle: 'See where students drop and where AI can improve.',
+                      label: 'Open analytics',
+                      onTap: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInsightsSection() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 900;
+        if (isNarrow) {
+          return Column(
+            children: [
+              _VoiceCoverageCard(operatorCount: _operatorCount, totalCoreDepartments: _recommendedOperators.length),
+              const SizedBox(height: 16),
+              _CallsPerformanceCard(perf: _perf),
+              const SizedBox(height: 16),
+              _StudentFinancialImpactCard(perf: _perf),
+              const SizedBox(height: 16),
+              _UbModelCard(ubModel: _ubModel, status: _ubStatus),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _VoiceCoverageCard(
+                    operatorCount: _operatorCount,
+                    totalCoreDepartments: _recommendedOperators.length,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(child: _CallsPerformanceCard(perf: _perf)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _StudentFinancialImpactCard(perf: _perf)),
+                const SizedBox(width: 16),
+                Expanded(child: _UbModelCard(ubModel: _ubModel, status: _ubStatus)),
+              ],
+            ),
+          ],
         );
+      },
+    );
+  }
+
+  Widget _buildOperationsSection(bool callOk) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 7,
+          child: NeyvoGlassPanel(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.campaign_outlined, color: NeyvoColors.teal),
+                    const SizedBox(width: 10),
+                    Text('Active operations', style: NeyvoTextStyles.heading),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (!callOk) ...[
+                  Text(
+                    'Make a quick test call to finalize setup, then launch campaigns for students.',
+                    style: NeyvoTextStyles.body,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                      child: const Text('Make a test call'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                _recentCallsTable(),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 5,
+          child: NeyvoGlassPanel(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.history_toggle_off, color: NeyvoColors.teal),
+                    const SizedBox(width: 10),
+                    Text('Live activity', style: NeyvoTextStyles.heading),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_recentCalls.isEmpty)
+                  Text(
+                    'No recent activity yet. As students call or receive outbound calls, activity will appear here.',
+                    style: NeyvoTextStyles.body,
+                  )
+                else
+                  Column(
+                    children: _recentCalls.take(5).map((c) {
+                      final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
+                      final status = (c['status'] as String?)?.toLowerCase() ?? '—';
+                      final name =
+                          (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '—').toString();
+                      final dur = (c['duration_seconds'] as num?)?.toInt() ?? 0;
+                      final ok = status == 'completed' || status == 'success';
+                      final timeLabel = dur <= 0 ? '' : ' · ${dur}s';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              dir == 'inbound' ? Icons.call_received : Icons.call_made,
+                              size: 18,
+                              color: ok ? NeyvoColors.success : NeyvoColors.warning,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '$name · ${dir == 'inbound' ? 'Inbound' : 'Outbound'}$timeLabel',
+                                style: NeyvoTextStyles.body,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _actionButton(
+                      icon: Icons.phone_in_talk_outlined,
+                      label: 'Call My AI',
+                      onTap: _showCallMyAi,
+                    ),
+                    _actionButton(
+                      icon: Icons.call_made_outlined,
+                      label: 'Start outbound',
+                      onTap: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                    ),
+                    _actionButton(
+                      icon: Icons.smart_toy_outlined,
+                      label: 'Edit operator',
+                      onTap: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
+                    ),
+                    _actionButton(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Add credits',
+                      onTap: () =>
+                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _performanceSnapshot() {
@@ -587,6 +855,530 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           ),
         ],
       ),
+    );
+  }
+
+  int _computeUniqueStudentsReached() {
+    final phones = <String>{};
+    for (final c in _recentCalls) {
+      final phone =
+          (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString().trim();
+      if (phone.isNotEmpty) phones.add(phone);
+    }
+    return phones.length;
+  }
+}
+
+class _TimeRangeSelector extends StatelessWidget {
+  const _TimeRangeSelector({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<String>(
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        ),
+      ),
+      segments: const [
+        ButtonSegment(value: '1d', label: Text('Today')),
+        ButtonSegment(value: '7d', label: Text('7d')),
+        ButtonSegment(value: '30d', label: Text('30d')),
+      ],
+      selected: {value},
+      onSelectionChanged: (v) {
+        if (v.isNotEmpty) onChanged(v.first);
+      },
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? NeyvoColors.borderDefault;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.11),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: c.withOpacity(0.6)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+          Text(
+            value,
+            style: NeyvoTextStyles.micro.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NextActionCard extends StatelessWidget {
+  const _NextActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: NeyvoGlassPanel(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 20, color: NeyvoColors.teal),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: NeyvoTextStyles.micro,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onTap,
+                style: FilledButton.styleFrom(
+                  backgroundColor: NeyvoColors.teal,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: Text(label),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VoiceCoverageCard extends StatelessWidget {
+  const _VoiceCoverageCard({
+    required this.operatorCount,
+    required this.totalCoreDepartments,
+  });
+
+  final int operatorCount;
+  final int totalCoreDepartments;
+
+  @override
+  Widget build(BuildContext context) {
+    final covered = operatorCount.clamp(0, totalCoreDepartments);
+    final uncovered = (totalCoreDepartments - covered).clamp(0, totalCoreDepartments);
+    final sections = <PieChartSectionData>[
+      PieChartSectionData(
+        value: covered.toDouble(),
+        color: NeyvoColors.teal,
+        title: '',
+        radius: 40,
+      ),
+      PieChartSectionData(
+        value: uncovered.toDouble(),
+        color: NeyvoColors.borderSubtle,
+        title: '',
+        radius: 32,
+      ),
+    ];
+
+    return NeyvoGlassPanel(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hub_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Voice coverage by department', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              SizedBox(
+                width: 140,
+                height: 140,
+                child: PieChart(
+                  PieChartData(
+                    sections: sections,
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 40,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$covered of $totalCoreDepartments core UB departments have at least one operator.',
+                      style: NeyvoTextStyles.body,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Admissions, Student Financial Services, Registrar, Housing, IT Help Desk, Front Desk.',
+                      style: NeyvoTextStyles.micro,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.of(context, rootNavigator: true)
+                          .pushNamed(PulseRouteNames.managedProfiles),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create operator'),
+                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CallsPerformanceCard extends StatelessWidget {
+  const _CallsPerformanceCard({required this.perf});
+
+  final Map<String, dynamic>? perf;
+
+  @override
+  Widget build(BuildContext context) {
+    final seriesDynamic = (perf?['daily_calls'] as List?) ?? const [];
+    final series = <FlSpot>[];
+    for (var i = 0; i < seriesDynamic.length; i++) {
+      final m = Map<String, dynamic>.from(seriesDynamic[i] as Map);
+      final total = (m['total'] as num?)?.toDouble() ?? 0;
+      series.add(FlSpot(i.toDouble(), total));
+    }
+
+    return NeyvoGlassPanel(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_graph_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Calls & performance', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (series.isEmpty)
+            Text(
+              'Call volume charts will appear here once you have more activity.',
+              style: NeyvoTextStyles.body,
+            )
+          else
+            SizedBox(
+              height: 160,
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: 1,
+                    getDrawingHorizontalLine: (_) =>
+                        FlLine(color: NeyvoColors.borderSubtle, strokeWidth: 1),
+                  ),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 28,
+                        getTitlesWidget: (v, _) =>
+                            Text(v.toInt().toString(), style: NeyvoTextStyles.micro),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 20,
+                        getTitlesWidget: (v, _) =>
+                            Text('D${v.toInt() + 1}', style: NeyvoTextStyles.micro),
+                      ),
+                    ),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  minX: 0,
+                  maxX: series.isEmpty ? 1 : series.last.x,
+                  minY: 0,
+                  maxY: series.isEmpty
+                      ? 1
+                      : (series.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 2),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: series,
+                      isCurved: true,
+                      color: NeyvoColors.teal,
+                      barWidth: 2,
+                      isStrokeCapRound: true,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            NeyvoColors.tealGlow,
+                            NeyvoColors.tealGlow.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudentFinancialImpactCard extends StatelessWidget {
+  const _StudentFinancialImpactCard({required this.perf});
+
+  final Map<String, dynamic>? perf;
+
+  @override
+  Widget build(BuildContext context) {
+    final impact = perf?['student_financial_impact'] as Map<String, dynamic>? ?? {};
+    final collected = (impact['collected'] as num?)?.toDouble() ?? 0;
+    final promised = (impact['promised'] as num?)?.toDouble() ?? 0;
+    final atRisk = (impact['at_risk'] as num?)?.toDouble() ?? 0;
+    final total = collected + promised + atRisk;
+
+    return NeyvoGlassPanel(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.attach_money_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Student financial impact', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (total <= 0)
+            Text(
+              'Connect billing and run campaigns to see financial impact here.',
+              style: NeyvoTextStyles.body,
+            )
+          else ...[
+            Text(
+              '\$${(collected + promised).toStringAsFixed(0)} collected / promised this week',
+              style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _impactBar('Collected', collected, total, NeyvoColors.success),
+                const SizedBox(width: 8),
+                _impactBar('Promised', promised, total, NeyvoColors.info),
+                const SizedBox(width: 8),
+                _impactBar('At risk', atRisk, total, NeyvoColors.warning),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _impactBar(String label, double value, double total, Color color) {
+    final fraction = total <= 0 ? 0.0 : value / total;
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 10,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: color.withOpacity(0.18),
+            ),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: fraction.clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: color,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: NeyvoTextStyles.micro),
+        ],
+      ),
+    );
+  }
+}
+
+class _UbModelCard extends StatelessWidget {
+  const _UbModelCard({required this.ubModel, required this.status});
+
+  final Map<String, dynamic>? ubModel;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final model = ubModel ?? {};
+    final sourceUrl = (model['source_url'] ?? 'https://www.bridgeport.edu').toString();
+    final departmentsCount = (model['departmentsDiscovered'] as num?)?.toInt() ??
+        (model['departments_count'] as num?)?.toInt() ??
+        0;
+    final faqCount =
+        (model['faqTopicsCount'] as num?)?.toInt() ?? (model['faq_count'] as num?)?.toInt() ?? 0;
+
+    return NeyvoGlassPanel(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_tree_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('UB model & knowledge', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (status == 'building') ...[
+            Text(
+              'Analyzing bridgeport.edu…',
+              style: NeyvoTextStyles.body,
+            ),
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(
+              value: null,
+              color: NeyvoColors.teal,
+              backgroundColor: NeyvoColors.bgRaised,
+            ),
+          ] else if (status != 'ready') ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: NeyvoColors.warning.withOpacity(0.11),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'UB model is not ready yet. Initialize from bridgeport.edu to unlock department-aware operators.',
+                      style: NeyvoTextStyles.micro,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(context, rootNavigator: true)
+                        .pushNamed(PulseRouteNames.ubModelOverview),
+                    child: const Text('Open UB onboarding'),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Text(
+              'Source: $sourceUrl',
+              style: NeyvoTextStyles.body,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _badgeChip('$departmentsCount departments learned'),
+                _badgeChip('$faqCount FAQ topics'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Admissions, Student Financial Services, Registrar, Housing, IT Help Desk and more are included in the model.',
+              style: NeyvoTextStyles.micro,
+            ),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => Navigator.of(context, rootNavigator: true)
+                  .pushNamed(PulseRouteNames.ubModelOverview),
+              child: const Text('View model'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badgeChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: NeyvoColors.bgRaised.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: NeyvoColors.borderSubtle),
+      ),
+      child: Text(text, style: NeyvoTextStyles.micro),
     );
   }
 }
