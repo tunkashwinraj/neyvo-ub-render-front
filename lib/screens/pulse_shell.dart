@@ -160,7 +160,11 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
       final items = _navItems;
-      final idx = items.indexWhere((n) => n.route == name);
+      int idx = items.indexWhere((n) => n.route == name);
+      // Wallet is not in sidebar; it lives under Billing. After Stripe redirect to /pulse/wallet?payment=success, show Wallet page with Billing tab selected.
+      if (idx < 0 && name == PulseRouteNames.wallet) {
+        idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
+      }
       if (idx >= 0) _selectedIndex = idx;
     }
     // When deep-linked to a profile detail, push it after the nested Navigator is built.
@@ -777,9 +781,11 @@ extension on _PulseShellState {
   /// Map the currently selected nav route to the active page widget.
   Widget _buildCurrentPage() {
     // When opened via "View plans" / "View voice tiers" from Billing, show that page (not in sidebar).
+    // When returning from Stripe with /pulse/wallet?payment=success, show Wallet page so user sees success and transactions.
     final initialRoute = widget.initialRouteName;
     if (initialRoute == PulseRouteNames.voiceTier) return const VoiceTierPage();
     if (initialRoute == PulseRouteNames.subscriptionPlan) return const PlanSelectorPage();
+    if (initialRoute == PulseRouteNames.wallet) return const WalletPage();
 
     final items = _navItems;
     if (_selectedIndex < 0 || _selectedIndex >= items.length) {
