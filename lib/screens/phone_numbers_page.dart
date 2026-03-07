@@ -24,6 +24,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   List<Map<String, dynamic>> _profiles = const [];
 
   final Map<String, bool> _attaching = {};
+  bool _syncingFromVapi = false;
 
   @override
   void initState() {
@@ -66,6 +67,24 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _syncFromVapi() async {
+    setState(() => _syncingFromVapi = true);
+    try {
+      final res = await NeyvoPulseApi.syncNumbersFromVapi();
+      if (!mounted) return;
+      final added = res['added_count'] as int? ?? 0;
+      final message = res['message'] as String? ?? (added > 0 ? 'Added $added number(s) from VAPI.' : 'No new numbers to add.');
+      setState(() => _syncingFromVapi = false);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _syncingFromVapi = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -118,6 +137,14 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                   Text(
                     'Production numbers for your voice agents.',
                     style: NeyvoTextStyles.body,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Numbers only appear here after they are linked to your account. If you have numbers in the VAPI dashboard, use "Sync from VAPI" below to add them.',
+                    style: NeyvoTextStyles.body.copyWith(
+                      color: NeyvoColors.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (_primaryNumbers.isNotEmpty) _primarySection(),
@@ -175,6 +202,13 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               Text('Production numbers', style: NeyvoTextStyles.heading),
               const Spacer(),
               TextButton.icon(
+                onPressed: _syncingFromVapi ? null : _syncFromVapi,
+                icon: _syncingFromVapi
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.sync, size: 18),
+                label: Text(_syncingFromVapi ? 'Syncing…' : 'Sync from VAPI'),
+              ),
+              TextButton.icon(
                 onPressed: _openBuyNumber,
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Buy number'),
@@ -187,7 +221,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             ],
           ),
           const SizedBox(height: 12),
-          if (nums.isEmpty)
+          if (nums.isEmpty && _primaryNumbers.isEmpty)
+            Text(
+              'No numbers yet. Buy a number or sync from VAPI to link numbers you already have in the VAPI dashboard.',
+              style: NeyvoTextStyles.body,
+            )
+          else if (nums.isEmpty)
             Text('No production numbers yet.', style: NeyvoTextStyles.body)
           else
             LayoutBuilder(

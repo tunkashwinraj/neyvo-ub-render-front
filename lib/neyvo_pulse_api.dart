@@ -1082,6 +1082,10 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> listNumbers() async =>
       _get('/api/numbers', params: {'account_id': _defaultAccountId});
 
+  /// POST /api/numbers/sync-from-vapi – link all VAPI numbers that are not yet in this account so they appear on the Phone Numbers page.
+  static Future<Map<String, dynamic>> syncNumbersFromVapi() async =>
+      _post('/api/numbers/sync-from-vapi', {});
+
   /// POST /api/numbers/attach – link an existing number to this account (no admin token). Number will appear on Phone Numbers page.
   static Future<Map<String, dynamic>> attachNumber({
     required String phoneNumberId,
