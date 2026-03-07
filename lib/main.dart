@@ -25,6 +25,10 @@
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
+    }
+
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       SpeariaApi.setUserId(user?.uid);
       if (user == null) NeyvoPulseApi.setDefaultAccountId(null);

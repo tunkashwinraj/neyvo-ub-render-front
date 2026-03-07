@@ -36,6 +36,15 @@ class _AuditLogPageState extends State<AuditLogPage> {
         resource: _filterResource,
         limit: 200,
       );
+      if (res['ok'] != true) {
+        final err = res['error']?.toString() ?? 'Unknown error';
+        if (err.toLowerCase().contains('forbidden') || (res['required_role'] as List?)?.contains('admin') == true) {
+          if (mounted) setState(() { _error = 'Admin only. Audit log is restricted to administrators.'; _loading = false; });
+          return;
+        }
+        if (mounted) setState(() { _error = err; _loading = false; });
+        return;
+      }
       final list = res['entries'] as List? ?? [];
       if (mounted) {
         setState(() {
@@ -44,9 +53,12 @@ class _AuditLogPageState extends State<AuditLogPage> {
         });
       }
     } catch (e) {
+      final msg = e.toString();
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = msg.toLowerCase().contains('403') || msg.toLowerCase().contains('forbidden')
+              ? 'Admin only. Audit log is restricted to administrators.'
+              : msg;
           _loading = false;
         });
       }
@@ -117,14 +129,21 @@ class _AuditLogPageState extends State<AuditLogPage> {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: '', child: Text('All resources')),
+              const PopupMenuItem(value: 'call', child: Text('Calls')),
+              const PopupMenuItem(value: 'member', child: Text('Members')),
               const PopupMenuItem(value: 'student', child: Text('Students')),
+              const PopupMenuItem(value: 'phone_number', child: Text('Lines')),
+              const PopupMenuItem(value: 'agent', child: Text('Operators')),
               const PopupMenuItem(value: 'payment', child: Text('Payments')),
+              const PopupMenuItem(value: 'reminder', child: Text('Reminders')),
               const PopupMenuItem(value: 'faq', child: Text('FAQ')),
               const PopupMenuItem(value: 'policy', child: Text('Policy')),
               const PopupMenuItem(value: 'campaign', child: Text('Campaigns')),
               const PopupMenuItem(value: 'integration', child: Text('Integration')),
               const PopupMenuItem(value: 'integration_config', child: Text('Integration config')),
               const PopupMenuItem(value: 'call_template', child: Text('Call templates')),
+              const PopupMenuItem(value: 'settings', child: Text('Settings')),
+              const PopupMenuItem(value: 'account', child: Text('Account')),
             ],
           ),
         ],

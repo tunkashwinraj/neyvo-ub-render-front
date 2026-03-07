@@ -20,6 +20,7 @@ import 'analytics_page.dart';
 import 'callbacks_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
+import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/screens/launch/launch_page.dart';
@@ -89,7 +90,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls, 'call_logs'),
     _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
-    _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'team'),
+    _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'audit_log'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
     _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
     _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet, 'billing'),
@@ -97,17 +98,20 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   ];
 
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
-  /// If staff has no permissions (empty list), show all items so the user is not locked out.
+  /// Audit Log is admin-only (hidden from non-admin).
+  /// If staff has no permissions (empty list), show all tabs except Audit Log so the user is not locked out.
   List<_NavItem> get _navItems {
     final role = _myRole?.toLowerCase();
     final perms = _myPermissions;
-    if (role == 'admin' || perms == null) {
-      if (_selectedIndex >= _allNavItems.length) _selectedIndex = 0;
-      return List<_NavItem>.from(_allNavItems);
+    final isAdmin = role == 'admin';
+    List<_NavItem> items;
+    if (isAdmin || perms == null) {
+      items = List<_NavItem>.from(_allNavItems);
+      if (!isAdmin) items.removeWhere((n) => n.permissionKey == 'audit_log');
+    } else {
+      final filtered = _allNavItems.where((n) => n.permissionKey != 'audit_log' && perms.contains(n.permissionKey)).toList();
+      items = filtered.isEmpty ? _allNavItems.where((n) => n.permissionKey != 'audit_log').toList() : filtered;
     }
-    final filtered = _allNavItems.where((n) => perms.contains(n.permissionKey)).toList();
-    // If filtered is empty (e.g. backend returned no permissions), show all tabs so sidebar is usable.
-    final items = filtered.isEmpty ? List<_NavItem>.from(_allNavItems) : filtered;
     if (_selectedIndex >= items.length) _selectedIndex = 0;
     return items;
   }
@@ -264,6 +268,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _signOut() async {
     await FirebaseAuth.instance.signOut();
+    SpeariaApi.setSessionToken(null);
+    SpeariaApi.setUserId(null);
     NeyvoPulseApi.setDefaultAccountId(null);
     try {
       final prefs = await SharedPreferences.getInstance();

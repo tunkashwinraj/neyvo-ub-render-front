@@ -238,7 +238,8 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                     NeyvoCard(
                       padding: const EdgeInsets.all(NeyvoSpacing.xl),
                       glowing: false,
-                      child: Column(
+                      child: Form(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
@@ -251,6 +252,8 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             TextField(
                               controller: _email,
                               keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) => FocusScope.of(context).nextFocus(),
                               decoration: const InputDecoration(
                                 labelText: 'Email',
                                 hintText: 'you@company.com',
@@ -260,6 +263,8 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             TextField(
                               controller: _password,
                               obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _submit(),
                               decoration: const InputDecoration(
                                 labelText: 'Password',
                               ),
@@ -300,6 +305,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                           ],
                         ),
                       ),
+                    ),
                     const SizedBox(height: NeyvoSpacing.section),
                   ],
                 ),
