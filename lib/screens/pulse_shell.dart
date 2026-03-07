@@ -7,7 +7,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -362,19 +361,19 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — UB horizontal logo (purple text on white)
+                // Logo area — UB horizontal logo (RGB)
                 Container(
-                  height: 56,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: const BoxDecoration(
                     color: NeyvoColors.sidebarBg,
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: SvgPicture.asset(
-                      'assets/ub_logo/ub_logo_horizontal_purple.svg',
+                    child: Image.asset(
+                      'assets/ub_logo/ub-logo-rgb-horizontal.jpg',
                       fit: BoxFit.contain,
-                      height: 36,
+                      height: 46,
                     ),
                   ),
                 ),
