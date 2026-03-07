@@ -131,7 +131,7 @@ class _BillingPageState extends State<BillingPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _sectionTitle('Wallet'),
+                    _sectionTitle('Credits available'),
                     const SizedBox(width: 8),
                     const CreditsInfoIcon(),
                   ],
@@ -139,54 +139,77 @@ class _BillingPageState extends State<BillingPage> {
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
                   glowing: credits < 500,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('$credits credits', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-                            const SizedBox(height: 4),
-                            Text('≈ $estMin minutes at current tier', style: NeyvoTextStyles.body),
-                            if (burn != null) ...[
-                              const SizedBox(height: 4),
-                              Text('Burn rate (month to date): \$$burn', style: NeyvoTextStyles.micro),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$credits',
+                                style: NeyvoTextStyles.heading.copyWith(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: NeyvoColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text('credits', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
+                              const SizedBox(height: 12),
+                              Text(
+                                '≈ $estMin min at current tier',
+                                style: NeyvoTextStyles.body.copyWith(
+                                  color: NeyvoColors.textMuted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (burn != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Burn rate (MTD): \$${burn.toStringAsFixed(2)}',
+                                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                                ),
+                              ],
                             ],
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            SizedBox(
+                              width: 200,
+                              child: FilledButton.icon(
+                                onPressed: _addCredits,
+                                icon: const Icon(Icons.add, size: 20),
+                                label: const Text('Add credits'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: NeyvoColors.teal,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: 200,
+                              child: OutlinedButton.icon(
+                                onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                                label: const Text('View transactions'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: NeyvoColors.teal,
+                                  side: const BorderSide(color: NeyvoColors.teal),
+                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: 220,
-                            child: FilledButton(
-                              onPressed: _addCredits,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: NeyvoColors.teal,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                              child: const Text('Add credits'),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: 220,
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: NeyvoColors.teal,
-                                side: const BorderSide(color: NeyvoColors.teal),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                              child: const Text('Transactions'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
