@@ -69,6 +69,14 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     }
   }
 
+  /// Primary number (if any) – imported or assigned as primary. Shown in its own section.
+  List<Map<String, dynamic>> get _primaryNumbers {
+    return _numbers
+        .where((n) => (n['role']?.toString().toLowerCase() ?? '') == 'primary')
+        .toList();
+  }
+
+  /// Non-primary numbers for the "Production numbers" grid.
   List<Map<String, dynamic>> get _productionNumbers {
     return _numbers
         .where((n) => (n['role']?.toString().toLowerCase() ?? '') != 'primary')
@@ -112,10 +120,42 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                     style: NeyvoTextStyles.body,
                   ),
                   const SizedBox(height: 16),
+                  if (_primaryNumbers.isNotEmpty) _primarySection(),
+                  if (_primaryNumbers.isNotEmpty) const SizedBox(height: 20),
                   _productionGrid(),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _primarySection() {
+    final primary = _primaryNumbers;
+    if (primary.isEmpty) return const SizedBox.shrink();
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.call, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Primary number', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Your main number (imported or set as primary). Used for inbound and as default outbound.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: primary.map((n) => _prodCard(n)).toList(),
           ),
         ],
       ),
