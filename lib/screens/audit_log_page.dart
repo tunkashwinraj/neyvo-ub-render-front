@@ -1,5 +1,7 @@
 // lib/screens/audit_log_page.dart
-// Phase D: Audit log – who did what, when
+// Phase D: Audit log – who did what, when (old UI style, expandable details)
+
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
@@ -65,6 +67,32 @@ class _AuditLogPageState extends State<AuditLogPage> {
     final s = v.toString();
     if (s.length > 19) return s.substring(0, 19).replaceFirst('T', ' ');
     return s;
+  }
+
+  /// Format details as readable key-value pairs (old UI style, but full content).
+  String _formatDetails(dynamic details) {
+    if (details == null) return '';
+    if (details is Map) {
+      final buf = StringBuffer();
+      for (final e in details.entries) {
+        final k = e.key.toString();
+        final v = e.value;
+        String vStr;
+        if (v is Map || v is List) {
+          try {
+            vStr = const JsonEncoder.withIndent('  ').convert(v);
+          } catch (_) {
+            vStr = v.toString();
+          }
+        } else {
+          vStr = v?.toString() ?? 'null';
+        }
+        if (buf.isNotEmpty) buf.write('\n');
+        buf.write('$k: $vStr');
+      }
+      return buf.toString();
+    }
+    return details.toString();
   }
 
   @override
@@ -133,37 +161,125 @@ class _AuditLogPageState extends State<AuditLogPage> {
                           final resource = e['resource']?.toString() ?? '—';
                           final resourceId = e['resource_id']?.toString();
                           final userId = e['user_id']?.toString();
+                          final entryId = e['id']?.toString();
                           final details = e['details'];
                           final createdAt = _formatTime(e['created_at']);
+                          final hasDetails = details != null &&
+                              ((details is Map && details.isNotEmpty) ||
+                                  (details is! Map && details.toString().isNotEmpty));
+                          final canExpand = hasDetails || (entryId != null && entryId.isNotEmpty);
+
+                          Widget tileContent = Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Resource: $resource${resourceId != null ? ' · $resourceId' : ''}',
+                                style: TextStyle(color: NeyvoColors.textSecondary, fontSize: 13),
+                              ),
+                              if (userId != null && userId.isNotEmpty)
+                                Text(
+                                  'By: $userId',
+                                  style: TextStyle(color: NeyvoColors.textMuted, fontSize: 12),
+                                ),
+                              Text(
+                                createdAt,
+                                style: TextStyle(color: NeyvoColors.textMuted, fontSize: 12),
+                              ),
+                              if (hasDetails)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    _formatDetails(details),
+                                    style: TextStyle(color: NeyvoColors.textMuted, fontSize: 11),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          );
+
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            child: ListTile(
-                              title: Text(
-                                _formatAction(action),
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text('Resource: $resource${resourceId != null ? ' · $resourceId' : ''}'),
-                                  if (userId != null && userId.isNotEmpty)
-                                    Text('By: $userId', style: TextStyle(color: NeyvoColors.textSecondary, fontSize: 12)),
-                                  Text(createdAt, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                                  if (details != null && details is Map && details.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        details.toString(),
-                                        style: TextStyle(color: Colors.grey[700], fontSize: 11),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                            child: canExpand
+                                ? ExpansionTile(
+                                    initiallyExpanded: false,
+                                    leading: Icon(
+                                      Icons.expand_more,
+                                      color: NeyvoColors.textMuted,
                                     ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                            ),
+                                    title: Text(
+                                      _formatAction(action),
+                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: tileContent,
+                                    ),
+                                    children: [
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (entryId != null && entryId.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(bottom: 8),
+                                                child: Text(
+                                                  'Entry ID: $entryId',
+                                                  style: TextStyle(
+                                                    color: NeyvoColors.textMuted,
+                                                    fontSize: 11,
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                ),
+                                              ),
+                                            if (hasDetails) ...[
+                                              Text(
+                                                'Details',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 12,
+                                                  color: NeyvoColors.textSecondary,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                width: double.infinity,
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: NeyvoColors.bgOverlay,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: NeyvoColors.borderSubtle),
+                                                ),
+                                                child: SelectableText(
+                                                  _formatDetails(details),
+                                                  style: TextStyle(
+                                                    color: NeyvoColors.textPrimary,
+                                                    fontSize: 12,
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : ListTile(
+                                    leading: Icon(Icons.history, color: NeyvoColors.textMuted),
+                                    title: Text(
+                                      _formatAction(action),
+                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: tileContent,
+                                    ),
+                                    isThreeLine: true,
+                                  ),
                           );
                         },
                       ),
