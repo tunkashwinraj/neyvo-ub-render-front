@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../neyvo_pulse_api.dart';
+import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
 
 const List<MapEntry<String, String>> _kEditPermissions = [
@@ -337,7 +338,8 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final perms = _role == 'staff' ? _selectedPermissions.toList() : <String>[];
     final name = _nameController.text.trim();
     final staffId = _staffIdController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phoneRaw = _phoneController.text.trim();
+    final phone = phoneRaw.isEmpty ? null : normalizePhoneInput(phoneRaw);
     final department = _departmentController.text.trim();
     final title = _titleController.text.trim();
     final office = _officeController.text.trim();
@@ -351,7 +353,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         permissions: perms,
         name: name.isEmpty ? null : name,
         staffId: staffId.isEmpty ? null : staffId,
-        phone: phone.isEmpty ? null : phone,
+        phone: phone,
         department: department.isEmpty ? null : department,
         title: title.isEmpty ? null : title,
         office: office.isEmpty ? null : office,

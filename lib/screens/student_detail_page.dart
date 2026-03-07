@@ -7,6 +7,7 @@ import '../services/user_timezone_service.dart';
 import '../../api/spearia_api.dart' show ApiException;
 import '../theme/neyvo_theme.dart';
 import '../utils/callback_date_format.dart';
+import '../utils/phone_util.dart';
 import 'call_detail_page.dart';
 
 class StudentDetailPage extends StatefulWidget {
@@ -164,7 +165,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       await NeyvoPulseApi.updateStudent(
         widget.studentId,
         name: _name.text.trim(),
-        phone: _phone.text.trim(),
+        phone: normalizePhoneInput(_phone.text.trim()),
         email: _email.text.trim().isEmpty ? null : _email.text.trim(),
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
@@ -200,7 +201,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   }
 
   Future<void> _call() async {
-    final phone = _phone.text.trim();
+    final phone = normalizePhoneInput(_phone.text.trim());
     final name = _name.text.trim();
     if (phone.isEmpty || name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone and name required')));
@@ -518,7 +519,14 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone')),
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone',
+                  hintText: '123-456-7890 or (123) 456-7890',
+                ),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
               const SizedBox(height: NeyvoSpacing.md),

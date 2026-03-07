@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../neyvo_pulse_api.dart';
+import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
 import 'member_detail_page.dart';
 
@@ -350,23 +351,13 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     return true;
   }
 
-  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
-  static String _normalizePhoneUs(String raw) {
-    final digits = raw.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return raw.trim();
-    if (digits.length == 10) return '+1$digits';
-    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
-    if (raw.trim().startsWith('+')) return raw.trim();
-    return '+1$digits';
-  }
-
   Future<void> _submit() async {
     if (!_canSubmit) return;
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final staffId = _staffIdController.text.trim();
     final phoneRaw = _phoneController.text.trim();
-    final phone = phoneRaw.isEmpty ? null : _normalizePhoneUs(phoneRaw);
+    final phone = phoneRaw.isEmpty ? null : normalizePhoneInput(phoneRaw);
     final department = _departmentController.text.trim();
     final title = _titleController.text.trim();
     final office = _officeController.text.trim();
@@ -655,18 +646,6 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     return true;
   }
 
-  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
-  static String? _normalizePhoneUs(String raw) {
-    final t = raw.trim();
-    if (t.isEmpty) return null;
-    final digits = t.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return t;
-    if (digits.length == 10) return '+1$digits';
-    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
-    if (t.startsWith('+')) return t;
-    return '+1$digits';
-  }
-
   Future<void> _submit() async {
     if (!_canSubmit) return;
     final userId = (widget.member['user_id'] ?? widget.member['id'] ?? '').toString();
@@ -674,7 +653,8 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final perms = _role == 'staff' ? _selectedPermissions.toList() : <String>[];
     final name = _nameController.text.trim();
     final staffId = _staffIdController.text.trim();
-    final phone = _normalizePhoneUs(_phoneController.text.trim());
+    final phoneRaw = _phoneController.text.trim();
+    final phone = phoneRaw.isEmpty ? null : normalizePhoneInput(phoneRaw);
     final department = _departmentController.text.trim();
     final title = _titleController.text.trim();
     final office = _officeController.text.trim();

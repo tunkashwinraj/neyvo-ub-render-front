@@ -11,7 +11,9 @@ import 'package:flutter_dropzone/flutter_dropzone.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/csv_import.dart';
+import '../utils/phone_util.dart';
 import 'student_detail_page.dart';
 
 class StudentsHubPage extends StatefulWidget {
@@ -99,15 +101,7 @@ class _DirectoryTabState extends State<_DirectoryTab> {
     _load();
   }
 
-  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
-  static String _normalizePhoneUs(String raw) {
-    final digits = raw.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return raw.trim();
-    if (digits.length == 10) return '+1$digits';
-    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
-    if (raw.trim().startsWith('+')) return raw.trim();
-    return '+1$digits';
-  }
+  static String _normalizePhoneUs(String raw) => normalizePhoneInput(raw);
 
   Future<void> openAddStudentDialog() async {
     final nameC = TextEditingController();
@@ -152,7 +146,7 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                             keyboardType: TextInputType.phone,
                             decoration: const InputDecoration(
                               labelText: 'Phone *',
-                              hintText: '10 digits, US (+1)',
+                              hintText: '123-456-7890 or (123) 456-7890',
                             ),
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
@@ -236,7 +230,17 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                 );
                 return;
               }
-              final phone = _normalizePhoneUs(phoneRaw);
+              final phone = normalizeToE164Us(phoneRaw);
+              if (phone.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Enter a valid US phone (e.g. 123-456-7890, (123) 456-7890)',
+                    ),
+                  ),
+                );
+                return;
+              }
               try {
                 await NeyvoPulseApi.createStudent(
                   name: name,
@@ -860,7 +864,7 @@ class _ImportTabState extends State<_ImportTab> {
             child: DataTable(
               columns: columns,
               rows: rows,
-              headingRowColor: MaterialStateProperty.all(NeyvoTheme.bgRaised),
+              headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
               dataRowMinHeight: 32,
               dataRowMaxHeight: 40,
             ),
@@ -893,7 +897,7 @@ class _ImportTabState extends State<_ImportTab> {
               color: NeyvoTheme.warning,
               title: total > 0 ? '${((withBalance / total) * 100).round()}%' : '',
               radius: 18,
-              titleStyle: NeyvoType.micro.copyWith(color: NeyvoTheme.textPrimary),
+              titleStyle: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textPrimary),
             ),
           if (withoutBalance > 0)
             PieChartSectionData(
@@ -988,7 +992,7 @@ class _ImportTabState extends State<_ImportTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Upload a CSV file with columns: name, phone, and optionally email, student_id, balance, due_date, late_fee, notes.',
+                      'Upload a CSV or Excel file. Required: name, phone. Optional: email, student_id, balance, due_date, late_fee, notes. Phone accepts any format: (123) 456-7890, 123-456-7890, 1234567890, etc.',
                       style: NeyvoType.bodyMedium.copyWith(
                           color: NeyvoColors.textSecondary),
                     ),

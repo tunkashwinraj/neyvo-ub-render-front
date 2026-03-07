@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../features/managed_profiles/managed_profile_api_service.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../utils/phone_util.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
@@ -35,12 +36,7 @@ class _DialerPageState extends State<DialerPage> {
   bool _starting = false;
   _DialerOverlayState? _overlay;
 
-  static String _toE164(String? p) {
-    final s = (p ?? '').replaceAll(RegExp(r'[^\d]'), '');
-    if (s.length == 10) return '+1$s';
-    if (s.length == 11 && s.startsWith('1')) return '+$s';
-    return (p ?? '').trim();
-  }
+  static String _toE164(String? p) => normalizePhoneInput(p);
 
   @override
   void initState() {
@@ -123,7 +119,8 @@ class _DialerPageState extends State<DialerPage> {
   Future<void> _startCall() async {
     final agentId = (_selectedAgentId ?? '').trim();
     final numberId = (_selectedNumberId ?? '').trim();
-    final phone = _contactPhone.text.trim();
+    final phoneRaw = _contactPhone.text.trim();
+    final phone = normalizeToE164Us(phoneRaw);
     if (agentId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select an agent.')));
       return;
@@ -132,8 +129,12 @@ class _DialerPageState extends State<DialerPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a number.')));
       return;
     }
-    if (!RegExp(r'^\+[0-9]{8,15}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter phone in E.164 format (e.g. +12035551234).')));
+    if (phone.isEmpty || !RegExp(r'^\+[0-9]{8,15}$').hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Enter a valid US phone (e.g. 123-456-7890, (123) 456-7890, +12035551234).',
+        ),
+      ));
       return;
     }
 
@@ -410,8 +411,8 @@ class _DialerPageState extends State<DialerPage> {
                           controller: _contactPhone,
                           keyboardType: TextInputType.phone,
                           decoration: const InputDecoration(
-                            labelText: 'Select contact (phone)',
-                            hintText: '+12035551234',
+                            labelText: 'Contact phone',
+                            hintText: '123-456-7890 or (123) 456-7890',
                           ),
                         ),
                         const SizedBox(height: 12),

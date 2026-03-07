@@ -8,6 +8,7 @@ import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
+import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
 import 'student_detail_page.dart';
 
@@ -971,7 +972,14 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
             children: [
               TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name *', hintText: 'Full name')),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: phoneC, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone *', hintText: 'Number to call')),
+              TextField(
+                controller: phoneC,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone *',
+                  hintText: '123-456-7890 or (123) 456-7890',
+                ),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)', hintText: 'Email address')),
               const SizedBox(height: NeyvoSpacing.md),
@@ -994,9 +1002,16 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
           FilledButton(
             onPressed: () async {
               final name = nameC.text.trim();
-              final phone = phoneC.text.trim();
-              if (name.isEmpty || phone.isEmpty) {
+              final phoneRaw = phoneC.text.trim();
+              final phone = normalizePhoneInput(phoneRaw);
+              if (name.isEmpty || phoneRaw.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and phone required')));
+                return;
+              }
+              if (phone.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Enter a valid US phone (e.g. 123-456-7890, (123) 456-7890)'),
+                ));
                 return;
               }
               try {
