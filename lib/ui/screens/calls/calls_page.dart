@@ -6,10 +6,10 @@ import '../../../screens/call_history_page.dart';
 import '../../../screens/callbacks_page.dart';
 import 'dialer_page.dart';
 
-enum CallsSection { inbound, outbound, dialer, callbacks }
+enum CallsSection { calls, callbacks, dialer }
 
 class CallsPage extends StatefulWidget {
-  const CallsPage({super.key, this.initialSection = CallsSection.inbound});
+  const CallsPage({super.key, this.initialSection = CallsSection.calls});
 
   final CallsSection initialSection;
 
@@ -35,13 +35,11 @@ class _CallsPageState extends State<CallsPage> {
           child: NeyvoGlassPanel(
             child: Row(
               children: [
-                _pill('Inbound', CallsSection.inbound),
-                const SizedBox(width: 8),
-                _pill('Outbound', CallsSection.outbound),
-                const SizedBox(width: 8),
-                _pill('Dialer', CallsSection.dialer),
+                _pill('Calls', CallsSection.calls),
                 const SizedBox(width: 8),
                 _pill('Callbacks', CallsSection.callbacks),
+                const SizedBox(width: 8),
+                _pill('Dialer', CallsSection.dialer),
               ],
             ),
           ),
@@ -79,9 +77,7 @@ class _CallsPageState extends State<CallsPage> {
 
   Widget _body() {
     switch (_section) {
-      case CallsSection.inbound:
-        return const CallHistoryPage(initialDirection: 'inbound');
-      case CallsSection.outbound:
+      case CallsSection.calls:
         return const CallHistoryPage(initialDirection: 'outbound');
       case CallsSection.dialer:
         return const DialerPage();

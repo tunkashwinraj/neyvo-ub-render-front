@@ -59,6 +59,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   int _selectedIndex = 0;
   int? _walletCredits;
   final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ManagedProfilesPageState> _managedProfilesListKey = GlobalKey<ManagedProfilesPageState>();
   int? _numbersCount; // kept for future analytics panels
   int? _callsTodayCapacity;
   int? _callsTodayUsed;
@@ -133,11 +134,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         // '/' = list
         return MaterialPageRoute<void>(
           builder: (_) => ManagedProfilesPage(
-            onOpenProfileDetail: (String profileId) {
-              _managedProfilesNavKey.currentState?.pushNamed<void>(
+            key: _managedProfilesListKey,
+            onOpenProfileDetail: (String profileId) async {
+              final result = await _managedProfilesNavKey.currentState?.pushNamed<dynamic>(
                 _managedProfileDetailRoute,
                 arguments: profileId,
               );
+              if (result == true && mounted) {
+                _managedProfilesListKey.currentState?.refresh();
+              }
             },
           ),
         );
@@ -806,7 +811,7 @@ extension on _PulseShellState {
         return const PhoneNumbersPage();
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
-        return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.inbound);
+        return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls);
       case PulseRouteNames.students:
         return const StudentsHubPage();
       case PulseRouteNames.campaigns:

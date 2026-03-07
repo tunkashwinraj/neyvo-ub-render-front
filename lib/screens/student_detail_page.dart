@@ -43,6 +43,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   String? _selectedAgentId;
 
   bool _cancelingCallback = false;
+  Map<String, TextEditingController> _customFieldControllers = {};
+  final _newFieldKey = TextEditingController();
 
   @override
   void initState() {
@@ -62,6 +64,10 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     _lateFee.dispose();
     _studentId.dispose();
     _notes.dispose();
+    _newFieldKey.dispose();
+    for (final c in _customFieldControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -105,6 +111,15 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
           _lateFee.text = s['late_fee']?.toString() ?? '';
           _studentId.text = s['student_id']?.toString() ?? '';
           _notes.text = s['notes']?.toString() ?? '';
+          // Load any custom fields into editable controllers.
+          for (final c in _customFieldControllers.values) {
+            c.dispose();
+          }
+          _customFieldControllers = {};
+          final custom = (s['custom_fields'] as Map?)?.cast<String, dynamic>() ?? {};
+          custom.forEach((key, value) {
+            _customFieldControllers[key] = TextEditingController(text: value?.toString() ?? '');
+          });
         });
       }
     } catch (e) {
@@ -156,6 +171,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
         schoolStudentId: _studentId.text.trim().isEmpty ? null : _studentId.text.trim(),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+        customFields: _buildCustomFieldsPayload(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
@@ -169,6 +185,18 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         setState(() => _saving = false);
       }
     }
+  }
+
+  Map<String, dynamic>? _buildCustomFieldsPayload() {
+    final out = <String, String>{};
+    _customFieldControllers.forEach((key, controller) {
+      final k = key.trim();
+      final v = controller.text.trim();
+      if (k.isNotEmpty && v.isNotEmpty) {
+        out[k] = v;
+      }
+    });
+    return out.isEmpty ? null : out;
   }
 
   Future<void> _call() async {
@@ -214,6 +242,22 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
         setState(() => _calling = false);
       }
     }
+  }
+
+  void _addCustomFieldRow() {
+    final key = _newFieldKey.text.trim();
+    if (key.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a field name')));
+      return;
+    }
+    if (_customFieldControllers.containsKey(key)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Field already exists')));
+      return;
+    }
+    setState(() {
+      _customFieldControllers[key] = TextEditingController();
+      _newFieldKey.clear();
+    });
   }
 
   Future<void> _confirmDeleteStudent() async {
@@ -487,6 +531,71 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               TextField(controller: _lateFee, decoration: const InputDecoration(labelText: 'Late fee')),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _notes, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes')),
+              const SizedBox(height: NeyvoSpacing.xl),
+
+              // Custom flexible fields
+              Text('Additional fields', style: NeyvoType.titleMedium),
+              const SizedBox(height: NeyvoSpacing.sm),
+              Text(
+                'Use this section for any extra columns you imported (e.g. course, cohort, dorm). '
+                'These fields are stored on the student record and can be referenced in prompts.',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              ..._customFieldControllers.entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          e.key,
+                          style: NeyvoType.labelSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: NeyvoSpacing.sm),
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: e.value,
+                          decoration: const InputDecoration(
+                            labelText: 'Value',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        tooltip: 'Remove field',
+                        onPressed: () {
+                          setState(() {
+                            e.value.dispose();
+                            _customFieldControllers.remove(e.key);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _newFieldKey,
+                      decoration: const InputDecoration(
+                        labelText: 'Add field name (e.g. course)',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: NeyvoSpacing.sm),
+                  FilledButton.tonal(
+                    onPressed: _addCustomFieldRow,
+                    child: const Text('Add'),
+                  ),
+                ],
+              ),
               const SizedBox(height: NeyvoSpacing.xl),
               FilledButton(
                 onPressed: _saving ? null : _save,

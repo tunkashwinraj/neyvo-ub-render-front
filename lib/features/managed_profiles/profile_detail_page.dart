@@ -29,6 +29,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   String? _error;
   bool _saving = false;
   bool _attaching = false;
+  bool _deleting = false;
 
   Map<String, dynamic> _profile = const {};
   List<Map<String, dynamic>> _numbers = const [];
@@ -1402,8 +1403,92 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             ],
           ),
         ),
+        const SizedBox(height: 24),
+        _buildDangerZone(),
       ],
     );
+  }
+
+  Widget _buildDangerZone() {
+    final status = (_profile['status'] ?? 'active').toString().toLowerCase();
+    final isArchived = status == 'archived';
+
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: NeyvoColors.error, size: 24),
+              const SizedBox(width: 10),
+              Text('Danger zone', style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.error)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Deleting this operator will archive it. Call history is preserved; the operator becomes read-only and will no longer appear in active lists.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+          ),
+          if (!isArchived) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _deleting ? null : _confirmDeleteOperator,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: NeyvoColors.error,
+                  side: const BorderSide(color: NeyvoColors.error),
+                ),
+                child: _deleting
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Delete operator'),
+              ),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text('This operator is already archived.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteOperator() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete operator?'),
+        content: const Text(
+          'This will archive the operator. Call history is preserved. The operator will no longer appear in active lists and cannot be used for new calls.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ManagedProfileApiService.archiveProfile(widget.profileId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Operator archived. Call history is preserved.')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Widget _tabBehavior() {

@@ -2,9 +2,11 @@
 // Students hub: Directory, Import, Sync tabs (single control plane).
 
 import 'package:file_picker/file_picker.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dropzone/flutter_dropzone.dart';
 
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
@@ -732,6 +734,8 @@ class _ImportTabState extends State<_ImportTab> {
   List<Map<String, dynamic>> _errors = [];
   List<Map<String, String>> _validRows = [];
   List<String> _errorLines = [];
+  DropzoneViewController? _dropzoneController;
+  bool _isDraggingOver = false;
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -794,6 +798,113 @@ class _ImportTabState extends State<_ImportTab> {
       _validRows = valid;
       _errorLines = errs;
     });
+  }
+
+  Widget _buildPreviewTable() {
+    // Collect headers across all valid rows.
+    final headerSet = <String>{};
+    for (final r in _validRows) {
+      headerSet.addAll(r.keys);
+    }
+    // Prioritize core fields, then any custom fields alphabetically.
+    final coreOrder = [
+      'name',
+      'phone',
+      'email',
+      'student_id',
+      'balance',
+      'due_date',
+      'late_fee',
+      'notes',
+    ];
+    final headers = <String>[
+      ...coreOrder.where((h) => headerSet.contains(h)),
+      ...headerSet.where((h) => !coreOrder.contains(h)).toList()..sort(),
+    ];
+
+    List<DataColumn> columns = headers
+        .map(
+          (h) => DataColumn(
+            label: Text(
+              h.replaceAll('_', ' '),
+              style: NeyvoType.labelSmall,
+            ),
+          ),
+        )
+        .toList();
+
+    List<DataRow> rows = _validRows.take(5).map((row) {
+      return DataRow(
+        cells: headers
+            .map(
+              (h) => DataCell(
+                Text(
+                  row[h] ?? '',
+                  style: NeyvoType.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+      );
+    }).toList();
+
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Preview (first 5 rows)', style: NeyvoType.labelSmall),
+          const SizedBox(height: NeyvoSpacing.sm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: columns,
+              rows: rows,
+              headingRowColor: MaterialStateProperty.all(NeyvoTheme.bgRaised),
+              dataRowMinHeight: 32,
+              dataRowMaxHeight: 40,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportSummaryChart() {
+    if (_validRows.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    int withBalance = 0;
+    for (final r in _validRows) {
+      final bal = (r['balance'] ?? '').toString().replaceAll(RegExp(r'[\$,]'), '').trim();
+      if (bal.isNotEmpty && bal != '0') withBalance++;
+    }
+    final withoutBalance = _validRows.length - withBalance;
+    final total = _validRows.length.toDouble();
+    return PieChart(
+      PieChartData(
+        sectionsSpace: 0,
+        centerSpaceRadius: 18,
+        startDegreeOffset: -90,
+        sections: [
+          if (withBalance > 0)
+            PieChartSectionData(
+              value: withBalance.toDouble(),
+              color: NeyvoTheme.warning,
+              title: total > 0 ? '${((withBalance / total) * 100).round()}%' : '',
+              radius: 18,
+              titleStyle: NeyvoType.micro.copyWith(color: NeyvoTheme.textPrimary),
+            ),
+          if (withoutBalance > 0)
+            PieChartSectionData(
+              value: withoutBalance.toDouble(),
+              color: NeyvoTheme.teal,
+              title: '',
+              radius: 16,
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _downloadTemplate() async {
@@ -864,7 +975,7 @@ class _ImportTabState extends State<_ImportTab> {
       padding: const EdgeInsets.all(NeyvoSpacing.lg),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
+          constraints: const BoxConstraints(maxWidth: 960),
           child: _step == 1
               ? Column(
                   mainAxisSize: MainAxisSize.min,
@@ -882,32 +993,82 @@ class _ImportTabState extends State<_ImportTab> {
                           color: NeyvoColors.textSecondary),
                     ),
                     const SizedBox(height: 24),
-                    InkWell(
-                      onTap: _pickFile,
-                      child: Container(
-                        height: 120,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: NeyvoColors.borderDefault),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.upload_file,
-                                  size: 32,
-                                  color: NeyvoColors.textMuted),
-                              const SizedBox(height: 8),
-                              Text('Drop your CSV here or tap to browse',
-                                  style: NeyvoType.bodyMedium),
-                              Text('.csv only',
-                                  style: NeyvoType.bodySmall.copyWith(
-                                      color: NeyvoColors.textMuted)),
-                            ],
+                    Stack(
+                      children: [
+                        if (kIsWeb)
+                          SizedBox(
+                            height: 140,
+                            child: DropzoneView(
+                              operation: DragOperation.copy,
+                              cursor: CursorType.grab,
+                              onCreated: (c) => _dropzoneController = c,
+                              onHover: () => setState(() => _isDraggingOver = true),
+                              onLeave: () => setState(() => _isDraggingOver = false),
+                              onDrop: (ev) async {
+                                try {
+                                  final mime = await _dropzoneController?.getFileMIME(ev) ?? '';
+                                  if (!mime.contains('csv') && !mime.contains('excel')) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Please drop a CSV file')),
+                                    );
+                                    return;
+                                  }
+                                  final bytes = await _dropzoneController!.getFileData(ev);
+                                  final text = String.fromCharCodes(bytes);
+                                  setState(() {
+                                    _csvText = text;
+                                    _step = 2;
+                                  });
+                                  _validateCsv();
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to read file: $e')),
+                                  );
+                                } finally {
+                                  if (mounted) setState(() => _isDraggingOver = false);
+                                }
+                              },
+                            ),
+                          ),
+                        InkWell(
+                          onTap: _pickFile,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            height: 140,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: _isDraggingOver ? NeyvoTheme.teal : NeyvoColors.borderDefault,
+                                width: _isDraggingOver ? 2 : 1,
+                              ),
+                              color: _isDraggingOver ? NeyvoTheme.teal.withOpacity(0.04) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.upload_file,
+                                    size: 32,
+                                    color: _isDraggingOver ? NeyvoTheme.teal : NeyvoColors.textMuted,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    kIsWeb
+                                        ? 'Drag & drop your CSV here or click to browse'
+                                        : 'Tap to choose a CSV file',
+                                    style: NeyvoType.bodyMedium,
+                                  ),
+                                  Text(
+                                    '.csv only · first row must be headers like name, phone, …',
+                                    style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     TextButton.icon(
@@ -920,77 +1081,45 @@ class _ImportTabState extends State<_ImportTab> {
               : _step == 2
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              '${_validRows.length} students ready',
-                              style: NeyvoType.bodyMedium
-                                  .copyWith(color: NeyvoColors.success),
-                            ),
-                            if (_errorLines.isNotEmpty)
-                              Text(
-                                ' · ${_errorLines.length} errors',
-                                style: NeyvoType.bodyMedium
-                                    .copyWith(color: NeyvoColors.error),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        if (_validRows.isNotEmpty) ...[
-                          Text('First 5 rows:',
-                              style: NeyvoType.labelSmall),
-                          const SizedBox(height: 4),
-                          Table(
-                            columnWidths: const {
-                              0: FlexColumnWidth(2),
-                              1: FlexColumnWidth(2),
-                              2: FlexColumnWidth(1.5),
-                            },
+                        NeyvoGlassPanel(
+                          child: Row(
                             children: [
-                              TableRow(
-                                children: [
-                                  Text('Name',
-                                      style: NeyvoType.labelSmall),
-                                  Text('Phone',
-                                      style: NeyvoType.labelSmall),
-                                  Text('Balance',
-                                      style: NeyvoType.labelSmall),
-                                ],
-                              ),
-                              ..._validRows.take(5).map((r) {
-                                String g(List<String> k) {
-                                  for (final key in r.keys) {
-                                    for (final kk in k) {
-                                      if (key
-                                              .toLowerCase()
-                                              .replaceAll(
-                                                  RegExp(r'[\s_\-]'),
-                                                  '') ==
-                                          kk.toLowerCase()) {
-                                        return r[key] ?? '';
-                                      }
-                                    }
-                                  }
-                                  return '';
-                                }
-                                return TableRow(
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                        g(['name', 'student_name']),
-                                        style: NeyvoType.bodySmall),
-                                    Text(
-                                        g(['phone', 'mobile']),
-                                        style: NeyvoType.bodySmall),
-                                    Text(g(['balance']),
-                                        style: NeyvoType.bodySmall),
+                                      '${_validRows.length} students ready',
+                                      style: NeyvoType.titleMedium.copyWith(color: NeyvoColors.success),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    if (_errorLines.isNotEmpty)
+                                      Text(
+                                        '${_errorLines.length} rows have issues. Fix them in your CSV or continue to import only the valid rows.',
+                                        style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error),
+                                      )
+                                    else
+                                      Text(
+                                        'All rows look good. Review the preview below, then click Import.',
+                                        style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+                                      ),
                                   ],
-                                );
-                              }),
+                                ),
+                              ),
+                              const SizedBox(width: NeyvoSpacing.md),
+                              if (_validRows.isNotEmpty)
+                                SizedBox(
+                                  height: 80,
+                                  width: 120,
+                                  child: _buildImportSummaryChart(),
+                                ),
                             ],
                           ),
-                        ],
+                        ),
+                        const SizedBox(height: NeyvoSpacing.lg),
+                        if (_validRows.isNotEmpty) _buildPreviewTable(),
                         if (_errorLines.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           ExpansionTile(

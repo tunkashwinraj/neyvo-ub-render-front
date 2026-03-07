@@ -14,13 +14,15 @@ class ManagedProfilesPage extends StatefulWidget {
   final void Function(String profileId)? onOpenProfileDetail;
 
   @override
-  State<ManagedProfilesPage> createState() => _ManagedProfilesPageState();
+  State<ManagedProfilesPage> createState() => ManagedProfilesPageState();
 }
 
-class _ManagedProfilesPageState extends State<ManagedProfilesPage> {
+class ManagedProfilesPageState extends State<ManagedProfilesPage> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _profiles = [];
+
+  void refresh() => _load();
 
   @override
   void initState() {

@@ -77,7 +77,12 @@ class _DialerPageState extends State<DialerPage> {
       final first = agents.isNotEmpty ? (agents.first['profile_id']?.toString()) : null;
       final rawNums = (nums['numbers'] as List?)?.cast<dynamic>() ?? const [];
       final numbers = rawNums.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      final firstNum = numbers.isNotEmpty ? (numbers.first['phone_number_id'] ?? numbers.first['id'])?.toString() : null;
+      final firstNum = numbers.isNotEmpty
+          ? (numbers.first['phone_number_id'] ??
+                  numbers.first['number_id'] ??
+                  numbers.first['id'])
+              ?.toString()
+          : null;
       final rawStudents = (studentsRes['students'] as List?)?.cast<dynamic>() ?? const [];
       final students = rawStudents.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (!mounted) return;
@@ -344,8 +349,16 @@ class _DialerPageState extends State<DialerPage> {
                           decoration: const InputDecoration(labelText: 'Select number'),
                           items: _numbers
                               .map((n) {
-                                final id = (n['phone_number_id'] ?? n['id'] ?? '').toString();
-                                final e164 = (n['phone_number_e164'] ?? n['phone_number'] ?? id).toString();
+                                final id = (n['phone_number_id'] ??
+                                        n['number_id'] ??
+                                        n['id'] ??
+                                        '')
+                                    .toString();
+                                final e164 = (n['phone_number_e164'] ??
+                                        n['phone_number'] ??
+                                        n['e164'] ??
+                                        id)
+                                    .toString();
                                 if (id.isEmpty) return null;
                                 return DropdownMenuItem(value: id, child: Text(e164, overflow: TextOverflow.ellipsis));
                               })

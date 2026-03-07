@@ -272,6 +272,7 @@ class NeyvoPulseApi {
     String? lateFee,
     String? schoolStudentId,
     String? notes,
+    Map<String, dynamic>? customFields,
   }) async =>
       _patch('/api/pulse/students/$studentId', {
         if (name != null) 'name': name,
@@ -282,6 +283,7 @@ class NeyvoPulseApi {
         if (lateFee != null) 'late_fee': lateFee,
         if (schoolStudentId != null) 'student_id': schoolStudentId,
         if (notes != null) 'notes': notes,
+        if (customFields != null) 'custom_fields': customFields,
       });
 
   static Future<void> deleteStudent(String studentId) async {

@@ -15,7 +15,7 @@ enum _CallSort { dateNewest, dateOldest, durationLongest, durationShortest }
 class CallHistoryPage extends StatefulWidget {
   const CallHistoryPage({
     super.key,
-    this.initialDirection = 'all', // all | inbound | outbound
+    this.initialDirection = 'outbound', // all | inbound | outbound
   });
 
   final String initialDirection;
@@ -32,7 +32,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   final _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, completed, failed, pending
   String _filterOutcome = 'all'; // all, callback, booked, handoff, missed, completed
-  String _filterDirection = 'all'; // all, inbound, outbound
+  String _filterDirection = 'outbound'; // all, inbound, outbound (default to outbound)
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
 
@@ -40,8 +40,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   void initState() {
     super.initState();
     _filterDirection = (widget.initialDirection).toLowerCase().trim();
-    if (_filterDirection != 'inbound' && _filterDirection != 'outbound') {
-      _filterDirection = 'all';
+    if (_filterDirection != 'inbound' && _filterDirection != 'outbound' && _filterDirection != 'all') {
+      _filterDirection = 'outbound';
     }
     _searchController.addListener(_filterCalls);
     _load();
