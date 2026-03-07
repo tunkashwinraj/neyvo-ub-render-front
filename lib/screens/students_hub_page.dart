@@ -97,6 +97,16 @@ class _DirectoryTabState extends State<_DirectoryTab> {
     _load();
   }
 
+  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
+  static String _normalizePhoneUs(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return raw.trim();
+    if (digits.length == 10) return '+1$digits';
+    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
+    if (raw.trim().startsWith('+')) return raw.trim();
+    return '+1$digits';
+  }
+
   Future<void> openAddStudentDialog() async {
     final nameC = TextEditingController();
     final phoneC = TextEditingController();
@@ -113,80 +123,100 @@ class _DirectoryTabState extends State<_DirectoryTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add student'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: nameC,
-                decoration: const InputDecoration(
-                  labelText: 'Name *',
-                  hintText: 'Full name',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 560, maxWidth: 720),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: nameC,
+                            decoration: const InputDecoration(
+                              labelText: 'Name *',
+                              hintText: 'Full name',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: phoneC,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone *',
+                              hintText: '10 digits, US (+1)',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: emailC,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              labelText: 'Email (optional)',
+                              hintText: 'Email address',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: studentIdC,
+                            decoration: const InputDecoration(
+                              labelText: 'Student / Contact ID (optional)',
+                              hintText: 'Internal ID or reference',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: NeyvoSpacing.lg),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: balanceC,
+                            decoration: const InputDecoration(
+                              labelText: 'Balance (optional)',
+                              hintText: '\$1,000',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: dueDateC,
+                            decoration: const InputDecoration(
+                              labelText: 'Due Date (optional)',
+                              hintText: '2026-02-25',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: lateFeeC,
+                            decoration: const InputDecoration(
+                              labelText: 'Late Fee (optional)',
+                              hintText: '\$75',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(
-                controller: phoneC,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone *',
-                  hintText: 'Number to call',
-                ),
-              ),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(
-                controller: emailC,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email (optional)',
-                  hintText: 'Email address',
-                ),
-              ),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(
-                controller: studentIdC,
-                decoration: const InputDecoration(
-                  labelText: 'Student / Contact ID (optional)',
-                  hintText: 'Internal ID or reference',
-                ),
-              ),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(
-                controller: notesC,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  hintText: 'Reason for call, follow-up notes...',
-                ),
-              ),
-              if (_isEducationOrg) ...[
-                const SizedBox(height: NeyvoSpacing.md),
+                const SizedBox(height: NeyvoSpacing.lg),
                 TextField(
-                  controller: balanceC,
+                  controller: notesC,
+                  maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Balance (optional)',
-                    hintText: '\$1,000',
-                  ),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
-                TextField(
-                  controller: dueDateC,
-                  decoration: const InputDecoration(
-                    labelText: 'Due Date (optional)',
-                    hintText: '2026-02-25',
-                  ),
-                ),
-                const SizedBox(height: NeyvoSpacing.md),
-                TextField(
-                  controller: lateFeeC,
-                  decoration: const InputDecoration(
-                    labelText: 'Late Fee (optional)',
-                    hintText: '\$75',
+                    labelText: 'Notes (optional)',
+                    hintText: 'Reason for call, follow-up notes...',
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
         actions: [
@@ -197,13 +227,14 @@ class _DirectoryTabState extends State<_DirectoryTab> {
           FilledButton(
             onPressed: () async {
               final name = nameC.text.trim();
-              final phone = phoneC.text.trim();
-              if (name.isEmpty || phone.isEmpty) {
+              final phoneRaw = phoneC.text.trim();
+              if (name.isEmpty || phoneRaw.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Name and phone required')),
                 );
                 return;
               }
+              final phone = _normalizePhoneUs(phoneRaw);
               try {
                 await NeyvoPulseApi.createStudent(
                   name: name,

@@ -1,6 +1,7 @@
 // lib/screens/team_page.dart
 // Team management: add faculty by email, assign role (admin/staff), staff permissions.
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../neyvo_pulse_api.dart';
@@ -164,50 +165,19 @@ class _TeamPageState extends State<TeamPage> {
         Text(
           () {
             final role = _myRole ?? '—';
-            final name = (_myName ?? '').trim();
-            final email = (_myEmail ?? '').trim();
+            var name = (_myName ?? '').trim();
+            var email = (_myEmail ?? '').trim();
+            if (name.isEmpty && email.isEmpty) {
+              final cu = FirebaseAuth.instance.currentUser;
+              name = cu?.displayName ?? '';
+              email = cu?.email ?? '';
+            }
             final nameOrEmail = name.isNotEmpty ? name : (email.isNotEmpty ? email : '');
             if (nameOrEmail.isEmpty) return 'Your role: $role';
             return 'Your role: $role · $nameOrEmail';
           }(),
           style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
         ),
-        if (_orgAccountIds.length > 1) ...[
-          const SizedBox(height: NeyvoSpacing.sm),
-          Row(
-            children: [
-              Text(
-                'Current org: ',
-                style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
-              ),
-              Text(
-                _currentAccountId ?? '—',
-                style: NeyvoTextStyles.label.copyWith(
-                  color: NeyvoColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: NeyvoSpacing.md),
-              DropdownButton<String>(
-                value: _currentAccountId,
-                isDense: true,
-                underline: const SizedBox(),
-                hint: const Text('Switch org'),
-                items: _orgAccountIds
-                    .map((id) => DropdownMenuItem<String>(value: id, child: Text(id)))
-                    .toList(),
-                onChanged: (String? id) {
-                  if (id != null) _switchOrg(id);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: NeyvoSpacing.sm),
-          Text(
-            'You belong to multiple orgs. Switch to see all members in that org.',
-            style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
-          ),
-        ],
         const SizedBox(height: NeyvoSpacing.lg),
         if (_myRole == 'admin' || (_myPermissions?.contains('team') ?? false)) ...[
           OutlinedButton.icon(
@@ -246,10 +216,15 @@ class _TeamPageState extends State<TeamPage> {
               display = name;
             } else if (email.isNotEmpty) {
               display = email;
-            } else if (_myUserId != null &&
-                userId.toString() == _myUserId &&
-                (_myName ?? _myEmail ?? '').toString().trim().isNotEmpty) {
-              display = (_myName ?? _myEmail ?? '').trim();
+            } else if (_myUserId != null && userId.toString() == _myUserId) {
+              final fromApi = (_myName ?? _myEmail ?? '').toString().trim();
+              if (fromApi.isNotEmpty) {
+                display = fromApi;
+              } else {
+                final cu = FirebaseAuth.instance.currentUser;
+                display = (cu?.displayName ?? cu?.email ?? '').toString().trim();
+                if (display.isEmpty) display = userId.toString();
+              }
             } else {
               display = userId.toString();
             }
@@ -375,12 +350,23 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     return true;
   }
 
+  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
+  static String _normalizePhoneUs(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return raw.trim();
+    if (digits.length == 10) return '+1$digits';
+    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
+    if (raw.trim().startsWith('+')) return raw.trim();
+    return '+1$digits';
+  }
+
   Future<void> _submit() async {
     if (!_canSubmit) return;
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final staffId = _staffIdController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phoneRaw = _phoneController.text.trim();
+    final phone = phoneRaw.isEmpty ? null : _normalizePhoneUs(phoneRaw);
     final department = _departmentController.text.trim();
     final title = _titleController.text.trim();
     final office = _officeController.text.trim();
@@ -396,7 +382,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         role: _role,
         permissions: permissions,
         staffId: staffId.isEmpty ? null : staffId,
-        phone: phone.isEmpty ? null : phone,
+        phone: phone,
         department: department.isEmpty ? null : department,
         title: title.isEmpty ? null : title,
         office: office.isEmpty ? null : office,
@@ -467,7 +453,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Phone (optional)',
-                hintText: 'Phone number',
+                hintText: '10 digits, US (+1)',
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -669,6 +655,18 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     return true;
   }
 
+  /// Normalizes US phone: 10 digits -> +1XXXXXXXXXX, 11 digits starting with 1 -> +1XXXXXXXXXX
+  static String? _normalizePhoneUs(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    final digits = t.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return t;
+    if (digits.length == 10) return '+1$digits';
+    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
+    if (t.startsWith('+')) return t;
+    return '+1$digits';
+  }
+
   Future<void> _submit() async {
     if (!_canSubmit) return;
     final userId = (widget.member['user_id'] ?? widget.member['id'] ?? '').toString();
@@ -676,7 +674,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final perms = _role == 'staff' ? _selectedPermissions.toList() : <String>[];
     final name = _nameController.text.trim();
     final staffId = _staffIdController.text.trim();
-    final phone = _phoneController.text.trim();
+    final phone = _normalizePhoneUs(_phoneController.text.trim());
     final department = _departmentController.text.trim();
     final title = _titleController.text.trim();
     final office = _officeController.text.trim();
@@ -689,7 +687,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         permissions: perms,
         name: name.isEmpty ? null : name,
         staffId: staffId.isEmpty ? null : staffId,
-        phone: phone.isEmpty ? null : phone,
+        phone: phone,
         department: department.isEmpty ? null : department,
         title: title.isEmpty ? null : title,
         office: office.isEmpty ? null : office,
@@ -758,7 +756,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Phone (optional)',
-                hintText: 'Phone number',
+                hintText: '10 digits, US (+1)',
               ),
               onChanged: (_) => setState(() {}),
             ),
