@@ -140,7 +140,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Numbers only appear here after they are linked to your account. If you have numbers in the VAPI dashboard, use "Sync from VAPI" below to add them.',
+                    'Numbers only appear here after they are linked to your account. Use "Refresh & sync from VAPI" to pull in all numbers from your VAPI dashboard.',
                     style: NeyvoTextStyles.body.copyWith(
                       color: NeyvoColors.textSecondary,
                       fontSize: 13,
@@ -206,17 +206,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 icon: _syncingFromVapi
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.sync, size: 18),
-                label: Text(_syncingFromVapi ? 'Syncing…' : 'Sync from VAPI'),
+                label: Text(_syncingFromVapi ? 'Refreshing…' : 'Refresh & sync from VAPI'),
               ),
               TextButton.icon(
                 onPressed: _openBuyNumber,
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Buy number'),
-              ),
-              TextButton.icon(
-                onPressed: _load,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh'),
               ),
             ],
           ),
