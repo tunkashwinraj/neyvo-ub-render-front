@@ -164,13 +164,16 @@ class _WalletPageState extends State<WalletPage> {
       final sb = StringBuffer();
       sb.writeln('Date,Type,Amount (credits),Amount (\$),Description,Call ID,Transaction type');
       for (final t in list) {
-        final amount = (t['amount'] as num?)?.toInt() ?? 0;
+        final credits = (t['credits'] as num?)?.toInt() ?? 0;
+        final dollarsVal = (t['dollars'] as num?)?.toDouble();
         final desc = (t['description'] ?? '').toString().replaceAll('"', '""');
         final type = (t['type'] ?? '').toString();
         final callId = (t['call_id'] ?? '').toString();
         final txnType = (t['transaction_type'] ?? type).toString();
-        final dollars = amount.abs() <= 0 ? '' : creditsToDollarsDisplay(amount.abs());
-        sb.writeln('${_formatDate(t['created_at'])},$type,$amount,"$dollars","$desc","$callId","$txnType"');
+        final dollars = dollarsVal != null && dollarsVal != 0
+            ? dollarsVal.abs().toStringAsFixed(2)
+            : (credits.abs() <= 0 ? '' : creditsToDollarsDisplay(credits.abs()));
+        sb.writeln('${_formatDate(t['created_at'])},$type,$credits,"$dollars","$desc","$callId","$txnType"');
       }
       final date = DateTime.now().toIso8601String().substring(0, 10);
       if (!mounted) return;
