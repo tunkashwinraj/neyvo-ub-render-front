@@ -1455,21 +1455,16 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Future<void> _confirmDeleteOperator() async {
+    final profileName = (_profile['profile_name'] ?? _profile['name'] ?? 'Unnamed').toString().trim();
+    final version = _profile['version'] as int? ?? 1;
+    final confirmName = profileName.isEmpty ? 'Unnamed' : 'UB $profileName v$version';
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete operator?'),
-        content: const Text(
-          'This will archive the operator. Call history is preserved. The operator will no longer appear in active lists and cannot be used for new calls.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (ctx) => _DeleteOperatorConfirmDialog(
+        confirmName: confirmName,
+        onCancel: () => Navigator.of(ctx).pop(false),
+        onDelete: () => Navigator.of(ctx).pop(true),
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -1638,6 +1633,81 @@ class _AiStudioMessage {
       text: text,
       proposedPrompt: proposedPrompt,
       proposedVoicemail: proposedVoicemail,
+    );
+  }
+}
+
+class _DeleteOperatorConfirmDialog extends StatefulWidget {
+  const _DeleteOperatorConfirmDialog({
+    required this.confirmName,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  final String confirmName;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  @override
+  State<_DeleteOperatorConfirmDialog> createState() => _DeleteOperatorConfirmDialogState();
+}
+
+class _DeleteOperatorConfirmDialogState extends State<_DeleteOperatorConfirmDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _matches => _controller.text.trim() == widget.confirmName;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: NeyvoColors.bgRaised,
+      title: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: NeyvoColors.error, size: 28),
+          const SizedBox(width: 12),
+          const Text('Delete Assistant'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Are you sure you want to delete this assistant? This action cannot be undone. Please enter \'${widget.confirmName}\' to confirm deletion.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: widget.confirmName,
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: NeyvoColors.bgBase,
+            ),
+            style: NeyvoTextStyles.body,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: widget.onCancel,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _matches ? widget.onDelete : null,
+          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
+          child: const Text('Delete'),
+        ),
+      ],
     );
   }
 }

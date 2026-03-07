@@ -8,9 +8,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
-import '../ui/components/backgrounds/neyvo_neural_background.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
-import '../ui/components/visualizer/neyvo_voice_wave.dart';
 import '../features/agents/create_agent_wizard.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
@@ -130,6 +128,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         _trainingNumber = trainingNumber != null && trainingNumber.isNotEmpty ? trainingNumber : null;
         _recentCalls = calls.take(8).toList();
         _perf = perf;
+        _ubModel = ubRes is Map ? Map<String, dynamic>.from(ubRes as Map) : null;
         _loading = false;
       });
     } catch (e) {
@@ -164,15 +163,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
     // Keep the dedicated "create first operator" experience for empty state.
     if (showCreateFirstOperator) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: Stack(
-          children: [
-            const Positioned.fill(child: NeyvoNeuralBackground()),
-            ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Center(
+      return ClipRect(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 600),
                     child: Column(
@@ -246,47 +243,48 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                 ),
               ],
             ),
-          ],
-        ),
-      );
+          ),
+    );
     }
 
     final callOk = _firstCallCompleted;
     final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: Stack(
-        children: [
-          const Positioned.fill(child: NeyvoNeuralBackground()),
-          ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 8),
-                      _buildHeroSection(orbState, callOk),
-                      const SizedBox(height: 24),
-                      _buildInsightsSection(),
-                      const SizedBox(height: 24),
-                      _buildOperationsSection(callOk),
-                      const SizedBox(height: 40),
-                    ],
+    return ClipRect(
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final contentWidth = constraints.maxWidth > 1200 ? 1200.0 : constraints.maxWidth;
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: contentWidth),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHeroSection(orbState, callOk, contentWidth),
+                        const SizedBox(height: 24),
+                        _buildInsightsSection(),
+                        const SizedBox(height: 24),
+                        _buildOperationsSection(callOk),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk) {
+  Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ?? _recentCalls.length;
     final resolutionPct = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
         (_perf?['resolution_rate'] as num?)?.toDouble();
@@ -299,179 +297,146 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     final ubModelStatus = _ubStatus;
     final envLabel = 'Prod';
 
+    final heroCard = _SimpleCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'University of Bridgeport Voice OS',
+                style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+              ),
+              const Spacer(),
+              _TimeRangeSelector(
+                value: _timeRange,
+                onChanged: (v) => setState(() {
+                  _timeRange = v;
+                  _load();
+                }),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _StatusChip(
+                label: 'Voice OS',
+                value: callOk ? 'Healthy' : 'Needs attention',
+                color: callOk ? NeyvoColors.success : NeyvoColors.warning,
+              ),
+              _StatusChip(
+                label: 'Coverage',
+                value: '$coveredDepartments / $totalCoreDepartments departments',
+              ),
+              _StatusChip(
+                label: 'UB model',
+                value: ubModelStatus == 'ready'
+                    ? 'Ready'
+                    : ubModelStatus == 'building'
+                        ? 'Building'
+                        : 'Missing',
+                color: ubModelStatus == 'ready'
+                    ? NeyvoColors.success
+                    : ubModelStatus == 'building'
+                        ? NeyvoColors.info
+                        : NeyvoColors.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              _metricChip('Calls handled', callsTotal > 0 ? callsTotal.toString() : '—'),
+              _metricChip(
+                'AI answer rate',
+                resolutionPct == null ? '—' : '${resolutionPct.toStringAsFixed(1)}%',
+              ),
+              _metricChip(
+                'Students reached',
+                studentsReached > 0 ? studentsReached.toString() : '—',
+              ),
+              _metricChip(
+                'Time saved',
+                timeSavedHours == null
+                    ? '—'
+                    : '≈ ${timeSavedHours.toStringAsFixed(1)} h',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Last updated just now · $envLabel',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+        ],
+      ),
+    );
+
+    final nextActionsCard = _SimpleCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Next best actions', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              if (w < 600) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.managedProfiles)),
+                      const SizedBox(width: 8),
+                      _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns)),
+                      const SizedBox(width: 8),
+                      _NextActionCompact(icon: Icons.school_outlined, label: 'UB model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
+                      const SizedBox(width: 8),
+                      _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics)),
+                    ],
+                  ),
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.managedProfiles))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _NextActionCompact(icon: Icons.school_outlined, label: 'UB model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics))),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+
+    if (contentWidth < 800) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          heroCard,
+          const SizedBox(height: 16),
+          nextActionsCard,
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 7,
-          child: NeyvoGlassPanel(
-            glowing: !callOk,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'University of Bridgeport Voice OS',
-                      style: NeyvoTextStyles.title.copyWith(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const Spacer(),
-                    _TimeRangeSelector(
-                      value: _timeRange,
-                      onChanged: (v) => setState(() {
-                        _timeRange = v;
-                        _load();
-                      }),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NeyvoAIOrb(state: orbState, size: 120),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 80,
-                          width: 220,
-                          child: const NeyvoVoiceWave(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _StatusChip(
-                                label: 'Voice OS',
-                                value: callOk ? 'Healthy' : 'Needs attention',
-                                color: callOk ? NeyvoColors.success : NeyvoColors.warning,
-                              ),
-                              _StatusChip(
-                                label: 'Coverage',
-                                value: '$coveredDepartments / $totalCoreDepartments core departments',
-                              ),
-                              _StatusChip(
-                                label: 'UB model',
-                                value: ubModelStatus == 'ready'
-                                    ? 'Ready'
-                                    : ubModelStatus == 'building'
-                                        ? 'Building'
-                                        : 'Missing',
-                                color: ubModelStatus == 'ready'
-                                    ? NeyvoColors.success
-                                    : ubModelStatus == 'building'
-                                        ? NeyvoColors.info
-                                        : NeyvoColors.warning,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 14,
-                            runSpacing: 14,
-                            children: [
-                              _metricChip('Calls handled', callsTotal > 0 ? callsTotal.toString() : '—'),
-                              _metricChip(
-                                'AI answer rate',
-                                resolutionPct == null ? '—' : '${resolutionPct.toStringAsFixed(1)}%',
-                              ),
-                              _metricChip(
-                                'Students reached',
-                                studentsReached > 0 ? studentsReached.toString() : '—',
-                              ),
-                              _metricChip(
-                                'Time saved',
-                                timeSavedHours == null
-                                    ? '—'
-                                    : '≈ ${timeSavedHours.toStringAsFixed(1)} h',
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Last updated just now · $envLabel',
-                            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+        Expanded(flex: 7, child: heroCard),
         const SizedBox(width: 16),
-        Expanded(
-          flex: 5,
-          child: NeyvoGlassPanel(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.lightbulb_outline, color: NeyvoColors.teal),
-                    const SizedBox(width: 10),
-                    Text('Next best actions', style: NeyvoTextStyles.heading),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _NextActionCard(
-                      icon: Icons.person_add_alt_1_outlined,
-                      title: 'Add operator for missing department',
-                      subtitle: 'Some UB departments do not have voice coverage yet.',
-                      label: 'Create operator',
-                      onTap: () => Navigator.of(context, rootNavigator: true)
-                          .pushNamed(PulseRouteNames.managedProfiles),
-                    ),
-                    _NextActionCard(
-                      icon: Icons.campaign_outlined,
-                      title: 'Turn on outbound reminders',
-                      subtitle: 'Reach students with balance and due date reminders.',
-                      label: 'Start campaign',
-                      onTap: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns),
-                    ),
-                    _NextActionCard(
-                      icon: Icons.school_outlined,
-                      title: 'Complete UB onboarding',
-                      subtitle: 'Finish setting up the UB model from bridgeport.edu.',
-                      label: 'View UB model',
-                      onTap: () => Navigator.of(context, rootNavigator: true)
-                          .pushNamed(PulseRouteNames.ubModelOverview),
-                    ),
-                    _NextActionCard(
-                      icon: Icons.analytics_outlined,
-                      title: 'Review call analytics',
-                      subtitle: 'See where students drop and where AI can improve.',
-                      label: 'Open analytics',
-                      onTap: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+        Expanded(flex: 5, child: nextActionsCard),
       ],
     );
   }
@@ -527,7 +492,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       children: [
         Expanded(
           flex: 7,
-          child: NeyvoGlassPanel(
+          child: _SimpleCard(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,7 +530,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         const SizedBox(width: 16),
         Expanded(
           flex: 5,
-          child: NeyvoGlassPanel(
+          child: _SimpleCard(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -935,6 +900,76 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+class _SimpleCard extends StatelessWidget {
+  const _SimpleCard({required this.child, this.padding});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: NeyvoColors.bgRaised,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NeyvoColors.borderSubtle),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _NextActionCompact extends StatelessWidget {
+  const _NextActionCompact({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 100),
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NeyvoColors.textPrimary,
+          side: const BorderSide(color: NeyvoColors.borderDefault),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          alignment: Alignment.centerLeft,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: NeyvoColors.teal),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                style: NeyvoTextStyles.label,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NextActionCard extends StatelessWidget {
   const _NextActionCard({
     required this.icon,
@@ -1026,7 +1061,7 @@ class _VoiceCoverageCard extends StatelessWidget {
       ),
     ];
 
-    return NeyvoGlassPanel(
+    return _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1100,7 +1135,7 @@ class _CallsPerformanceCard extends StatelessWidget {
       series.add(FlSpot(i.toDouble(), total));
     }
 
-    return NeyvoGlassPanel(
+    return _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1200,7 +1235,7 @@ class _StudentFinancialImpactCard extends StatelessWidget {
     final atRisk = (impact['at_risk'] as num?)?.toDouble() ?? 0;
     final total = collected + promised + atRisk;
 
-    return NeyvoGlassPanel(
+    return _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1286,7 +1321,7 @@ class _UbModelCard extends StatelessWidget {
     final faqCount =
         (model['faqTopicsCount'] as num?)?.toInt() ?? (model['faq_count'] as num?)?.toInt() ?? 0;
 
-    return NeyvoGlassPanel(
+    return _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

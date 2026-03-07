@@ -673,7 +673,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                 Expanded(
                   child: Stack(
                               children: [
-                                _buildCurrentPage(),
+                                ClipRect(child: _buildCurrentPage()),
                                 if (_incomingCall != null)
                                   IncomingCallOverlay(
                                     agentName: (_incomingCall?['agent_name'] ?? _incomingCall?['agent'] ?? '').toString(),
