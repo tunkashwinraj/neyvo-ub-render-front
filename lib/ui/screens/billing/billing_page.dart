@@ -8,6 +8,7 @@ import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../widgets/add_credits_modal.dart';
 import 'plan_selector_page.dart';
 import 'voice_tier_page.dart';
+import 'wallet_page.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -196,7 +197,22 @@ class _BillingPageState extends State<BillingPage> {
                             SizedBox(
                               width: 200,
                               child: OutlinedButton.icon(
-                                onPressed: () => Navigator.of(context).pushNamed(PulseRouteNames.wallet),
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => Scaffold(
+                                      appBar: AppBar(
+                                        title: const Text('Transactions'),
+                                        backgroundColor: NeyvoColors.bgBase,
+                                        foregroundColor: NeyvoColors.textPrimary,
+                                        leading: IconButton(
+                                          icon: const Icon(Icons.arrow_back),
+                                          onPressed: () => Navigator.of(context).pop(),
+                                        ),
+                                      ),
+                                      body: const WalletPage(),
+                                    ),
+                                  ),
+                                ),
                                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                                 label: const Text('View transactions'),
                                 style: OutlinedButton.styleFrom(

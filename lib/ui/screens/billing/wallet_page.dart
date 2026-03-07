@@ -430,17 +430,57 @@ class _WalletPageState extends State<WalletPage> {
     if (mounted) _load();
   }
 
+  static String _typeDisplay(String type) {
+    switch (type) {
+      case 'purchase':
+        return 'Credit';
+      case 'bonus':
+      case 'welcome_bonus':
+        return 'Bonus';
+      case 'subscription_plan':
+        return 'Plan';
+      case 'addon_deduction':
+        return 'Add-on';
+      case 'debit':
+        return 'Debit';
+      case 'manual_adjustment':
+        return 'Adjustment';
+      default:
+        return type.isEmpty ? '—' : type;
+    }
+  }
+
+  static String _defaultDescription(String type, Map<String, dynamic> t) {
+    switch (type) {
+      case 'purchase':
+        final pack = (t['pack_name'] ?? '').toString();
+        return pack.isNotEmpty ? 'Wallet credit purchase ($pack)' : 'Wallet credit purchase';
+      case 'subscription_plan':
+        return 'Subscription plan';
+      case 'addon_deduction':
+        return 'Add-on deduction';
+      case 'bonus':
+      case 'welcome_bonus':
+        return 'Bonus credits';
+      case 'manual_adjustment':
+        return 'Manual adjustment';
+      default:
+        return '—';
+    }
+  }
+
   Widget _transactionRow(Map<String, dynamic> t) {
     final type = (t['type'] ?? '').toString().toLowerCase();
-    final creditsVal = (t['credits'] as num?)?.toInt() ?? 0;
+    final creditsVal = (t['credits'] as num?)?.toInt() ?? (t['amount'] as num?)?.toInt() ?? 0;
     final isCredit = creditsVal >= 0;
     final callId = (t['call_id'] ?? '').toString().trim();
     final durationMinutes = (t['duration_minutes'] as num?)?.toDouble();
     final creditsCharged = (t['credits_charged'] as num?)?.toInt();
     final hasCallDetail = callId.isNotEmpty && durationMinutes != null && creditsCharged != null;
+    final rawDesc = (t['description'] ?? '').toString().trim();
     final desc = hasCallDetail
-        ? 'Call · ${durationMinutes!.toStringAsFixed(1)} min · $creditsCharged credits'
-        : (t['description'] ?? '—').toString();
+        ? 'Call · ${durationMinutes.toStringAsFixed(1)} min · $creditsCharged credits'
+        : (rawDesc.isNotEmpty ? rawDesc : _defaultDescription(type, t));
     final createdAt = t['created_at'];
 
     final bool isCallDebit = callId.isNotEmpty;
@@ -472,7 +512,7 @@ class _WalletPageState extends State<WalletPage> {
             SizedBox(
               width: 72,
               child: Text(
-                type == 'debit' ? 'Debit' : (type == 'credit' || isCredit) ? 'Credit' : type.isEmpty ? '—' : type,
+                _typeDisplay(type),
                 style: NeyvoTextStyles.body.copyWith(
                   color: isCredit ? NeyvoColors.success : NeyvoColors.error,
                   fontWeight: FontWeight.w500,
