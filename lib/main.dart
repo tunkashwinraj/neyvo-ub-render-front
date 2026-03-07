@@ -15,6 +15,7 @@
   import 'ui/screens/ub/ub_onboarding_page.dart';
   import 'screens/pulse_shell.dart';
   import 'theme/neyvo_theme.dart';
+  import 'widgets/inactivity_detector.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
 
@@ -60,7 +61,10 @@
               );
             }
             if (snapshot.hasData && snapshot.data != null) {
-              return const _PostAuthGate();
+              return const InactivityDetector(
+                timeout: Duration(minutes: 15),
+                child: _PostAuthGate(),
+              );
             }
             return const PulseAuthPage();
           },
