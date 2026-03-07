@@ -132,6 +132,7 @@ class ManagedProfileApiService {
     List<String> selectedToolKeys = const [],
     List<Map<String, String>> promptVariables = const [],
     String? departmentPhone,
+    String? usePrebuilt,
   }) async =>
       _post('/api/managed-profiles/ai-craft-prompt', {
         'department': department,
@@ -140,7 +141,12 @@ class ManagedProfileApiService {
         'selected_tool_keys': selectedToolKeys,
         'prompt_variables': promptVariables,
         if (departmentPhone != null && departmentPhone.isNotEmpty) 'department_phone': departmentPhone,
+        if (usePrebuilt != null && usePrebuilt.isNotEmpty) 'use_prebuilt': usePrebuilt,
       });
+
+  /// Fetch a prebuilt prompt template (e.g. "sfs" for Student Financial Services).
+  static Future<Map<String, dynamic>> getPromptTemplate(String templateId) async =>
+      _get('/api/managed-profiles/prompt-templates/$templateId');
 
   static Future<Map<String, dynamic>> getProfileCalls(String profileId, {int limit = 20, String? cursor}) async {
     final params = <String, dynamic>{'limit': limit};
