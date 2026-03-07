@@ -196,6 +196,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         vapiAssistantId: null,
         vapiPhoneNumberId: null,
         defaultAgentId: _defaultAgentId,
+        callScript: _callScript.text.trim().isEmpty ? null : _callScript.text.trim(),
       );
       UserTimezoneService.setTimezone(_timezoneValue);
       if (mounted) {

@@ -598,6 +598,7 @@ class NeyvoPulseApi {
     String? vapiAssistantId,
     String? vapiPhoneNumberId,
     String? defaultAgentId,
+    String? callScript,
   }) async =>
       _patch('/api/pulse/settings', {
         if (schoolName != null) 'school_name': schoolName,
@@ -609,6 +610,7 @@ class NeyvoPulseApi {
         if (vapiAssistantId != null) 'vapi_assistant_id': vapiAssistantId,
         if (vapiPhoneNumberId != null) 'vapi_phone_number_id': vapiPhoneNumberId,
         if (defaultAgentId != null) 'default_agent_id': defaultAgentId,
+        if (callScript != null) 'call_script': callScript,
       });
 
   // Reports
