@@ -20,6 +20,15 @@
   import 'widgets/inactivity_detector.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
+  /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
+  /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
+  /// 2) Runtime: when backend is ub-neyvo-back.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
+  String get _kFallbackAccountId {
+    const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (SpeariaApi.baseUrl.contains('ub-neyvo-back.onrender.com')) return '870065';
+    return '';
+  }
 
   Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -109,6 +118,8 @@
         final onboardingFromApi = res['onboarding_completed'];
         if (ok && accountId != null && accountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(accountId);
+        } else if (_kFallbackAccountId.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         // Load user timezone from settings for date display
         try {
@@ -129,6 +140,9 @@
           });
         }
       } catch (_) {
+        if (_kFallbackAccountId.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
+        }
         if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
       }
     }

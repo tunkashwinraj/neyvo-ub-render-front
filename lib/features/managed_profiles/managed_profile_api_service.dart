@@ -191,12 +191,17 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> makeOutboundCall({
     required String profileId,
     required String customerPhone,
+    String? studentId,
     Map<String, dynamic> overrides = const {},
   }) async {
-    return _post('/api/managed-profiles/$profileId/call', {
+    final body = <String, dynamic>{
       'customer_phone': customerPhone,
       'overrides': overrides,
-    });
+    };
+    if (studentId != null && studentId.trim().isNotEmpty) {
+      body['student_id'] = studentId.trim();
+    }
+    return _post('/api/managed-profiles/$profileId/call', body);
   }
 
   static Future<Map<String, dynamic>> getWebCallToken(String profileId) async {

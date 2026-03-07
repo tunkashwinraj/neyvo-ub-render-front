@@ -25,6 +25,8 @@ class _DialerPageState extends State<DialerPage> {
   List<Map<String, dynamic>> _numbers = [];
   String? _selectedNumberId;
   Map<String, dynamic>? _numberCapacity;
+  List<Map<String, dynamic>> _students = [];
+  String? _selectedStudentId;
 
   final _contactPhone = TextEditingController();
   final _contactName = TextEditingController();
@@ -32,6 +34,13 @@ class _DialerPageState extends State<DialerPage> {
 
   bool _starting = false;
   _DialerOverlayState? _overlay;
+
+  static String _toE164(String? p) {
+    final s = (p ?? '').replaceAll(RegExp(r'[^\d]'), '');
+    if (s.length == 10) return '+1$s';
+    if (s.length == 11 && s.startsWith('1')) return '+$s';
+    return (p ?? '').trim();
+  }
 
   @override
   void initState() {
@@ -57,16 +66,20 @@ class _DialerPageState extends State<DialerPage> {
         NeyvoPulseApi.getOutboundCapacity(),
         ManagedProfileApiService.listProfiles(),
         NeyvoPulseApi.listNumbers(),
+        NeyvoPulseApi.listStudents().catchError((_) => <String, dynamic>{'students': []}),
       ]);
       final cap = results[0] as Map<String, dynamic>;
       final prof = results[1] as Map<String, dynamic>;
       final nums = results[2] as Map<String, dynamic>;
+      final studentsRes = results[3] as Map<String, dynamic>;
       final list = (prof['profiles'] as List?)?.cast<dynamic>() ?? const [];
       final agents = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       final first = agents.isNotEmpty ? (agents.first['profile_id']?.toString()) : null;
       final rawNums = (nums['numbers'] as List?)?.cast<dynamic>() ?? const [];
       final numbers = rawNums.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       final firstNum = numbers.isNotEmpty ? (numbers.first['phone_number_id'] ?? numbers.first['id'])?.toString() : null;
+      final rawStudents = (studentsRes['students'] as List?)?.cast<dynamic>() ?? const [];
+      final students = rawStudents.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (!mounted) return;
       setState(() {
         _capacity = cap;
@@ -74,6 +87,7 @@ class _DialerPageState extends State<DialerPage> {
         _selectedAgentId = _selectedAgentId ?? first;
         _numbers = numbers;
         _selectedNumberId = _selectedNumberId ?? firstNum;
+        _students = students;
         _loading = false;
       });
       await _loadNumberCapacity();
@@ -175,6 +189,7 @@ class _DialerPageState extends State<DialerPage> {
       await ManagedProfileApiService.makeOutboundCall(
         profileId: agentId,
         customerPhone: phone,
+        studentId: (_selectedStudentId ?? '').trim().isEmpty ? null : _selectedStudentId,
         overrides: overrides,
       );
 
@@ -343,6 +358,40 @@ class _DialerPageState extends State<DialerPage> {
                                   await _loadNumberCapacity();
                                 },
                         ),
+                        if (_students.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            value: _selectedStudentId,
+                            decoration: const InputDecoration(
+                              labelText: 'Or select a student (auto-fills name & phone)',
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('— Manual entry —')),
+                              ..._students.map((s) {
+                                final id = s['id']?.toString() ?? '';
+                                final name = s['name']?.toString() ?? '—';
+                                final phone = s['phone']?.toString() ?? '';
+                                final label = phone.isNotEmpty ? '$name ($phone)' : name;
+                                if (id.isEmpty) return null;
+                                return DropdownMenuItem(value: id, child: Text(label, overflow: TextOverflow.ellipsis));
+                              }).whereType<DropdownMenuItem<String>>(),
+                            ],
+                            onChanged: _starting
+                                ? null
+                                : (v) {
+                                    setState(() {
+                                      _selectedStudentId = v;
+                                      if (v != null) {
+                                        final s = _students.firstWhere((e) => (e['id']?.toString()) == v, orElse: () => const {});
+                                        if (s.isNotEmpty) {
+                                          _contactName.text = s['name']?.toString() ?? '';
+                                          _contactPhone.text = _toE164(s['phone']?.toString()) ?? '';
+                                        }
+                                      }
+                                    });
+                                  },
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         TextField(
                           controller: _contactPhone,

@@ -227,12 +227,14 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         },
       );
     }
-    // Real-time credits: backend writes to wallet/{account_id} after Stripe payment.
+    // Real-time credits: backend uses unified path businesses/{id}/wallet/summary (billing writes there).
     final accountId = NeyvoPulseApi.defaultAccountId.trim().isNotEmpty ? NeyvoPulseApi.defaultAccountId : _accountIdDisplay?.trim();
     if ((accountId ?? '').isNotEmpty && user != null) {
       _walletCreditsSubscription = FirebaseFirestore.instance
-          .collection('wallet')
+          .collection('businesses')
           .doc(accountId)
+          .collection('wallet')
+          .doc('summary')
           .snapshots()
           .listen(
         (snap) {
