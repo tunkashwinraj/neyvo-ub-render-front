@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
@@ -169,19 +168,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                     child: Column(
                       children: [
                         const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: NeyvoColors.ubPurple,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/ub_logo/ub_logo_horizontal_white.svg',
-                            fit: BoxFit.contain,
-                            height: 44,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
                         const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
                         const SizedBox(height: 20),
                         Text(
@@ -269,19 +255,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   child: Column(
                     children: [
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: NeyvoColors.ubPurple,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: SvgPicture.asset(
-                          'assets/ub_logo/ub_logo_horizontal_white.svg',
-                          fit: BoxFit.contain,
-                          height: 48,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
                       Center(child: NeyvoAIOrb(state: orbState, size: 180)),
                       const SizedBox(height: 14),
                       Text(

@@ -5,7 +5,6 @@ import 'pulse_route_names.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
 import 'screens/training_page.dart';
-import 'screens/audit_log_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
 import 'ui/screens/calls/calls_page.dart';
@@ -88,7 +87,7 @@ class PulseRouter {
       case PulseRouteNames.training:
         return MaterialPageRoute(builder: (_) => const TrainingPage());
       case PulseRouteNames.auditLog:
-        return MaterialPageRoute(builder: (_) => const AuditLogPage());
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.auditLog));
       case PulseRouteNames.integrations:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.integrations));
       case PulseRouteNames.integration:

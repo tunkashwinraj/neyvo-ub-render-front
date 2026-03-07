@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
+import '../theme/neyvo_theme.dart';
 
 class AuditLogPage extends StatefulWidget {
   const AuditLogPage({super.key});
@@ -92,6 +93,10 @@ class _AuditLogPageState extends State<AuditLogPage> {
               const PopupMenuItem(value: 'payment', child: Text('Payments')),
               const PopupMenuItem(value: 'faq', child: Text('FAQ')),
               const PopupMenuItem(value: 'policy', child: Text('Policy')),
+              const PopupMenuItem(value: 'campaign', child: Text('Campaigns')),
+              const PopupMenuItem(value: 'integration', child: Text('Integration')),
+              const PopupMenuItem(value: 'integration_config', child: Text('Integration config')),
+              const PopupMenuItem(value: 'call_template', child: Text('Call templates')),
             ],
           ),
         ],
@@ -127,6 +132,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
                           final action = e['action']?.toString() ?? '—';
                           final resource = e['resource']?.toString() ?? '—';
                           final resourceId = e['resource_id']?.toString();
+                          final userId = e['user_id']?.toString();
                           final details = e['details'];
                           final createdAt = _formatTime(e['created_at']);
                           return Card(
@@ -141,6 +147,8 @@ class _AuditLogPageState extends State<AuditLogPage> {
                                 children: [
                                   const SizedBox(height: 4),
                                   Text('Resource: $resource${resourceId != null ? ' · $resourceId' : ''}'),
+                                  if (userId != null && userId.isNotEmpty)
+                                    Text('By: $userId', style: TextStyle(color: NeyvoColors.textSecondary, fontSize: 12)),
                                   Text(createdAt, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                                   if (details != null && details is Map && details.isNotEmpty)
                                     Padding(

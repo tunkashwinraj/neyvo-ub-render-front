@@ -36,6 +36,7 @@ import '../ui/components/calls/incoming_call_overlay.dart';
 import '../ui/screens/agency/agency_overview_page.dart';
 import 'students_hub_page.dart';
 import 'team_page.dart';
+import 'audit_log_page.dart';
 
 class PulseShell extends StatefulWidget {
   const PulseShell({
@@ -89,6 +90,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls, 'call_logs'),
     _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
+    _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'team'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
     _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
     _NavItem('Wallet', Icons.account_balance_outlined, PulseRouteNames.wallet, 'billing'),
@@ -360,17 +362,17 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — UB horizontal logo (purple on white per style guide)
+                // Logo area — UB horizontal logo (purple text on white)
                 Container(
                   height: 56,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: const BoxDecoration(
-                    color: NeyvoColors.ubPurple,
+                    color: NeyvoColors.sidebarBg,
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: SvgPicture.asset(
-                      'assets/ub_logo/ub_logo_horizontal_white.svg',
+                      'assets/ub_logo/ub_logo_horizontal_purple.svg',
                       fit: BoxFit.contain,
                       height: 36,
                     ),
@@ -775,6 +777,8 @@ extension on _PulseShellState {
         return const CampaignsPage();
       case PulseRouteNames.team:
         return const TeamPage();
+      case PulseRouteNames.auditLog:
+        return const AuditLogPage();
       case PulseRouteNames.testCall:
         return const TestCallPage();
       case PulseRouteNames.analytics:
