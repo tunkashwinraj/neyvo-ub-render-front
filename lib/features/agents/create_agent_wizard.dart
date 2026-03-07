@@ -1,12 +1,15 @@
 // lib/features/agents/create_agent_wizard.dart
 // UB Operator Wizard: work goals → overview → create. Department fixed to Student Financial Services.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../pulse_route_names.dart';
+import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../managed_profiles/managed_profile_api_service.dart';
 
 /// Default tools for UB operator when none selected (backend uses same default).
@@ -15,6 +18,9 @@ const List<String> _defaultToolKeys = [
   'create_callback@1.0',
   'send_confirmation@1.0',
 ];
+
+/// Max characters for work goals (UB Operator Wizard and profile goal field).
+const int _workGoalsMaxLength = 1000;
 
 /// Friendly labels for Overview abilities (no raw tool keys shown).
 const Map<String, String> _toolKeyToFriendlyLabel = {
@@ -53,6 +59,28 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
   String? _overviewExampleSentence;
   bool _overviewExampleLoading = false;
 
+  static const List<String> _buildingMessages = [
+    'Crafting your operator\'s voice…',
+    'Building industry-grade prompts…',
+    'Connecting to your voice assistant…',
+    'Adding natural conversation flow…',
+    'Almost there…',
+  ];
+  int _buildingMessageIndex = 0;
+  Timer? _buildingMessageTimer;
+
+  /// Shown between step 1 and 2 while AI generates prompt + tools.
+  bool _craftingPrompt = false;
+  static const List<String> _craftingMessages = [
+    'Crafting your system prompt…',
+    'Choosing the right tools…',
+    'Optimizing for natural conversation…',
+    'Building your operator\'s voice…',
+    'Almost ready…',
+  ];
+  int _craftingMessageIndex = 0;
+  Timer? _craftingMessageTimer;
+
   @override
   void initState() {
     super.initState();
@@ -62,9 +90,43 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
 
   @override
   void dispose() {
+    _buildingMessageTimer?.cancel();
+    _craftingMessageTimer?.cancel();
     _workGoalsCtrl.dispose();
     _profileNameCtrl.dispose();
     super.dispose();
+  }
+
+  void _startCraftingAnimation() {
+    _craftingMessageTimer?.cancel();
+    _craftingMessageIndex = 0;
+    _craftingMessageTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+      if (!mounted) return;
+      setState(() {
+        _craftingMessageIndex = (_craftingMessageIndex + 1) % _craftingMessages.length;
+      });
+    });
+  }
+
+  void _stopCraftingAnimation() {
+    _craftingMessageTimer?.cancel();
+    _craftingMessageTimer = null;
+  }
+
+  void _startBuildingAnimation() {
+    _buildingMessageTimer?.cancel();
+    _buildingMessageIndex = 0;
+    _buildingMessageTimer = Timer.periodic(const Duration(milliseconds: 1600), (_) {
+      if (!mounted) return;
+      setState(() {
+        _buildingMessageIndex = (_buildingMessageIndex + 1) % _buildingMessages.length;
+      });
+    });
+  }
+
+  void _stopBuildingAnimation() {
+    _buildingMessageTimer?.cancel();
+    _buildingMessageTimer = null;
   }
 
   Future<void> _loadDepartments() async {
@@ -98,9 +160,13 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       return;
     }
     setState(() {
+      _craftingPrompt = true;
       _loading = true;
       _error = null;
     });
+    _startCraftingAnimation();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
     try {
       final res = await ManagedProfileApiService.aiCraftPrompt(
         department: _fixedDepartmentId,
@@ -110,20 +176,24 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         departmentPhone: _fixedDepartmentPhone,
       );
       if (!mounted) return;
+      _stopCraftingAnimation();
       setState(() {
         _systemPrompt = (res['system_prompt'] ?? '').toString();
         _voicemailMessage = (res['voicemail_message'] ?? '').toString();
         _operatorSummary = (res['operator_summary'] ?? '').toString();
         _loading = false;
+        _craftingPrompt = false;
         _step = 1;
         _overviewExampleSentence = null;
       });
       if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverviewExampleIfNeeded());
     } catch (e) {
       if (mounted) {
+        _stopCraftingAnimation();
         setState(() {
           _error = e.toString();
           _loading = false;
+          _craftingPrompt = false;
         });
       }
     }
@@ -183,6 +253,10 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       _saving = true;
       _error = null;
     });
+    _startBuildingAnimation();
+    // Yield so the "Building your operator" UI paints before the request runs.
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
     final payload = <String, dynamic>{
       'schema_version': 2,
       'profile_name': profileName,
@@ -202,12 +276,15 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       if (!mounted) return;
       final err = res['error'];
       if (err != null) {
+        _stopBuildingAnimation();
         setState(() => _error = err.toString());
         setState(() => _saving = false);
         return;
       }
+      _stopBuildingAnimation();
       final profileId = res['profile_id']?.toString();
       if (mounted) {
+        _stopBuildingAnimation();
         Navigator.of(context).pop(true);
         if (profileId != null && profileId.isNotEmpty) {
           Navigator.of(context, rootNavigator: true).pushNamed(
@@ -218,6 +295,7 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       }
     } catch (e) {
       if (mounted) {
+        _stopBuildingAnimation();
         setState(() => _error = e is ApiException ? e.message : e.toString());
         setState(() => _saving = false);
       }
@@ -243,7 +321,9 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
       backgroundColor: NeyvoColors.bgBase,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(NeyvoRadius.lg)),
       contentPadding: const EdgeInsets.all(24),
-      title: Text('$_stepTitle (${_step + 1}/$_totalSteps)'),
+      title: Text(
+        _craftingPrompt ? 'Preparing… (1/$_totalSteps)' : (_saving ? 'Creating… (${_step + 1}/$_totalSteps)' : '$_stepTitle (${_step + 1}/$_totalSteps)'),
+      ),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -262,47 +342,51 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
                 ),
                 const SizedBox(height: 16),
               ],
-              if (_loading)
+              if (_craftingPrompt)
+                _buildCraftingPromptExperience()
+              else if (_loading)
                 const Padding(
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
                 )
+              else if (_saving)
+                _buildCreatingExperience()
               else ...[
                 if (_step == 0) _buildWorkGoalsStep(),
                 if (_step == 1) _buildOverviewStep(),
                 if (_step == 2) _buildCreateStep(),
               ],
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (_step > 0)
-                    TextButton(
-                      onPressed: () => setState(() => _step--),
-                      child: const Text('Back'),
-                    ),
-                  const SizedBox(width: 8),
-                  if (_step < _totalSteps - 1)
-                    FilledButton(
-                      onPressed: _step == 0
-                          ? (_workGoalsCtrl.text.trim().isEmpty ? null : () => _fetchCraftedPromptForOverview())
-                          : () => setState(() {
-                                _step++;
-                                _overviewExampleSentence = null;
-                              }),
-                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                      child: Text(_step == 0 ? 'Continue' : 'Continue'),
-                    )
-                  else
-                    FilledButton(
-                      onPressed: _saving ? null : _create,
-                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                      child: _saving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
-                          : const Text('Create Operator'),
-                    ),
-                ],
-              ),
+              if (!_saving && !_craftingPrompt) ...[
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (_step > 0)
+                      TextButton(
+                        onPressed: () => setState(() => _step--),
+                        child: const Text('Back'),
+                      ),
+                    const SizedBox(width: 8),
+                    if (_step < _totalSteps - 1)
+                      FilledButton(
+                        onPressed: _step == 0
+                            ? (_workGoalsCtrl.text.trim().isEmpty ? null : () => _fetchCraftedPromptForOverview())
+                            : () => setState(() {
+                                  _step++;
+                                  _overviewExampleSentence = null;
+                                }),
+                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                        child: Text(_step == 0 ? 'Continue' : 'Continue'),
+                      )
+                    else
+                      FilledButton(
+                        onPressed: _create,
+                        style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                        child: const Text('Create Operator'),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -346,13 +430,20 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         const SizedBox(height: 12),
         TextField(
           controller: _workGoalsCtrl,
-          maxLines: 4,
+          maxLines: 6,
+          maxLength: _workGoalsMaxLength,
           decoration: const InputDecoration(
             hintText: 'Paste or type work goals…',
             border: OutlineInputBorder(),
             alignLabelWithHint: true,
+            counterText: '',
           ),
           onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${_workGoalsCtrl.text.length} / $_workGoalsMaxLength',
+          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
         ),
       ],
     );
@@ -425,6 +516,78 @@ class _CreateAgentWizardState extends State<CreateAgentWizard> {
         const SizedBox(height: 8),
         Text('Press "Create Operator" to create and open the operator detail page.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
       ],
+    );
+  }
+
+  Widget _buildCraftingPromptExperience() {
+    final message = _craftingMessages[_craftingMessageIndex % _craftingMessages.length];
+    return SizedBox(
+      height: 320,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const NeyvoAIOrb(state: NeyvoAIOrbState.processing, size: 100),
+            const SizedBox(height: 28),
+            Text(
+              'Preparing your operator',
+              style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.teal),
+            ),
+            const SizedBox(height: 8),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(
+                message,
+                key: ValueKey<String>(message),
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'We\'re generating your system prompt and tools.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreatingExperience() {
+    final message = _buildingMessages[_buildingMessageIndex % _buildingMessages.length];
+    return SizedBox(
+      height: 320,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const NeyvoAIOrb(state: NeyvoAIOrbState.processing, size: 100),
+          const SizedBox(height: 28),
+          Text(
+            'Building your operator',
+            style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.teal),
+          ),
+          const SizedBox(height: 8),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              message,
+              key: ValueKey<String>(message),
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'We\'re creating something powerful for you.',
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    ),
     );
   }
 }

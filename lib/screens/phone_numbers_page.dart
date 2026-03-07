@@ -89,10 +89,19 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   }
 
   /// Primary number (if any) – imported or assigned as primary. Shown in its own section.
+  /// Deduplicated by E.164 so the same number never appears twice.
   List<Map<String, dynamic>> get _primaryNumbers {
-    return _numbers
+    final rolePrimary = _numbers
         .where((n) => (n['role']?.toString().toLowerCase() ?? '') == 'primary')
         .toList();
+    final seen = <String>{};
+    return rolePrimary.where((n) {
+      final e164 = (n['phone_number'] ?? n['phone_number_e164'] ?? '').toString().trim();
+      final key = e164.replaceAll(RegExp(r'\D'), '');
+      if (key.isNotEmpty && seen.contains(key)) return false;
+      if (key.isNotEmpty) seen.add(key);
+      return true;
+    }).toList();
   }
 
   /// Non-primary numbers for the "Production numbers" grid.

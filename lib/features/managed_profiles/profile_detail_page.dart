@@ -565,8 +565,18 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               const SizedBox(height: 6),
               TextField(
                 controller: _goalCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(hintText: 'What is this operator trying to accomplish?'),
+                maxLines: 6,
+                maxLength: 1000,
+                decoration: const InputDecoration(
+                  hintText: 'What is this operator trying to accomplish?',
+                  counterText: '',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_goalCtrl.text.length} / 1000',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
               ),
             ],
           ),
