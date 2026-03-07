@@ -31,13 +31,22 @@ class MemberDetailPage extends StatefulWidget {
   State<MemberDetailPage> createState() => _MemberDetailPageState();
 }
 
-class _MemberDetailPageState extends State<MemberDetailPage> {
+class _MemberDetailPageState extends State<MemberDetailPage>
+    with SingleTickerProviderStateMixin {
   late Map<String, dynamic> _member;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _member = Map<String, dynamic>.from(widget.member);
+    _tabController = TabController(length: 1, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _openEdit() {
@@ -116,9 +125,17 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
     final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
     final displayName = name.isNotEmpty ? name : (email.isNotEmpty ? email : 'Member');
 
+    final notes = (_member['notes'] ?? '').toString().trim();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(displayName),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Overview', icon: Icon(Icons.person_outline, size: 20)),
+          ],
+        ),
         actions: [
           if (widget.canEdit) ...[
             IconButton(
@@ -134,29 +151,47 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
           ],
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          _detailCard(
-            'Contact',
-            [
-              _detailRow('Email', email.isNotEmpty ? email : '—'),
-              _detailRow('Phone', phone.isNotEmpty ? phone : '—'),
-              if (extension.isNotEmpty) _detailRow('Extension', extension),
-            ],
-          ),
-          const SizedBox(height: NeyvoSpacing.lg),
-          _detailCard(
-            'Role & Position',
-            [
-              _detailRow('Role', role),
-              if (title.isNotEmpty) _detailRow('Title', title),
-              if (department.isNotEmpty) _detailRow('Department', department),
-              if (staffId.isNotEmpty) _detailRow('Staff ID', staffId),
-              if (office.isNotEmpty) _detailRow('Office', office),
-              if (campus.isNotEmpty) _detailRow('Campus', campus),
-              if (permList.isNotEmpty)
-                _detailRow('Permissions', permList.join(', ')),
+          ListView(
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
+            children: [
+              _detailCard(
+                'Contact',
+                [
+                  _detailRow('Name', name.isNotEmpty ? name : '—'),
+                  _detailRow('Email', email.isNotEmpty ? email : '—'),
+                  _detailRow('Phone', phone.isNotEmpty ? phone : '—'),
+                  _detailRow('Extension', extension.isNotEmpty ? extension : '—'),
+                ],
+              ),
+              const SizedBox(height: NeyvoSpacing.lg),
+              _detailCard(
+                'Role & Position',
+                [
+                  _detailRow('Role', role),
+                  _detailRow('Title', title.isNotEmpty ? title : '—'),
+                  _detailRow('Department', department.isNotEmpty ? department : '—'),
+                  _detailRow('Staff ID', staffId.isNotEmpty ? staffId : '—'),
+                  _detailRow('Office', office.isNotEmpty ? office : '—'),
+                  _detailRow('Campus', campus.isNotEmpty ? campus : '—'),
+                  _detailRow(
+                    'Permissions',
+                    permList.isNotEmpty ? permList.join(', ') : '—',
+                  ),
+                ],
+              ),
+              const SizedBox(height: NeyvoSpacing.lg),
+              _detailCard(
+                'Notes',
+                [
+                  Text(
+                    notes.isNotEmpty ? notes : '—',
+                    style: NeyvoTextStyles.bodyPrimary,
+                  ),
+                ],
+              ),
             ],
           ),
         ],
@@ -234,6 +269,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _officeController;
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
+  late TextEditingController _notesController;
 
   @override
   void initState() {
@@ -268,6 +304,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _campusController = TextEditingController(
       text: (widget.member['campus'] ?? '').toString().trim(),
     );
+    _notesController = TextEditingController(
+      text: (widget.member['notes'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -280,6 +319,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _officeController.dispose();
     _extensionController.dispose();
     _campusController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -303,6 +343,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     final office = _officeController.text.trim();
     final extension = _extensionController.text.trim();
     final campus = _campusController.text.trim();
+    final notes = _notesController.text.trim();
     try {
       await NeyvoPulseApi.updateMember(
         userId,
@@ -316,6 +357,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         office: office.isEmpty ? null : office,
         extension: extension.isEmpty ? null : extension,
         campus: campus.isEmpty ? null : campus,
+        notes: notes.isEmpty ? null : notes,
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
@@ -423,6 +465,17 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Campus (optional)',
                 hintText: 'e.g. Main Campus, North Campus',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                hintText: 'Internal notes about this team member',
+                alignLabelWithHint: true,
               ),
               onChanged: (_) => setState(() {}),
             ),
