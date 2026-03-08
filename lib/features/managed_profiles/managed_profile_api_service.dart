@@ -77,6 +77,10 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> getProfile(String profileId) async =>
       _get('/api/managed-profiles/$profileId');
 
+  /// Fetch variable metadata (source, in_prompt, has_default) for Additional settings.
+  static Future<Map<String, dynamic>> getVariableMetadata(String profileId) async =>
+      _get('/api/managed-profiles/$profileId/variables-metadata');
+
   static Future<Map<String, dynamic>> updateProfile(String profileId, Map<String, dynamic> body) async =>
       _patch('/api/managed-profiles/$profileId', body);
 

@@ -61,6 +61,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   List<Map<String, String>> _promptVariables = [];
   bool _variablePreviewLoading = false;
   String? _variablePreviewSentence;
+  Map<String, String> _variableDefaults = {};
+  List<Map<String, dynamic>> _variableMetadata = [];
+  List<Map<String, dynamic>> _openVariables = [];
+  bool _variableMetadataLoading = false;
   bool _knowledgeLoading = false;
   bool _knowledgeSaving = false;
   List<Map<String, dynamic>> _knowledgeItems = const [];
@@ -143,14 +147,21 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _handoffEnabled = (guardrails['handoff_enabled'] as bool?) ?? true;
       }
 
+      final vd = profile['variable_defaults'];
+      final variableDefaults = (vd is Map)
+          ? (vd.map((k, v) => MapEntry(k.toString(), (v ?? '').toString().trim())))
+          : <String, String>{};
+
       if (!mounted) return;
       setState(() {
         _profile = profile;
         _numbers = numbers;
         _wallet = walletRes;
         _knowledgeItems = knowledgeItems;
+        _variableDefaults = Map<String, String>.from(variableDefaults);
         _loading = false;
       });
+      await _loadVariableMetadata();
       // After wallet is available, load curated voices for the effective tier.
       await _loadVoiceCatalogForTier();
     } catch (e) {
@@ -158,6 +169,29 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       setState(() {
         _error = e.toString();
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadVariableMetadata() async {
+    if (!mounted) return;
+    setState(() => _variableMetadataLoading = true);
+    try {
+      final res = await ManagedProfileApiService.getVariableMetadata(widget.profileId);
+      final vars = (res['variables'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final open = (res['open_variables'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      if (!mounted) return;
+      setState(() {
+        _variableMetadata = vars;
+        _openVariables = open;
+        _variableMetadataLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _variableMetadata = [];
+        _openVariables = [];
+        _variableMetadataLoading = false;
       });
     }
   }
@@ -177,6 +211,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         body['work_goals'] = _goalCtrl.text.trim();
         body['voicemail_message'] = _voicemailCtrl.text.trim();
         body['prompt_variables'] = _promptVariables;
+        final defaults = Map<String, String>.from(_variableDefaults);
+        defaults.removeWhere((k, v) => v.isEmpty);
+        body['variable_defaults'] = defaults;
       }
       final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
       if (!mounted) return;
@@ -899,7 +936,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             const SizedBox(height: 8),
             Text(
               'When AI proposes changes, you’ll see the updated system prompt and voicemail here. '
-              'Send a message on the left to get started.',
+              'Send a message on the left to get started. If your script uses variables like {{studentName}}, they\'ll be filled when you make calls—see Additional settings for sources and defaults.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
           ],
@@ -1211,7 +1248,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           Text('Prompt variables', style: NeyvoTextStyles.heading),
           const SizedBox(height: 6),
           Text(
-            'Variables like {{studentName}} used in the prompt. When making outbound calls, pass values for these.',
+            'Use placeholders like {{studentName}} in your script to personalize each call. You can mix fixed text with variables—values are filled from student records, your profile, or overrides below. If a variable isn\'t auto-filled, it will appear in the "Open variables" section so you can add a default or pass it per call.',
             style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
           ),
           const SizedBox(height: 12),
@@ -1269,6 +1306,104 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 onPressed: _loadVariablePreview,
                 child: const Text('Show example'),
               ),
+          ],
+          if (_openVariables.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.warning.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: NeyvoColors.warning.withOpacity(0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 20, color: NeyvoColors.warning),
+                      const SizedBox(width: 8),
+                      Text('Open variables', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.warning)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'These variables appear in your script but aren\'t auto-filled. Add a default below or pass a value when making each call.',
+                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _openVariables.map((v) {
+                      final k = (v['key'] ?? '').toString();
+                      return Chip(
+                        label: Text('{{$k}}'),
+                        backgroundColor: NeyvoColors.warning.withOpacity(0.2),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_variableMetadataLoading) ...[
+            const SizedBox(height: 20),
+            const Center(child: CircularProgressIndicator()),
+          ] else if (_variableMetadata.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text('Variable sources & overrides', style: NeyvoTextStyles.label),
+            const SizedBox(height: 6),
+            Text(
+              'Where each variable gets its value. Use an override to set a default for all calls; per-call overrides still take precedence.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            ..._variableMetadata.map((v) {
+              final key = (v['key'] ?? '').toString();
+              final label = (v['label'] ?? key).toString();
+              final sourceDesc = (v['source_description'] ?? '').toString();
+              final inPrompt = v['in_prompt'] == true;
+              final currentVal = _variableDefaults[key] ?? '';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('{{$key}}', style: NeyvoTextStyles.bodyPrimary.copyWith(fontFamily: 'monospace')),
+                        if (inPrompt) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: NeyvoColors.teal.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.teal)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(sourceDesc, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      key: ValueKey('var_override_$key'),
+                      initialValue: currentVal,
+                      onChanged: (val) => setState(() => _variableDefaults[key] = val.trim()),
+                      decoration: const InputDecoration(
+                        labelText: 'Override value (optional)',
+                        hintText: 'Hardcode for all calls',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
         ],
       ),
