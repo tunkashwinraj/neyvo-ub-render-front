@@ -1436,7 +1436,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           ),
           const SizedBox(height: 12),
           Text(
-            'Deleting this operator will archive it. Call history is preserved; the operator becomes read-only and will no longer appear in active lists.',
+            'Permanently delete this operator. The number will be detached and the assistant removed from VAPI. This cannot be undone.',
             style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
           ),
           if (!isArchived) ...[
@@ -1457,7 +1457,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           ] else
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text('This operator is already archived.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+              child: Text('This operator is archived and cannot be edited.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
             ),
         ],
       ),
@@ -1484,7 +1484,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       await ManagedProfileApiService.archiveProfile(widget.profileId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Operator archived. Call history is preserved.')),
+        const SnackBar(content: Text('Operator deleted.')),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
