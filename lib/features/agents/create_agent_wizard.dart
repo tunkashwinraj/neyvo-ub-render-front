@@ -20,7 +20,7 @@ const List<String> _defaultToolKeys = [
 ];
 
 /// Max characters for work goals (UB Operator Wizard and profile goal field).
-const int _workGoalsMaxLength = 1000;
+const int _workGoalsMaxLength = 2500;
 
 /// Friendly labels for Overview abilities (no raw tool keys shown).
 const Map<String, String> _toolKeyToFriendlyLabel = {

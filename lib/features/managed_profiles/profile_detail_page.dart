@@ -697,7 +697,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               TextField(
                 controller: _goalCtrl,
                 maxLines: 6,
-                maxLength: 1000,
+                maxLength: 2500,
                 decoration: const InputDecoration(
                   hintText: 'What is this operator trying to accomplish?',
                   counterText: '',
@@ -706,7 +706,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
               const SizedBox(height: 2),
               Text(
-                '${_goalCtrl.text.length} / 1000',
+                '${_goalCtrl.text.length} / 2500',
                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
               ),
             ],
