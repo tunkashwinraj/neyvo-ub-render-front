@@ -33,7 +33,7 @@ class CallDetailPage extends StatelessWidget {
     final fromVal = (merged['from'] ?? merged['customer_phone'] ?? merged['student_phone'] ?? '').toString().trim();
     final toVal = (merged['to'] ?? '').toString().trim();
     final name = (merged['customer_name'] ?? merged['student_name'] ?? '').toString().trim();
-    final ts = merged['created_at'] ?? merged['timestamp'] ?? merged['ended_at'] ?? merged['started_at'];
+    final ts = merged['started_at'] ?? merged['created_at'] ?? merged['timestamp'] ?? merged['ended_at'];
     final intent = (merged['intent'] ?? merged['outcome'] ?? merged['outcome_type'] ?? merged['service_requested'] ?? '—').toString();
     final durationStr = formatDuration(merged);
     final status = (merged['status'] ?? '—').toString();

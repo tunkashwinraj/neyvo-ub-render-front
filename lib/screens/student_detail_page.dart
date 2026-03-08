@@ -715,9 +715,20 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 ..._calls.map((c) {
                   final callMap = Map<String, dynamic>.from(c as Map);
                   final status = callMap['status']?.toString() ?? callMap['outcome']?.toString() ?? 'unknown';
-                  final dateRaw = callMap['date'] ?? callMap['created_at'];
-                  final date = dateRaw != null ? UserTimezoneService.format(dateRaw) : '';
-                  final duration = callMap['duration_seconds']?.toString() ?? callMap['duration']?.toString() ?? '';
+                  final dateRaw = callMap['started_at'] ?? callMap['created_at'] ?? callMap['date'];
+                  final date = dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '';
+                  final durationSec = callMap['duration_seconds'] ?? callMap['duration_sec'] ?? callMap['duration'];
+                  String duration = '';
+                  if (durationSec != null) {
+                    final s = durationSec is int ? durationSec : int.tryParse(durationSec.toString()) ?? 0;
+                    if (s < 60) {
+                      duration = '${s}s';
+                    } else {
+                      final m = s ~/ 60;
+                      final r = s % 60;
+                      duration = r > 0 ? '${m}m ${r}s' : '${m}m';
+                    }
+                  }
                   final outcome = callMap['outcome']?.toString() ?? status;
                   final agentName = callMap['agent_name']?.toString() ?? '';
                   final direction = (callMap['direction']?.toString() ?? '').toLowerCase();

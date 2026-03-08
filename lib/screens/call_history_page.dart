@@ -93,7 +93,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
   /// Duration in seconds (int) or duration string from backend
   static String formatDuration(dynamic call) {
-    final sec = call['duration_seconds'];
+    final sec = call['duration_seconds'] ?? call['duration_sec'];
     if (sec != null) {
       final s = sec is int ? sec : int.tryParse(sec.toString()) ?? 0;
       if (s < 60) return '${s}s';
@@ -459,8 +459,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final agentName = (call['profile_name'] ?? call['agent_name'] ?? call['managed_profile_name'] ?? '').toString();
                         final numberCalled = (call['number_called'] ?? call['from'] ?? call['phone_number_id'] ?? '').toString();
                         final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '').toString();
-                        final dateRaw = call['created_at_display'] ?? call['created_at'] ?? call['date'];
-                        final date = dateRaw != null ? UserTimezoneService.format(dateRaw) : '';
+                        final dateRaw = call['started_at'] ?? call['created_at'] ?? call['timestamp'] ?? call['date'];
+                        final date = dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '';
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
                         final recordingUrl = call['recording_url']?.toString();
@@ -480,6 +480,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             ? ''
                             : routedIntentRaw.toString().trim();
                         
+                        final showNumberCalled = numberCalled.isNotEmpty && numberCalled != studentPhone;
+
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                           child: ExpansionTile(
@@ -511,9 +513,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (studentPhone.isNotEmpty) Text('Caller: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (studentPhone.isNotEmpty) Text('Phone: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (agentName.isNotEmpty) Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (numberCalled.isNotEmpty) Text('Number: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                if (showNumberCalled) Text('Number dialed: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (outcome.isNotEmpty && outcome != 'unknown') Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 if (date.isNotEmpty) Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                 Row(
