@@ -754,94 +754,71 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Widget _tabAiStudio() {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        NeyvoGlassPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('AI Studio', style: NeyvoTextStyles.heading),
-              const SizedBox(height: 6),
-              Text(
-                'Chat with AI to refine how this operator sounds. You don’t need to edit the raw prompt.',
-                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-              ),
-            ],
+    if (!_isUbOperator) {
+      return Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+        child: NeyvoGlassPanel(
+          child: Text(
+            'AI Studio is available for UB operators that use a custom prompt.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
           ),
         ),
-        const SizedBox(height: 16),
-        if (_isUbOperator) ...[
-          _buildAiStudioCard(),
-        ] else
-          NeyvoGlassPanel(
-            child: Text(
-              'AI Studio is available for UB operators that use a custom prompt.',
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-            ),
-          ),
-      ],
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(NeyvoSpacing.xl),
+      child: _buildAiStudioCard(),
     );
   }
 
   Widget _buildAiStudioCard() {
     final sub = (_wallet?['subscription_tier'] ?? '').toString().toLowerCase();
     final canUse = sub != 'free';
+    if (!canUse) {
+      return NeyvoGlassPanel(
+        child: Text(
+          'AI Studio requires a Pro or Business plan.',
+          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+        ),
+      );
+    }
     return NeyvoGlassPanel(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('AI Studio workspace', style: NeyvoTextStyles.heading),
-          const SizedBox(height: 6),
-          if (!canUse)
-            Text(
-              'AI Studio requires a Pro or Business plan.',
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-            )
-          else ...[
-            Text(
-              'On the left, chat with AI about how you want this operator to sound. On the right, preview the updated script and voicemail before applying.',
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 420,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left: conversation
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Conversation', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: NeyvoColors.bgRaised,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: NeyvoColors.borderSubtle),
-                            ),
-                            child: _buildAiStudioChatList(),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.bgRaised,
+                            borderRadius: BorderRadius.circular(NeyvoRadius.lg),
+                            border: Border.all(color: NeyvoColors.borderSubtle),
                           ),
+                          child: _buildAiStudioChatList(),
                         ),
-                        const SizedBox(height: 8),
-                        _buildAiStudioInputRow(),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: NeyvoSpacing.sm),
+                      _buildAiStudioInputRow(),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  // Right: suggestion preview
-                  Expanded(
-                    flex: 2,
-                    child: _buildAiStudioSuggestionPanel(),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: NeyvoSpacing.lg),
+                Expanded(
+                  flex: 2,
+                  child: _buildAiStudioSuggestionPanel(),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -935,8 +912,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             Text('Suggested script preview', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
             const SizedBox(height: 8),
             Text(
-              'When AI proposes changes, you’ll see the updated system prompt and voicemail here. '
-              'Send a message on the left to get started. If your script uses variables like {{studentName}}, they\'ll be filled when you make calls—see Additional settings for sources and defaults.',
+              'Suggestions will appear here with a before/after preview. Use the (i) button to view full prompt and voicemail when you have a suggestion.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
           ],
@@ -945,63 +921,118 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     }
 
     final msg = _chatMessages[latestIndex];
+    final hasChanges = msg.changes != null && msg.changes!.isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: NeyvoColors.bgRaised,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(NeyvoRadius.lg),
         border: Border.all(color: NeyvoColors.borderSubtle),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(NeyvoSpacing.lg),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Suggested script preview', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Suggested changes',
+                  style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.info_outline, size: 20),
+                tooltip: 'View full system prompt and voicemail',
+                onPressed: () => _showAiStudioFullContentDialog(msg),
+                style: IconButton.styleFrom(
+                  foregroundColor: NeyvoColors.teal,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: NeyvoSpacing.sm),
           Expanded(
-            child: DefaultTabController(
-              length: 2,
-              child: Column(
-                children: [
-                  const TabBar(
-                    labelColor: NeyvoColors.teal,
-                    unselectedLabelColor: NeyvoColors.textSecondary,
-                    indicatorColor: NeyvoColors.teal,
-                    tabs: [
-                      Tab(text: 'System prompt'),
-                      Tab(text: 'Voicemail'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        SingleChildScrollView(
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            msg.proposedPrompt ?? _promptCtrl.text,
-                            style: NeyvoTextStyles.bodyPrimary,
+            child: hasChanges
+                ? ListView.builder(
+                    itemCount: msg.changes!.length,
+                    itemBuilder: (context, i) {
+                      final c = msg.changes![i];
+                      final summary = c['summary'] ?? '';
+                      final before = c['before'] ?? '';
+                      final after = c['after'] ?? '';
+                      final type = c['type'] ?? '';
+                      final typeLabel = type == 'voicemail' ? 'Voicemail' : 'System prompt';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: NeyvoSpacing.lg),
+                        child: Container(
+                          padding: const EdgeInsets.all(NeyvoSpacing.md),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.bgOverlay,
+                            borderRadius: BorderRadius.circular(NeyvoRadius.md),
+                            border: Border.all(color: NeyvoColors.borderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (summary.isNotEmpty)
+                                Text(
+                                  summary,
+                                  style: NeyvoTextStyles.bodyPrimary.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              if (summary.isNotEmpty) const SizedBox(height: NeyvoSpacing.sm),
+                              Text(
+                                typeLabel,
+                                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                              ),
+                              if (before.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text('Before:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+                                const SizedBox(height: 2),
+                                Text(before, style: NeyvoTextStyles.bodyPrimary),
+                              ],
+                              if (after.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text('After:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+                                const SizedBox(height: 2),
+                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: NeyvoColors.teal)),
+                              ],
+                            ],
                           ),
                         ),
-                        SingleChildScrollView(
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            msg.proposedVoicemail ?? _voicemailCtrl.text,
-                            style: NeyvoTextStyles.bodyPrimary,
-                          ),
+                      );
+                    },
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          msg.text,
+                          style: NeyvoTextStyles.bodyPrimary,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.md),
+                        Text(
+                          'View full prompt and voicemail using the (i) button above to review before applying.',
+                          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
           ),
-          const SizedBox(height: 8),
-          if (msg.applied) ...[
-            Text('Applied and synced to operator.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
-          ] else if (msg.rejected) ...[
-            Text('Suggestion rejected.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
-          ] else ...[
+          const SizedBox(height: NeyvoSpacing.sm),
+          if (msg.applied)
+            Text(
+              'Applied and synced to operator.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+            )
+          else if (msg.rejected)
+            Text(
+              'Suggestion rejected.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+            )
+          else
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1009,16 +1040,95 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   onPressed: () => _rejectSuggestion(latestIndex),
                   child: const Text('Reject'),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: NeyvoSpacing.sm),
                 FilledButton(
                   onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: NeyvoColors.white,
+                  ),
                   child: const Text('Apply to operator'),
                 ),
               ],
             ),
-          ],
         ],
+      ),
+    );
+  }
+
+  void _showAiStudioFullContentDialog(_AiStudioMessage msg) {
+    final prompt = msg.proposedPrompt ?? _promptCtrl.text;
+    final voicemail = msg.proposedVoicemail ?? _voicemailCtrl.text;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: NeyvoColors.bgRaised,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                child: Row(
+                  children: [
+                    Text(
+                      'Full system prompt and voicemail',
+                      style: NeyvoTextStyles.heading,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: IconButton.styleFrom(foregroundColor: NeyvoColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: DefaultTabController(
+                  length: 2,
+                  child: Column(
+                    children: [
+                      TabBar(
+                        labelColor: NeyvoColors.teal,
+                        unselectedLabelColor: NeyvoColors.textSecondary,
+                        indicatorColor: NeyvoColors.teal,
+                        tabs: const [
+                          Tab(text: 'System prompt'),
+                          Tab(text: 'Voicemail'),
+                        ],
+                      ),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                              child: SelectableText(
+                                prompt,
+                                style: NeyvoTextStyles.bodyPrimary,
+                              ),
+                            ),
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                              child: SelectableText(
+                                voicemail,
+                                style: NeyvoTextStyles.bodyPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1088,6 +1198,23 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       final explanation = (res['explanation'] ?? '').toString().trim();
       final proposedPrompt = (res['custom_system_prompt'] ?? '').toString();
       final proposedVoicemail = (res['voicemail_message'] ?? '').toString();
+      final rawChanges = res['changes'];
+      List<Map<String, String>>? changes;
+      if (rawChanges is List && rawChanges.isNotEmpty) {
+        changes = [];
+        for (final c in rawChanges) {
+          if (c is! Map) continue;
+          final type = (c['type'] ?? '').toString().trim();
+          if (type != 'system_prompt' && type != 'voicemail') continue;
+          changes.add({
+            'type': type,
+            'summary': (c['summary'] ?? '').toString(),
+            'before': (c['before'] ?? '').toString(),
+            'after': (c['after'] ?? '').toString(),
+          });
+        }
+        if (changes!.isEmpty) changes = null;
+      }
       final msgText = explanation.isEmpty
           ? 'I\'ve prepared an updated script and voicemail based on your request.'
           : explanation;
@@ -1099,6 +1226,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               msgText,
               proposedPrompt: proposedPrompt.isNotEmpty ? proposedPrompt : null,
               proposedVoicemail: proposedVoicemail.isNotEmpty ? proposedVoicemail : null,
+              changes: changes,
             ),
           );
         });
@@ -1937,6 +2065,7 @@ class _AiStudioMessage {
   final String text;
   final String? proposedPrompt;
   final String? proposedVoicemail;
+  final List<Map<String, String>>? changes;
   final bool applied;
   final bool rejected;
 
@@ -1945,6 +2074,7 @@ class _AiStudioMessage {
     required this.text,
     this.proposedPrompt,
     this.proposedVoicemail,
+    this.changes,
     this.applied = false,
     this.rejected = false,
   });
@@ -1960,6 +2090,7 @@ class _AiStudioMessage {
       text: text,
       proposedPrompt: proposedPrompt,
       proposedVoicemail: proposedVoicemail,
+      changes: changes,
       applied: applied ?? this.applied,
       rejected: rejected ?? this.rejected,
     );
@@ -1973,12 +2104,14 @@ class _AiStudioMessage {
     String text, {
     String? proposedPrompt,
     String? proposedVoicemail,
+    List<Map<String, String>>? changes,
   }) {
     return _AiStudioMessage(
       isUser: false,
       text: text,
       proposedPrompt: proposedPrompt,
       proposedVoicemail: proposedVoicemail,
+      changes: changes,
     );
   }
 }
