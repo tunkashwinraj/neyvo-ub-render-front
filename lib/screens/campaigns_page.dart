@@ -661,22 +661,16 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   Future<void> _confirmDeleteCampaign(String campaignId, String campaignName) async {
-    final confirm = await showDialog<bool>(
+    final confirmName = campaignName.trim().isEmpty ? 'Campaign' : campaignName.trim();
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete campaign?'),
-        content: Text('"$campaignName" will be permanently deleted. Only draft or scheduled campaigns can be deleted.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.error),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (ctx) => _DeleteCampaignConfirmDialog(
+        confirmName: confirmName,
+        onCancel: () => Navigator.of(ctx).pop(false),
+        onDelete: () => Navigator.of(ctx).pop(true),
       ),
     );
-    if (confirm != true || !mounted) return;
+    if (confirmed != true || !mounted) return;
     try {
       await NeyvoPulseApi.deleteCampaign(campaignId);
       if (mounted) {
@@ -685,7 +679,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
           _stopDetailAutoRefresh();
         });
         _load();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign deleted')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign deleted. Data is kept for records.')));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
@@ -1518,6 +1512,45 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     padding: const EdgeInsets.only(top: NeyvoSpacing.sm),
                     child: Text('Showing first 50 of ${calls.length} calls', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
                   ),
+                if (canEdit) ...[
+                  const SizedBox(height: NeyvoSpacing.xl),
+                  Card(
+                    color: NeyvoTheme.bgCard,
+                    child: Padding(
+                      padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: NeyvoTheme.error, size: 24),
+                              const SizedBox(width: 10),
+                              Text('Danger zone', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.error)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Remove this campaign from the list. Campaign data is kept for records. Only draft or scheduled campaigns can be deleted; running campaigns cannot be deleted.',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: NeyvoTheme.error,
+                                side: BorderSide(color: NeyvoTheme.error),
+                              ),
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              label: const Text('Delete campaign'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2024,6 +2057,82 @@ class _CampaignsPageState extends State<CampaignsPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Dialog to confirm campaign deletion by typing the campaign name (same pattern as operator delete).
+class _DeleteCampaignConfirmDialog extends StatefulWidget {
+  const _DeleteCampaignConfirmDialog({
+    required this.confirmName,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  final String confirmName;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  @override
+  State<_DeleteCampaignConfirmDialog> createState() => _DeleteCampaignConfirmDialogState();
+}
+
+class _DeleteCampaignConfirmDialogState extends State<_DeleteCampaignConfirmDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _matches => _controller.text.trim() == widget.confirmName;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: NeyvoTheme.bgSurface,
+      title: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: NeyvoTheme.error, size: 28),
+          const SizedBox(width: 12),
+          const Text('Delete campaign'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Campaign data will be kept for records but the campaign will be removed from the list. Only draft or scheduled campaigns can be deleted. Running campaigns cannot be deleted.\n\nType \'${widget.confirmName}\' to confirm.',
+            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: widget.confirmName,
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: NeyvoTheme.bgPrimary,
+            ),
+            style: NeyvoType.bodyMedium,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: widget.onCancel,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _matches ? widget.onDelete : null,
+          style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.error),
+          child: const Text('Delete'),
+        ),
+      ],
     );
   }
 }
