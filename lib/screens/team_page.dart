@@ -9,6 +9,9 @@ import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
 import 'member_detail_page.dart';
 
+/// Fixed width for Add/Edit team member dialogs (same for admin and staff).
+const double kTeamMemberDialogWidth = 560;
+
 /// Permission keys and display labels for staff role.
 const List<MapEntry<String, String>> kTeamPermissions = [
   MapEntry('students', 'Students'),
@@ -37,11 +40,32 @@ class _TeamPageState extends State<TeamPage> {
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
   String? _error;
+  final _searchController = TextEditingController();
+
+  List<Map<String, dynamic>> get _filteredMembers {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return _members;
+    return _members.where((m) {
+      final name = (m['name']?.toString() ?? '').toLowerCase();
+      final email = (m['email']?.toString() ?? '').toLowerCase();
+      final role = (m['role']?.toString() ?? '').toLowerCase();
+      return name.contains(query) ||
+          email.contains(query) ||
+          role.contains(query);
+    }).toList();
+  }
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(() => setState(() {}));
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -120,166 +144,226 @@ class _TeamPageState extends State<TeamPage> {
     );
   }
 
+  bool get _canAddMember =>
+      _myRole == 'admin' || (_myPermissions?.contains('team') ?? false);
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: NeyvoColors.teal),
-      );
-    }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              _error!,
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _load,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(NeyvoSpacing.lg),
-      children: [
-        Text(
-          'Team',
-          style: NeyvoTextStyles.title.copyWith(
-            fontWeight: FontWeight.w700,
-            color: NeyvoColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: NeyvoSpacing.sm),
-        Text(
-          'Manage team members and roles',
-          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.xl),
-        Text(
-          () {
-            final role = _myRole ?? '—';
-            var name = (_myName ?? '').trim();
-            var email = (_myEmail ?? '').trim();
-            if (name.isEmpty && email.isEmpty) {
-              final cu = FirebaseAuth.instance.currentUser;
-              name = cu?.displayName ?? '';
-              email = cu?.email ?? '';
-            }
-            final nameOrEmail = name.isNotEmpty ? name : (email.isNotEmpty ? email : '');
-            if (nameOrEmail.isEmpty) return 'Your role: $role';
-            return 'Your role: $role · $nameOrEmail';
-          }(),
-          style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textSecondary),
-        ),
-        const SizedBox(height: NeyvoSpacing.lg),
-        if (_myRole == 'admin' || (_myPermissions?.contains('team') ?? false)) ...[
-          OutlinedButton.icon(
-            onPressed: _openAddMember,
-            icon: const Icon(Icons.person_add_outlined, size: 18),
-            label: const Text('Add team member'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: NeyvoColors.teal,
-              side: const BorderSide(color: NeyvoColors.teal),
-            ),
-          ),
-          const SizedBox(height: NeyvoSpacing.lg),
-        ],
-        Text(
-          'Members',
-          style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
-        ),
-        const SizedBox(height: NeyvoSpacing.sm),
-        if (_members.isEmpty)
-          Text(
-            'No team members yet. Add members above if you have permission.',
-            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-          )
-        else
-          ..._members.map((m) {
-            final rawName = m['name'];
-            final name = rawName == null ? '' : rawName.toString().trim();
-            final rawEmail = m['email'];
-            final email = rawEmail == null ? '' : rawEmail.toString().trim();
-            final userId = m['user_id'] ?? m['id'] ?? '?';
-            final role = m['role']?.toString() ?? '—';
-            final perms = m['permissions'];
-            final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
-            String display;
-            if (name.isNotEmpty) {
-              display = name;
-            } else if (email.isNotEmpty) {
-              display = email;
-            } else if (_myUserId != null && userId.toString() == _myUserId) {
-              final fromApi = (_myName ?? _myEmail ?? '').toString().trim();
-              if (fromApi.isNotEmpty) {
-                display = fromApi;
-              } else {
-                final cu = FirebaseAuth.instance.currentUser;
-                display = (cu?.displayName ?? cu?.email ?? '').toString().trim();
-                if (display.isEmpty) display = userId.toString();
-              }
-            } else {
-              display = userId.toString();
-            }
-            return Padding(
-              padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-              child: InkWell(
-                onTap: () => _openMemberDetail(m),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: NeyvoSpacing.md,
-                    vertical: NeyvoSpacing.sm,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Team'),
+        backgroundColor: NeyvoColors.bgLight,
+        foregroundColor: NeyvoColors.textPrimary,
+      ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: NeyvoColors.teal),
+            )
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _error!,
+                          style: NeyvoTextStyles.body
+                              .copyWith(color: NeyvoColors.error),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.lg),
+                        FilledButton(
+                            onPressed: _load, child: const Text('Retry')),
+                      ],
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: NeyvoTheme.surface.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: NeyvoTheme.borderSubtle),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              display,
-                              style: NeyvoTextStyles.bodyPrimary,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Role: $role'
-                                  + (permList.isNotEmpty ? ' · ${permList.join(", ")}' : ''),
-                              style: NeyvoTextStyles.micro.copyWith(
-                                color: NeyvoTheme.textMuted,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        color: NeyvoTheme.surface,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText:
+                              'Search by name, email, or role...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () =>
+                                      _searchController.clear(),
+                                )
+                              : null,
                         ),
                       ),
-                      Icon(
-                        Icons.chevron_right,
-                        color: NeyvoColors.textMuted,
-                        size: 20,
-                      ),
-                    ],
-                  ),
+                    ),
+                    Expanded(
+                      child: _filteredMembers.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.people_outlined,
+                                      size: 64,
+                                      color: NeyvoColors.textMuted),
+                                  const SizedBox(height: NeyvoSpacing.md),
+                                  Text(
+                                    _members.isEmpty
+                                        ? 'No team members yet'
+                                        : 'No members found',
+                                    style: NeyvoType.bodyMedium
+                                        .copyWith(
+                                            color: NeyvoColors.textMuted),
+                                  ),
+                                  if (_members.isEmpty &&
+                                      _canAddMember) ...[
+                                    const SizedBox(height: NeyvoSpacing.sm),
+                                    Text(
+                                      'Add members using the + button.',
+                                      style: NeyvoType.bodySmall
+                                          .copyWith(
+                                              color: NeyvoColors.textMuted),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(NeyvoSpacing.md),
+                              itemCount: _filteredMembers.length,
+                              itemBuilder: (context, i) {
+                                final m = _filteredMembers[i];
+                                final rawName = m['name'];
+                                final name = rawName == null
+                                    ? ''
+                                    : rawName.toString().trim();
+                                final rawEmail = m['email'];
+                                final email = rawEmail == null
+                                    ? ''
+                                    : rawEmail.toString().trim();
+                                final userId =
+                                    m['user_id'] ?? m['id'] ?? '?';
+                                final role =
+                                    m['role']?.toString() ?? '—';
+                                final perms = m['permissions'];
+                                final permList = perms is List
+                                    ? perms
+                                        .map((e) => e.toString())
+                                        .toList()
+                                    : <String>[];
+                                String display;
+                                if (name.isNotEmpty) {
+                                  display = name;
+                                } else if (email.isNotEmpty) {
+                                  display = email;
+                                } else if (_myUserId != null &&
+                                    userId.toString() == _myUserId) {
+                                  final fromApi = (_myName ?? _myEmail ?? '')
+                                      .toString()
+                                      .trim();
+                                  if (fromApi.isNotEmpty) {
+                                    display = fromApi;
+                                  } else {
+                                    final cu =
+                                        FirebaseAuth.instance.currentUser;
+                                    display = (cu?.displayName ??
+                                            cu?.email ?? '')
+                                        .toString()
+                                        .trim();
+                                    if (display.isEmpty) {
+                                      display = userId.toString();
+                                    }
+                                  }
+                                } else {
+                                  display = userId.toString();
+                                }
+                                return Card(
+                                  margin: const EdgeInsets.only(
+                                      bottom: NeyvoSpacing.sm),
+                                  child: InkWell(
+                                    onTap: () => _openMemberDetail(m),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(
+                                          NeyvoSpacing.md),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundColor: NeyvoColors.teal
+                                                .withOpacity(0.1),
+                                            child: Text(
+                                              display.isNotEmpty
+                                                  ? display[0]
+                                                      .toUpperCase()
+                                                  : '?',
+                                              style: TextStyle(
+                                                color: NeyvoColors.teal,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                              width: NeyvoSpacing.md),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  display,
+                                                  style: NeyvoType.titleMedium,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Role: $role${permList.isNotEmpty ? ' · ${permList.join(", ")}' : ''}',
+                                                  style: NeyvoType.bodySmall
+                                                      .copyWith(
+                                                          color: NeyvoColors
+                                                              .textSecondary),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.chevron_right,
+                                            color: NeyvoColors.textMuted,
+                                            size: 20,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ),
-            );
-          }),
-      ],
+      floatingActionButton: _canAddMember
+          ? FloatingActionButton(
+              onPressed: _openAddMember,
+              backgroundColor: NeyvoColors.teal,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 
@@ -406,10 +490,15 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary),
       ),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: kTeamMemberDialogWidth,
+            maxWidth: kTeamMemberDialogWidth,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             TextField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
@@ -547,6 +636,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
               ),
             ],
           ],
+        ),
         ),
       ),
       actions: [
@@ -700,10 +790,15 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary),
       ),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: kTeamMemberDialogWidth,
+            maxWidth: kTeamMemberDialogWidth,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             if (email.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
@@ -839,6 +934,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               ),
             ],
           ],
+        ),
         ),
       ),
       actions: [
