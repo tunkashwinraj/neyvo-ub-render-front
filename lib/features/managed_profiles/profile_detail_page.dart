@@ -9,6 +9,7 @@ import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
+import 'widgets/knowledge_base_section.dart';
 
 class ManagedProfileDetailPage extends StatefulWidget {
   const ManagedProfileDetailPage({
@@ -43,8 +44,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _promptCtrl = TextEditingController();
   final _voicemailCtrl = TextEditingController();
   final _aiSuggestMessageCtrl = TextEditingController();
-  final _knowledgeQuestionCtrl = TextEditingController();
-  final _knowledgeAnswerCtrl = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
@@ -65,14 +64,11 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   List<Map<String, dynamic>> _variableMetadata = [];
   List<Map<String, dynamic>> _openVariables = [];
   bool _variableMetadataLoading = false;
-  bool _knowledgeLoading = false;
-  bool _knowledgeSaving = false;
-  List<Map<String, dynamic>> _knowledgeItems = const [];
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _load();
   }
 
@@ -84,8 +80,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _promptCtrl.dispose();
     _voicemailCtrl.dispose();
     _aiSuggestMessageCtrl.dispose();
-    _knowledgeQuestionCtrl.dispose();
-    _knowledgeAnswerCtrl.dispose();
     super.dispose();
   }
 
@@ -114,16 +108,12 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         ManagedProfileApiService.getProfile(widget.profileId),
         NeyvoPulseApi.listNumbers(),
         NeyvoPulseApi.getBillingWallet(),
-        ManagedProfileApiService.listKnowledgeItems(widget.profileId).catchError((_) => <String, dynamic>{'items': []}),
       ]);
       final profile = Map<String, dynamic>.from(results[0] as Map);
       final numbersRes = Map<String, dynamic>.from(results[1] as Map);
       final walletRes = results[2] as Map<String, dynamic>?;
-      final knowledgeRes = Map<String, dynamic>.from(results[3] as Map);
       final raw = (numbersRes['numbers'] as List?) ?? const [];
       final numbers = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      final knowledgeRaw = (knowledgeRes['items'] as List?) ?? const [];
-      final knowledgeItems = knowledgeRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
       _nameCtrl.text = (profile['profile_name'] ?? profile['name'] ?? '').toString();
       _goalCtrl.text = (profile['work_goals'] ?? profile['goal'] ?? '').toString();
@@ -157,7 +147,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _profile = profile;
         _numbers = numbers;
         _wallet = walletRes;
-        _knowledgeItems = knowledgeItems;
         _variableDefaults = Map<String, String>.from(variableDefaults);
         _loading = false;
       });
@@ -227,59 +216,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
-  }
-
-  Future<void> _loadKnowledgeItems() async {
-    if (!mounted) return;
-    setState(() => _knowledgeLoading = true);
-    try {
-      final res = await ManagedProfileApiService.listKnowledgeItems(widget.profileId);
-      final raw = (res['items'] as List?) ?? const [];
-      if (!mounted) return;
-      setState(() {
-        _knowledgeItems = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        _knowledgeLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _knowledgeLoading = false);
-    }
-  }
-
-  Future<void> _saveKnowledgeItem() async {
-    final question = _knowledgeQuestionCtrl.text.trim();
-    final answer = _knowledgeAnswerCtrl.text.trim();
-    if (question.isEmpty || answer.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill Question/Topic and Answer/Policy.')),
-      );
-      return;
-    }
-    if (_knowledgeSaving) return;
-    setState(() => _knowledgeSaving = true);
-    try {
-      await ManagedProfileApiService.addKnowledgeItem(
-        widget.profileId,
-        question: question,
-        answer: answer,
-      );
-      _knowledgeQuestionCtrl.clear();
-      _knowledgeAnswerCtrl.clear();
-      await _loadKnowledgeItems();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved to knowledge base.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save knowledge: $e')),
-      );
-      setState(() => _knowledgeSaving = false);
-      return;
-    }
-    if (mounted) setState(() => _knowledgeSaving = false);
   }
 
   Future<void> _attachToNumber() async {
@@ -650,6 +586,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       indicatorColor: NeyvoColors.teal,
                       tabs: const [
                         Tab(text: 'Personality'),
+                        Tab(text: 'Knowledge'),
                         Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
                         Tab(text: 'Additional settings'),
@@ -661,6 +598,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       controller: _tabs,
                       children: [
                         _tabPersonality(),
+                        _tabKnowledge(),
                         _tabAiStudio(),
                         _tabVoice(),
                         _tabAdditionalSettings(),
@@ -748,6 +686,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tabKnowledge() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        KnowledgeBaseSection(
+          profileId: widget.profileId,
         ),
       ],
     );
@@ -1725,8 +1674,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       children: [
         _buildVariablesCard(),
         const SizedBox(height: 16),
-        _buildKnowledgeBaseCard(),
-        const SizedBox(height: 16),
         NeyvoGlassPanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1787,99 +1734,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(height: 24),
         _buildDangerZone(),
       ],
-    );
-  }
-
-  Widget _buildKnowledgeBaseCard() {
-    return NeyvoGlassPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Agent Knowledge Base', style: NeyvoTextStyles.heading),
-          const SizedBox(height: 8),
-          Text(
-            'Add custom Q&A or policy answers the operator can retrieve during calls.',
-            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-          ),
-          const SizedBox(height: 12),
-          Text('Question/Topic', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _knowledgeQuestionCtrl,
-            maxLines: 2,
-            decoration: const InputDecoration(
-              hintText: 'e.g. What is the tuition payment extension policy?',
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text('Answer/Policy', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _knowledgeAnswerCtrl,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              hintText: 'Enter the policy or answer to read to callers.',
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              FilledButton(
-                onPressed: _knowledgeSaving ? null : _saveKnowledgeItem,
-                style: FilledButton.styleFrom(
-                  backgroundColor: NeyvoColors.teal,
-                  foregroundColor: NeyvoColors.white,
-                ),
-                child: _knowledgeSaving
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Save to Knowledge Base'),
-              ),
-              const SizedBox(width: 10),
-              TextButton.icon(
-                onPressed: _knowledgeLoading ? null : _loadKnowledgeItems,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_knowledgeLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-          if (_knowledgeItems.isEmpty && !_knowledgeLoading)
-            Text(
-              'No saved Q&A yet.',
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-            )
-          else
-            Column(
-              children: _knowledgeItems.map((item) {
-                final q = (item['question'] ?? '').toString();
-                final a = (item['answer'] ?? '').toString();
-                return Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(top: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: NeyvoColors.bgRaised.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: NeyvoColors.borderSubtle),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Q: $q', style: NeyvoTextStyles.bodyPrimary),
-                      const SizedBox(height: 6),
-                      Text('A: $a', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-        ],
-      ),
     );
   }
 

@@ -97,6 +97,10 @@ class ManagedProfileApiService {
         'answer': answer,
       });
 
+  static Future<void> deleteKnowledgeItem(String profileId, String itemId) async {
+    await _delete('/api/managed-profiles/$profileId/knowledge/items/$itemId');
+  }
+
   static Future<Map<String, dynamic>> aiSuggest(String profileId, String message) async =>
       _post('/api/managed-profiles/$profileId/ai-suggest', {'message': message});
 
