@@ -1595,31 +1595,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        NeyvoGlassPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Guardrails', style: NeyvoTextStyles.heading),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _handoffEnabled,
-                onChanged: (v) => setState(() => _handoffEnabled = v),
-                title: Text('Allow human handoff', style: NeyvoTextStyles.bodyPrimary),
-                subtitle: Text('Enable transferring callers to a human fallback.', style: NeyvoTextStyles.micro),
-              ),
-              const SizedBox(height: 6),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _interruptEnabled,
-                onChanged: (v) => setState(() => _interruptEnabled = v),
-                title: Text('Interrupt enabled', style: NeyvoTextStyles.bodyPrimary),
-                subtitle: Text('Allow callers to interrupt the operator mid-sentence.', style: NeyvoTextStyles.micro),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         _buildVariablesCard(),
         const SizedBox(height: 16),
         _buildKnowledgeBaseCard(),
