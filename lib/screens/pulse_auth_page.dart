@@ -3,6 +3,7 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
@@ -217,10 +218,15 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    Image.asset(
-                      'assets/ub_logo/ub-logo-rgb-horizontal.jpg',
+                    SvgPicture.asset(
+                      'assets/ub_logo/ub_logo_horizontal_purple.svg',
                       fit: BoxFit.contain,
                       height: 58,
+                      // Force UB purple so the logo is not black
+                      colorFilter: const ColorFilter.mode(
+                        NeyvoColors.ubPurple,
+                        BlendMode.srcIn,
+                      ),
                     ),
                     const SizedBox(height: NeyvoSpacing.xl),
                     Text(

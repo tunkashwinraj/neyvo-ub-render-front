@@ -54,13 +54,13 @@ class NeyvoColors {
   static const Color error = Color(0xFFD32F2F);   // red for errors
   static const Color info = ubLightBlue;
 
-  // Sidebar — clean white with purple accents
-  static const Color sidebarBg = white;
-  static const Color sidebarSelected = Color(0x0D592C82);   // 5% purple
-  static const Color sidebarHover = Color(0x08592C82);     // 3% purple
-  static const Color sidebarBgLight = white;
-  static const Color sidebarSelectedLight = Color(0x0D592C82);
-  static const Color sidebarHoverLight = Color(0x08592C82);
+  // Sidebar — UB purple with subtle elevation states
+  static const Color sidebarBg = ubPurple;
+  static const Color sidebarSelected = Color(0xFF7B4FA8);   // lighter purple band
+  static const Color sidebarHover = Color(0x33592C82);     // 20% purple overlay
+  static const Color sidebarBgLight = ubPurple;
+  static const Color sidebarSelectedLight = sidebarSelected;
+  static const Color sidebarHoverLight = sidebarHover;
 }
 
 /// Typography scale — Roboto Slab (headings) + Open Sans (body) per UB style guide.

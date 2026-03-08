@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -404,7 +405,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — UB horizontal logo (RGB)
+                // Logo area — UB horizontal logo (KO on purple)
                 Container(
                   height: 64,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -413,10 +414,14 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Image.asset(
-                      'assets/ub_logo/ub-logo-rgb-horizontal.jpg',
+                    child: SvgPicture.asset(
+                      'assets/ub_logo/ub_logo_horizontal_white.svg',
                       fit: BoxFit.contain,
                       height: 46,
+                      colorFilter: const ColorFilter.mode(
+                        NeyvoColors.white,
+                        BlendMode.srcIn,
+                      ),
                     ),
                   ),
                 ),
@@ -454,14 +459,18 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                     children: [
                       Text(
                         'Account ID: ${_accountIdDisplay ?? '—'}',
-                        style: NeyvoTextStyles.micro,
+                        style: NeyvoTextStyles.micro.copyWith(
+                          color: NeyvoColors.white.withOpacity(0.75),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         FirebaseAuth.instance.currentUser?.email ?? '—',
-                        style: NeyvoTextStyles.micro,
+                        style: NeyvoTextStyles.micro.copyWith(
+                          color: NeyvoColors.white.withOpacity(0.65),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -470,8 +479,17 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                 ),
                 ListTile(
                   dense: true,
-                  leading: Icon(Icons.logout, size: 18, color: NeyvoColors.textMuted),
-                  title: Text('Sign out', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                  leading: Icon(
+                    Icons.logout,
+                    size: 18,
+                    color: NeyvoColors.white.withOpacity(0.8),
+                  ),
+                  title: Text(
+                    'Sign out',
+                    style: NeyvoTextStyles.label.copyWith(
+                      color: NeyvoColors.white.withOpacity(0.9),
+                    ),
+                  ),
                   onTap: () async => await _signOut(),
                 ),
                 const SizedBox(height: 8),
@@ -896,6 +914,25 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
   @override
   Widget build(BuildContext context) {
     final isActive = widget.isActive;
+    final baseColor = NeyvoColors.white.withOpacity(0.7);
+    final hoverColor = NeyvoColors.white.withOpacity(0.9);
+    final activeTextColor = NeyvoColors.white;
+    final activeIconColor = NeyvoColors.ubLightBlue;
+
+    final Color iconColor;
+    final Color textColor;
+
+    if (isActive) {
+      iconColor = activeIconColor;
+      textColor = activeTextColor;
+    } else if (_hover) {
+      iconColor = hoverColor;
+      textColor = hoverColor;
+    } else {
+      iconColor = baseColor;
+      textColor = baseColor;
+    }
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
@@ -920,7 +957,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
                   Icon(
                     widget.icon,
                     size: 16,
-                    color: isActive ? NeyvoColors.teal : (_hover ? NeyvoColors.textSecondary : NeyvoColors.textMuted),
+                    color: iconColor,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -928,7 +965,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
                       widget.label,
                       style: NeyvoTextStyles.bodyPrimary.copyWith(
                         fontSize: 14,
-                        color: isActive ? NeyvoColors.teal : (_hover ? NeyvoColors.textSecondary : NeyvoColors.textMuted),
+                        color: textColor,
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -945,7 +982,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
                 child: Container(
                   width: 3,
                   decoration: const BoxDecoration(
-                    color: NeyvoColors.teal,
+                    color: NeyvoColors.ubLightBlue,
                     borderRadius: BorderRadius.only(
                       topRight: Radius.circular(2),
                       bottomRight: Radius.circular(2),
