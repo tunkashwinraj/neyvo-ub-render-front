@@ -110,6 +110,7 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
                           final question = questionCtrl.text.trim();
                           final answer = answerCtrl.text.trim();
                           if (question.isEmpty || answer.isEmpty) {
+                            if (!ctx.mounted) return;
                             setLocalState(() {
                               localError = 'Please fill both Question/Topic and Answer/Policy.';
                             });
@@ -124,18 +125,26 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
                             );
                             if (ctx.mounted) Navigator.of(ctx).pop();
                             await _loadItems();
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Saved to knowledge base.')),
-                            );
+                            if (!mounted || !context.mounted) return;
+                            final messenger = ScaffoldMessenger.maybeOf(context);
+                            if (messenger != null) {
+                              messenger.showSnackBar(
+                                const SnackBar(content: Text('Saved to knowledge base.')),
+                              );
+                            }
                           } catch (e) {
-                            if (mounted) {
+                            if (mounted && ctx.mounted) {
                               setLocalState(() {
                                 localError = 'Failed to save knowledge. Please try again.';
                               });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to save knowledge: $e')),
-                              );
+                              if (context.mounted) {
+                                final messenger = ScaffoldMessenger.maybeOf(context);
+                                if (messenger != null) {
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text('Failed to save knowledge: $e')),
+                                  );
+                                }
+                              }
                             }
                           } finally {
                             if (mounted) setState(() => _saving = false);
@@ -160,9 +169,133 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
         );
       },
     );
+  }
 
-    questionCtrl.dispose();
-    answerCtrl.dispose();
+  Future<void> _openEditDialog(Map<String, dynamic> item) async {
+    final itemId = (item['id'] ?? '').toString();
+    final questionCtrl = TextEditingController(text: (item['question'] ?? '').toString());
+    final answerCtrl = TextEditingController(text: (item['answer'] ?? '').toString());
+    String? localError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              backgroundColor: NeyvoColors.bgBase,
+              title: const Text('Edit Knowledge'),
+              content: SizedBox(
+                width: 560,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Update the question or answer. The new version will be re-embedded for calls.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: questionCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Question/Topic',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: answerCtrl,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Answer/Policy',
+                      ),
+                    ),
+                    if (localError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        localError!,
+                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          final question = questionCtrl.text.trim();
+                          final answer = answerCtrl.text.trim();
+                          if (question.isEmpty || answer.isEmpty) {
+                            if (!ctx.mounted) return;
+                            setLocalState(() {
+                              localError = 'Please fill both Question/Topic and Answer/Policy.';
+                            });
+                            return;
+                          }
+                          setState(() => _saving = true);
+                          try {
+                            await ManagedProfileApiService.addKnowledgeItem(
+                              widget.profileId,
+                              question: question,
+                              answer: answer,
+                            );
+                            // Remove the old item so we don't show duplicates.
+                            if (itemId.isNotEmpty) {
+                              await ManagedProfileApiService.deleteKnowledgeItem(widget.profileId, itemId);
+                            }
+                            if (ctx.mounted) Navigator.of(ctx).pop();
+                            await _loadItems();
+                            if (!mounted || !context.mounted) return;
+                            final messenger = ScaffoldMessenger.maybeOf(context);
+                            if (messenger != null) {
+                              messenger.showSnackBar(
+                                const SnackBar(content: Text('Knowledge updated.')),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted && ctx.mounted) {
+                              setLocalState(() {
+                                localError = 'Failed to update knowledge. Please try again.';
+                              });
+                              if (context.mounted) {
+                                final messenger = ScaffoldMessenger.maybeOf(context);
+                                if (messenger != null) {
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text('Update failed: $e')),
+                                  );
+                                }
+                              }
+                            }
+                          } finally {
+                            if (mounted) setState(() => _saving = false);
+                          }
+                        },
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  label: Text(_saving ? 'Saving...' : 'Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _deleteItem(Map<String, dynamic> item) async {
@@ -204,14 +337,21 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
       setState(() {
         _items = _items.where((e) => (e['id'] ?? '').toString() != itemId).toList();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Knowledge item deleted.')),
-      );
+      if (!context.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger != null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Knowledge item deleted.')),
+        );
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
-      );
+      if (!mounted || !context.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger != null) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Delete failed: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
@@ -352,11 +492,22 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
                         ],
                       ),
                     ),
-                    trailing: IconButton(
-                      tooltip: 'Delete',
-                      onPressed: _deleting ? null : () => _deleteItem(item),
-                      icon: const Icon(Icons.delete_outline),
-                      color: NeyvoColors.error,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit',
+                          onPressed: _saving ? null : () => _openEditDialog(item),
+                          icon: const Icon(Icons.edit_outlined),
+                          color: NeyvoColors.textSecondary,
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          onPressed: _deleting ? null : () => _deleteItem(item),
+                          icon: const Icon(Icons.delete_outline),
+                          color: NeyvoColors.error,
+                        ),
+                      ],
                     ),
                     children: [
                       Align(

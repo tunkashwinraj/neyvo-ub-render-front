@@ -68,7 +68,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _load();
   }
 
@@ -586,6 +586,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       indicatorColor: NeyvoColors.teal,
                       tabs: const [
                         Tab(text: 'Personality'),
+                        Tab(text: 'Knowledge'),
                         Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
                         Tab(text: 'Additional settings'),
@@ -597,6 +598,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       controller: _tabs,
                       children: [
                         _tabPersonality(),
+                        _tabKnowledge(),
                         _tabAiStudio(),
                         _tabVoice(),
                         _tabAdditionalSettings(),
@@ -685,8 +687,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        KnowledgeBaseSection(profileId: widget.profileId),
+      ],
+    );
+  }
+
+  Widget _tabKnowledge() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        KnowledgeBaseSection(
+          profileId: widget.profileId,
+        ),
       ],
     );
   }
