@@ -18,6 +18,7 @@
   import 'screens/pulse_shell.dart';
   import 'theme/neyvo_theme.dart';
   import 'widgets/inactivity_detector.dart';
+  import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
   /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
@@ -69,9 +70,7 @@
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
+              return const NeyvoLoadingScreen();
             }
             if (snapshot.hasData && snapshot.data != null) {
               return const InactivityDetector(
@@ -98,6 +97,37 @@
 
     @override
     State<_PostAuthGate> createState() => _PostAuthGateState();
+  }
+
+  /// Paths that PulseShell can open as the initial tab (must match PulseRouteNames).
+  const Set<String> _pulseShellPaths = {
+    PulseRouteNames.dashboard,
+    PulseRouteNames.launch,
+    PulseRouteNames.agents,
+    PulseRouteNames.calls,
+    PulseRouteNames.students,
+    PulseRouteNames.campaigns,
+    PulseRouteNames.team,
+    PulseRouteNames.auditLog,
+    PulseRouteNames.analytics,
+    PulseRouteNames.billing,
+    PulseRouteNames.wallet,
+    PulseRouteNames.settings,
+    PulseRouteNames.phoneNumbers,
+    PulseRouteNames.managedProfiles,
+    PulseRouteNames.integrations,
+    PulseRouteNames.voiceTier,
+    PulseRouteNames.subscriptionPlan,
+    PulseRouteNames.agency,
+    PulseRouteNames.voiceStudio,
+    PulseRouteNames.testCall,
+  };
+
+  String? _initialRouteFromPath(String? path, {required bool hasPaymentParam}) {
+    if (path == null || path.isEmpty) return hasPaymentParam ? PulseRouteNames.billing : null;
+    if (hasPaymentParam) return PulseRouteNames.billing;
+    if (path.startsWith('/pulse/') && _pulseShellPaths.contains(path)) return path;
+    return null;
   }
 
   class _PostAuthGateState extends State<_PostAuthGate> {
@@ -150,20 +180,15 @@
     @override
     Widget build(BuildContext context) {
       if (!_loaded) {
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        return const NeyvoLoadingScreen();
       }
       if (!_onboardingCompleted) {
         return const UbOnboardingPage();
       }
-      // After Stripe redirect: land on billing (or wallet/settings) when URL path matches.
-      // Success/cancel URLs point to /pulse/billing so sidebar remains usable.
+      // On web refresh: use URL path so /pulse/operators (etc.) opens the correct tab instead of a blank/wrong view.
       final path = kIsWeb ? Uri.base.path : null;
       final hasPaymentParam = kIsWeb && (Uri.base.queryParameters['payment'] ?? '').trim().isNotEmpty;
-      final initialRoute = (path == PulseRouteNames.wallet || path == PulseRouteNames.billing || path == PulseRouteNames.settings)
-          ? path
-          : (hasPaymentParam ? PulseRouteNames.billing : null);
+      final initialRoute = _initialRouteFromPath(path, hasPaymentParam: hasPaymentParam);
       return PulseShell(initialRouteName: initialRoute);
     }
   }

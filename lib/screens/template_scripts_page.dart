@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
-import '../../theme/spearia_theme.dart';
+import '../theme/neyvo_theme.dart';
 
 class TemplateScriptsPage extends StatefulWidget {
   const TemplateScriptsPage({super.key});
@@ -77,12 +77,12 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
         await NeyvoPulseApi.createCallTemplate(name: name, body: body);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved'), backgroundColor: SpeariaAura.success));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved'), backgroundColor: NeyvoTheme.success));
         _closeEditor();
         _load();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
     }
   }
 
@@ -117,7 +117,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
         _load();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: SpeariaAura.error));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
     }
   }
 
@@ -132,13 +132,13 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(SpeariaSpacing.xl),
+      padding: const EdgeInsets.all(NeyvoSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_error != null) ...[
-            Text(_error!, style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.error)),
-            const SizedBox(height: SpeariaSpacing.md),
+            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
+            const SizedBox(height: NeyvoSpacing.md),
           ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -146,10 +146,10 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
             children: [
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: SpeariaSpacing.lg),
+                  padding: const EdgeInsets.only(right: NeyvoSpacing.lg),
                   child: Text(
                     'Scripts the assistant uses during calls. Prebuilt templates are provided by default; you can edit them or create your own. Use placeholders: {{student_name}}, {{balance}}, {{due_date}}, {{school_name}}, {{late_fee}}.',
-                    style: SpeariaType.bodyMedium.copyWith(color: SpeariaAura.textSecondary),
+                    style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
                   ),
                 ),
               ),
@@ -160,18 +160,18 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
               ),
             ],
           ),
-          const SizedBox(height: SpeariaSpacing.xl),
+          const SizedBox(height: NeyvoSpacing.xl),
           if (_templates.isEmpty)
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(SpeariaSpacing.xl),
+                padding: const EdgeInsets.all(NeyvoSpacing.xl),
                 child: Center(
                   child: Column(
                     children: [
-                      Icon(Icons.description_outlined, size: 48, color: SpeariaAura.textMuted),
-                      const SizedBox(height: SpeariaSpacing.md),
-                      Text('No templates yet', style: SpeariaType.bodyLarge.copyWith(color: SpeariaAura.textSecondary)),
-                      const SizedBox(height: SpeariaSpacing.sm),
+                      Icon(Icons.description_outlined, size: 48, color: NeyvoTheme.textMuted),
+                      const SizedBox(height: NeyvoSpacing.md),
+                      Text('No templates yet', style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textSecondary)),
+                      const SizedBox(height: NeyvoSpacing.sm),
                       TextButton.icon(
                         onPressed: () => _openEditor(),
                         icon: const Icon(Icons.add),
@@ -184,7 +184,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
             )
           else
             ..._templates.map((t) => Card(
-                  margin: const EdgeInsets.only(bottom: SpeariaSpacing.md),
+                  margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.description_outlined)),
                     title: Row(
@@ -192,9 +192,9 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                         Expanded(child: Text(t['name']?.toString() ?? 'Unnamed')),
                         if (t['is_default'] == true)
                           Padding(
-                            padding: const EdgeInsets.only(left: SpeariaSpacing.sm),
+                            padding: const EdgeInsets.only(left: NeyvoSpacing.sm),
                             child: Chip(
-                              label: Text('Prebuilt', style: SpeariaType.labelSmall.copyWith(color: SpeariaAura.primary)),
+                              label: Text('Prebuilt', style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary)),
                               padding: EdgeInsets.zero,
                               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               visualDensity: VisualDensity.compact,
@@ -206,7 +206,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                       (t['body'] ?? t['script'] ?? '').toString().replaceAll('\n', ' ').length > 80
                           ? '${(t['body'] ?? t['script']).toString().substring(0, 80)}...'
                           : (t['body'] ?? t['script'] ?? '').toString(),
-                      style: SpeariaType.bodySmall.copyWith(color: SpeariaAura.textSecondary),
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -226,20 +226,20 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
 
   Widget _buildEditor() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(SpeariaSpacing.xl),
+      padding: const EdgeInsets.all(NeyvoSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               IconButton(icon: const Icon(Icons.close), onPressed: _closeEditor),
-              Text(_editingId == null ? 'New template' : 'Edit template', style: SpeariaType.headlineMedium),
+              Text(_editingId == null ? 'New template' : 'Edit template', style: NeyvoType.headlineMedium),
             ],
           ),
-          const SizedBox(height: SpeariaSpacing.lg),
+          const SizedBox(height: NeyvoSpacing.lg),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(SpeariaSpacing.lg),
+              padding: const EdgeInsets.all(NeyvoSpacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -250,7 +250,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                       hintText: 'e.g. Balance reminder - high balance',
                     ),
                   ),
-                  const SizedBox(height: SpeariaSpacing.lg),
+                  const SizedBox(height: NeyvoSpacing.lg),
                   TextField(
                     controller: _bodyController,
                     maxLines: 12,
@@ -260,9 +260,9 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                       alignLabelWithHint: true,
                     ),
                   ),
-                  const SizedBox(height: SpeariaSpacing.sm),
+                  const SizedBox(height: NeyvoSpacing.sm),
                   Wrap(
-                    spacing: SpeariaSpacing.sm,
+                    spacing: NeyvoSpacing.sm,
                     children: [
                       _placeholderChip('{{student_name}}'),
                       _placeholderChip('{{balance}}'),
@@ -271,12 +271,12 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                       _placeholderChip('{{late_fee}}'),
                     ],
                   ),
-                  const SizedBox(height: SpeariaSpacing.lg),
+                  const SizedBox(height: NeyvoSpacing.lg),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(onPressed: _closeEditor, child: const Text('Cancel')),
-                      const SizedBox(width: SpeariaSpacing.md),
+                      const SizedBox(width: NeyvoSpacing.md),
                       FilledButton.icon(onPressed: _saveTemplate, icon: const Icon(Icons.save, size: 18), label: const Text('Save')),
                     ],
                   ),
