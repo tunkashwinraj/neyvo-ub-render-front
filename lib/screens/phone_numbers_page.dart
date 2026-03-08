@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../api/spearia_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -358,13 +359,55 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           );
         }
       } else {
-        await ManagedProfileApiService.attachPhoneNumber(
-          profileId: profileId,
-          phoneNumberId: numberId,
-          vapiPhoneNumberId: numberId,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attached')));
+        try {
+          await ManagedProfileApiService.attachPhoneNumber(
+            profileId: profileId,
+            phoneNumberId: numberId,
+            vapiPhoneNumberId: numberId,
+            forceMove: false,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attached')));
+          }
+        } on ApiException catch (e) {
+          if (e.statusCode == 409 && e.payload is Map && mounted) {
+            final payload = e.payload as Map<dynamic, dynamic>;
+            final inUseBy = payload['in_use_by'];
+            final currentName = inUseBy is Map
+                ? ((inUseBy['profile_name'] ?? inUseBy['profile_id']) ?? 'Another operator').toString()
+                : 'Another operator';
+            final selectedProfileName = _profiles
+                .cast<Map<String, dynamic>>()
+                .where((p) => (p['profile_id'] ?? p['id']) == profileId)
+                .map((p) => (p['profile_name'] ?? p['name'] ?? profileId).toString())
+                .firstOrNull ?? profileId;
+            final moveAnyway = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Number already in use'),
+                content: Text(
+                  'This number is in use by "$currentName". Move it to "$selectedProfileName" anyway?',
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                  FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Move here')),
+                ],
+              ),
+            );
+            if (moveAnyway == true && mounted) {
+              await ManagedProfileApiService.attachPhoneNumber(
+                profileId: profileId,
+                phoneNumberId: numberId,
+                vapiPhoneNumberId: numberId,
+                forceMove: true,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number moved.')));
+              }
+            }
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+          }
         }
       }
     } catch (e) {

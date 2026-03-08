@@ -173,15 +173,21 @@ class ManagedProfileApiService {
     await _delete('/api/managed-profiles/$profileId');
   }
 
-  static Future<void> attachPhoneNumber({
+  /// Attach a phone number to this operator. If the number is in use by another operator,
+  /// the server returns 409 with [in_use_by] (profile_id, profile_name). Pass [forceMove]
+  /// true to move the number from that operator to this one.
+  static Future<Map<String, dynamic>> attachPhoneNumber({
     required String profileId,
     required String phoneNumberId,
     required String vapiPhoneNumberId,
+    bool forceMove = false,
   }) async {
-    await _post('/api/managed-profiles/$profileId/attach-number', {
+    final body = {
       'phone_number_id': phoneNumberId,
       'vapi_phone_number_id': vapiPhoneNumberId,
-    });
+      if (forceMove) 'force_move': true,
+    };
+    return _post('/api/managed-profiles/$profileId/attach-number', body);
   }
 
   static Future<void> detachPhoneNumber(String profileId) async {

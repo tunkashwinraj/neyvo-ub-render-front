@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../api/spearia_api.dart';
 import '../../utils/voice_preview_player.dart';
 
 import '../../neyvo_pulse_api.dart';
@@ -220,9 +221,17 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             items: available.map((n) {
               final id = (n['phone_number_id'] ?? n['id'] ?? n['number_id'] ?? '').toString();
               final e164 = (n['phone_number_e164'] ?? n['phone_number'] ?? '').toString();
+              final attachedToId = (n['attached_profile_id'] ?? '').toString();
+              final attachedToName = (n['attached_profile_name'] ?? '').toString();
+              final inUseBy = attachedToId.isNotEmpty && attachedToId != widget.profileId
+                  ? (attachedToName.isNotEmpty ? attachedToName : 'Another operator')
+                  : null;
+              final label = inUseBy != null
+                  ? '${e164.isEmpty ? id : e164} — In use by: $inUseBy'
+                  : (e164.isEmpty ? id : e164);
               return DropdownMenuItem(
                 value: id,
-                child: Text(e164.isEmpty ? id : e164, overflow: TextOverflow.ellipsis),
+                child: Text(label, overflow: TextOverflow.ellipsis),
               );
             }).toList(),
             onChanged: (v) => selected = (v ?? '').trim(),
@@ -243,19 +252,76 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     if (selected.isEmpty) return;
     setState(() => _attaching = true);
     try {
-      await ManagedProfileApiService.attachPhoneNumber(
-        profileId: widget.profileId,
-        phoneNumberId: selected,
-        vapiPhoneNumberId: selected,
-      );
+      await _attachNumberWithRetry(selected, forceMove: false);
+    } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _attaching = false);
-      await _load();
+      if (e.statusCode == 409 && e.payload is Map) {
+        final payload = e.payload as Map<dynamic, dynamic>;
+        final inUseBy = payload['in_use_by'];
+        final profileName = inUseBy is Map
+            ? ((inUseBy['profile_name'] ?? inUseBy['profile_id']) ?? 'Another operator').toString()
+            : 'Another operator';
+        final moveAnyway = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: NeyvoColors.bgBase,
+            title: const Text('Number already in use'),
+            content: Text(
+              'This number is already in use by the operator "$profileName".\n\n'
+              'Do you want to move it to this operator? (It will be detached from "$profileName".)',
+              style: NeyvoTextStyles.body,
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                child: const Text('Move here'),
+              ),
+            ],
+          ),
+        );
+        if (moveAnyway == true && mounted) {
+          setState(() => _attaching = true);
+          try {
+            await _attachNumberWithRetry(selected, forceMove: true);
+            if (mounted) {
+              setState(() => _attaching = false);
+              await _load();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Number moved to this operator.')),
+              );
+            }
+          } catch (e2) {
+            if (mounted) {
+              setState(() => _attaching = false);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e2.toString())));
+            }
+          }
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
     } catch (e) {
       if (!mounted) return;
       setState(() => _attaching = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      return;
     }
+    if (!mounted) return;
+    setState(() => _attaching = false);
+    await _load();
+  }
+
+  Future<void> _attachNumberWithRetry(String selected, {required bool forceMove}) async {
+    await ManagedProfileApiService.attachPhoneNumber(
+      profileId: widget.profileId,
+      phoneNumberId: selected,
+      vapiPhoneNumberId: selected,
+      forceMove: forceMove,
+    );
   }
 
   Future<void> _detach() async {
