@@ -234,6 +234,113 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
     }
   }
 
+  void _showForgotPasswordDialog() {
+    final email = (FirebaseAuth.instance.currentUser?.email ?? '').trim();
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No email address on file for this account.')),
+      );
+      return;
+    }
+    bool sending = false;
+    bool success = false;
+    String? dialogError;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Reset password'),
+              content: SingleChildScrollView(
+                child: success
+                    ? Text(
+                        'Check your email for a link to reset your password.',
+                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'We\'ll send a password reset link to:',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          Text(
+                            email,
+                            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
+                          ),
+                          if (dialogError != null) ...[
+                            const SizedBox(height: NeyvoSpacing.sm),
+                            Text(
+                              dialogError!,
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error),
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+              actions: [
+                if (!success)
+                  TextButton(
+                    onPressed: sending ? null : () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                if (success)
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('OK'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: sending
+                        ? null
+                        : () async {
+                            setDialogState(() {
+                              dialogError = null;
+                              sending = true;
+                            });
+                            try {
+                              await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                success = true;
+                              });
+                            } on FirebaseAuthException catch (e) {
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                dialogError = e.code == 'user-not-found'
+                                    ? 'No account found for this email.'
+                                    : (e.message ?? e.code);
+                              });
+                            } catch (e) {
+                              if (!ctx.mounted) return;
+                              setDialogState(() {
+                                sending = false;
+                                dialogError = e.toString();
+                              });
+                            }
+                          },
+                    child: sending
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Send link'),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(backgroundColor: NeyvoTheme.bgPrimary, body: Center(child: CircularProgressIndicator()));
@@ -293,6 +400,20 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
                     )
                   : null,
             ),
+          ),
+        ),
+        const SizedBox(height: NeyvoSpacing.md),
+        Card(
+          color: NeyvoTheme.bgCard,
+          child: ListTile(
+            leading: const Icon(Icons.lock_reset, color: NeyvoTheme.textSecondary),
+            title: Text('Forgot password', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            subtitle: Text(
+              'Send a password reset link to your email',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _showForgotPasswordDialog,
           ),
         ),
         const SizedBox(height: NeyvoSpacing.xl),
