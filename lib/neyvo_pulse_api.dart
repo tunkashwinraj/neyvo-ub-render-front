@@ -127,6 +127,21 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> patchAgentKnowledge(String agentId, Map<String, dynamic> knowledge) async =>
       _patch('/api/agents/$agentId/knowledge', knowledge);
 
+  /// GET /api/agents/{id}/knowledge/items — list vector knowledge backup rows.
+  static Future<Map<String, dynamic>> getAgentKnowledgeItems(String agentId) async =>
+      _get('/api/agents/$agentId/knowledge/items');
+
+  /// POST /api/agents/{id}/knowledge/items — add one Q&A pair to vector knowledge.
+  static Future<Map<String, dynamic>> addAgentKnowledgeItem({
+    required String agentId,
+    required String question,
+    required String answer,
+  }) async =>
+      _post('/api/agents/$agentId/knowledge/items', {
+        'question': question,
+        'answer': answer,
+      });
+
   static Future<Map<String, dynamic>> updateAgent(String agentId, Map<String, dynamic> body) async {
     if (_defaultAccountId.isNotEmpty) body['account_id'] = _defaultAccountId;
     final v = await SpeariaApi.patchJson('/api/agents/$agentId', body: body);

@@ -39,6 +39,11 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   final TextEditingController _voicemailMessageController = TextEditingController();
   final TextEditingController _endCallPhrasesController = TextEditingController();
   final TextEditingController _advancedConfigController = TextEditingController();
+  final TextEditingController _knowledgeQuestionController = TextEditingController();
+  final TextEditingController _knowledgeAnswerController = TextEditingController();
+  List<Map<String, dynamic>> _knowledgeItems = const [];
+  bool _knowledgeLoading = false;
+  bool _knowledgeSaving = false;
   double? _stabilityOverride;
   double? _similarityBoostOverride;
 
@@ -52,6 +57,8 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     _voicemailMessageController.dispose();
     _endCallPhrasesController.dispose();
     _advancedConfigController.dispose();
+    _knowledgeQuestionController.dispose();
+    _knowledgeAnswerController.dispose();
     super.dispose();
   }
 
@@ -70,6 +77,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
       final results = await Future.wait([
         NeyvoPulseApi.getAgent(widget.agentId),
         NeyvoPulseApi.getBillingWallet(),
+        NeyvoPulseApi.getAgentKnowledgeItems(widget.agentId).catchError((_) => <String, dynamic>{'items': []}),
       ]);
       final agentRes = results[0] as Map<String, dynamic>?;
       if (agentRes != null && (agentRes['ok'] != false)) {
@@ -92,6 +100,9 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
           setState(() {
             _agent = agentData;
             _billing = results[1] as Map<String, dynamic>?;
+            final kRes = results[2] as Map<String, dynamic>? ?? {};
+            final rawItems = (kRes['items'] as List?) ?? const [];
+            _knowledgeItems = rawItems.map((e) => Map<String, dynamic>.from(e as Map)).toList();
             _loading = false;
           });
         }
@@ -112,6 +123,58 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadKnowledgeItems() async {
+    if (!mounted) return;
+    setState(() => _knowledgeLoading = true);
+    try {
+      final res = await NeyvoPulseApi.getAgentKnowledgeItems(widget.agentId);
+      final rawItems = (res['items'] as List?) ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _knowledgeItems = rawItems.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _knowledgeLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _knowledgeLoading = false);
+    }
+  }
+
+  Future<void> _saveKnowledgeItem() async {
+    final question = _knowledgeQuestionController.text.trim();
+    final answer = _knowledgeAnswerController.text.trim();
+    if (question.isEmpty || answer.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter Question/Topic and Answer/Policy first.')),
+      );
+      return;
+    }
+    if (_knowledgeSaving) return;
+    setState(() => _knowledgeSaving = true);
+    try {
+      await NeyvoPulseApi.addAgentKnowledgeItem(
+        agentId: widget.agentId,
+        question: question,
+        answer: answer,
+      );
+      _knowledgeQuestionController.clear();
+      _knowledgeAnswerController.clear();
+      await _loadKnowledgeItems();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved to knowledge base.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save knowledge: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _knowledgeSaving = false);
     }
   }
 
@@ -960,6 +1023,89 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
                     child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save call behavior'),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: NeyvoSpacing.lg),
+          _sectionCard(
+            'Agent Knowledge Base',
+            'Custom Q&A and policy answers the agent can retrieve when it does not know an answer.',
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _knowledgeQuestionController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Question/Topic',
+                    hintText: 'e.g. What is your payment plan policy?',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _knowledgeAnswerController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Answer/Policy',
+                    hintText: 'Answer to read naturally to the caller.',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    FilledButton(
+                      onPressed: _knowledgeSaving ? null : _saveKnowledgeItem,
+                      child: _knowledgeSaving
+                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Save to Knowledge Base'),
+                    ),
+                    const SizedBox(width: 10),
+                    TextButton.icon(
+                      onPressed: _knowledgeLoading ? null : _loadKnowledgeItems,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+                if (_knowledgeLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                const SizedBox(height: 8),
+                if (_knowledgeItems.isEmpty && !_knowledgeLoading)
+                  Text(
+                    'No saved Q&A yet.',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textTertiary),
+                  )
+                else
+                  Column(
+                    children: _knowledgeItems.map((item) {
+                      final q = (item['question'] ?? '').toString();
+                      final a = (item['answer'] ?? '').toString();
+                      return Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: NeyvoTheme.bgSurface.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: NeyvoTheme.borderSubtle),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Q: $q', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                            const SizedBox(height: 6),
+                            Text('A: $a', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
               ],
             ),
           ),

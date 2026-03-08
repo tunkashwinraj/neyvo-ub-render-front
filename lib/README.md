@@ -27,6 +27,8 @@ For web:
 flutter run -d chrome --dart-define=NEYVO_PULSE=true --dart-define=BACKEND_BASE=http://127.0.0.1:8000
 ```
 
+To run **without opening Chrome** (faster start) and with **auto hot reload** on save, see the project root **DEV.md**.
+
 Without `NEYVO_PULSE=true`, the app uses the default Spearia Admin flow (AuthGate, onboarding, business dashboard).
 
 ## API key usage

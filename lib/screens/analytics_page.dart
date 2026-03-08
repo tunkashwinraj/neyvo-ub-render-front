@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../services/user_timezone_service.dart';
@@ -243,11 +244,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildOverviewSection() {
     final d = _overview ?? {};
+    final comms = _comms ?? {};
     final creditsConsumed = (d['total_credits_consumed'] ?? d['credits_consumed'] ?? 0) as num;
     final walletCredits = (d['wallet_credits'] ?? d['credits'] ?? 0) as num;
     final totalCalls = (d['total_calls'] ?? d['calls_this_period'] ?? 0) as num;
     final ttsMinutes = (d['total_tts_minutes'] ?? d['tts_minutes'] ?? 0) as num;
     final List<FlSpot> creditsSpots = _creditsBurnedSpots(d);
+    // Prefer calls-by-calendar-date for the analysis chart (Overview)
+    final callsByDateRaw = comms['calls_by_date'] as List?;
+    final overviewCallsByDate = callsByDateRaw != null
+        ? callsByDateRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final overviewCallsPerDay = overviewCallsByDate.isNotEmpty
+        ? overviewCallsByDate.map((e) => (e['count'] as num?)?.toInt() ?? 0).toList()
+        : (comms['calls_per_day'] as List?) ?? [];
+    final hasCallsChart = overviewCallsByDate.isNotEmpty || overviewCallsPerDay.isNotEmpty;
     return NeyvoGlassPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,14 +278,32 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 20),
           SizedBox(
             height: 220,
-            child: creditsSpots.isEmpty
-                ? Center(
-                    child: Text(
-                      'Make calls to see usage data',
-                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-                    ),
+            child: hasCallsChart
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      final count = overviewCallsByDate.isNotEmpty ? overviewCallsByDate.length : overviewCallsPerDay.length;
+                      final minWidth = (count * 24).toDouble().clamp(200.0, 1200.0);
+                      final content = _CallsBarChart(
+                        callsByDate: overviewCallsByDate,
+                        callsPerDay: overviewCallsPerDay,
+                      );
+                      if (constraints.maxWidth < minWidth) {
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(width: minWidth, height: 220, child: content),
+                        );
+                      }
+                      return content;
+                    },
                   )
-                : _CreditsLineChart(spots: creditsSpots),
+                : creditsSpots.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Make calls to see usage data',
+                          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+                        ),
+                      )
+                    : _CreditsLineChart(spots: creditsSpots),
           ),
         ],
       ),
@@ -289,7 +318,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final noAnswer = (d['no_answer_count'] ?? d['no_answer'] ?? 0) as num;
     final transferred = (d['transferred_count'] ?? d['transferred'] ?? 0) as num;
     final agents = (d['by_agent'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final callsPerDay = (d['calls_per_day'] as List?) ?? [];
     return NeyvoGlassPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,21 +395,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ],
               );
             },
-          ),
-          const SizedBox(height: 20),
-          NeyvoCard(
-            padding: const EdgeInsets.all(20),
-            child: SizedBox(
-              height: 200,
-              child: callsPerDay.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Create operators and make calls to see data.',
-                        style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-                      ),
-                    )
-                  : _CallsBarChart(callsPerDay: callsPerDay),
-            ),
           ),
           if (agents.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -969,25 +982,53 @@ class _InsightsReportDownloadSheetState extends State<_InsightsReportDownloadShe
 }
 
 class _CallsBarChart extends StatelessWidget {
+  final List<Map<String, dynamic>> callsByDate;
   final List<dynamic> callsPerDay;
 
-  const _CallsBarChart({required this.callsPerDay});
+  const _CallsBarChart({required this.callsByDate, required this.callsPerDay});
+
+  static String _formatCalendarDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    try {
+      final d = DateTime.parse(dateStr);
+      return DateFormat.MMMd().format(d);
+    } catch (_) {
+      return dateStr;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final maxY = callsPerDay.isEmpty ? 2.0 : (callsPerDay.map((e) => (e is num ? e : 0).toDouble()).reduce((a, b) => a > b ? a : b) + 2);
+    final counts = callsByDate.isNotEmpty
+        ? callsByDate.map((e) => (e['count'] as num?)?.toDouble() ?? 0.0).toList()
+        : callsPerDay.map((e) => (e is num ? e : 0).toDouble()).toList();
+    final dateLabels = callsByDate.isNotEmpty
+        ? callsByDate.map((e) => _formatCalendarDate((e['date'] as String?)?.substring(0, 10))).toList()
+        : List.generate(counts.length, (i) {
+            final d = DateTime.now().subtract(Duration(days: counts.length - 1 - i));
+            return DateFormat.MMMd().format(d);
+          });
+    final maxY = counts.isEmpty ? 2.0 : (counts.reduce((a, b) => a > b ? a : b) + 2);
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: maxY.toDouble(),
+        maxY: maxY,
         barTouchData: BarTouchData(enabled: true),
         titlesData: FlTitlesData(
           show: true,
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              getTitlesWidget: (v, _) => Text('${v.toInt()}', style: NeyvoTextStyles.micro),
-              reservedSize: 24,
+              getTitlesWidget: (v, _) {
+                final i = v.toInt();
+                final label = i >= 0 && i < dateLabels.length ? dateLabels[i] : '${v.toInt()}';
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(label, style: NeyvoTextStyles.micro, maxLines: 1, overflow: TextOverflow.ellipsis),
+                );
+              },
+              reservedSize: 32,
+              interval: 1,
             ),
           ),
           leftTitles: AxisTitles(
@@ -1006,8 +1047,8 @@ class _CallsBarChart extends StatelessWidget {
           getDrawingHorizontalLine: (_) => FlLine(color: NeyvoColors.borderSubtle, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
-        barGroups: callsPerDay.asMap().entries.map((e) {
-          final v = e.value is num ? (e.value as num).toDouble() : 0.0;
+        barGroups: counts.asMap().entries.map((e) {
+          final v = e.value;
           return BarChartGroupData(
             x: e.key,
             barRods: [
@@ -1122,6 +1163,13 @@ class _CreditsLineChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxY = spots.isEmpty ? 1.0 : (spots.map((s) => s.y).reduce((a, b) => a > b ? a : b) + 10);
     final maxX = spots.isEmpty ? 7.0 : spots.last.x;
+    // Calendar date labels for x-axis (last N days) instead of "Day 0", "Day 1"
+    final bottomLabels = spots.isEmpty
+        ? <String>[]
+        : List.generate(spots.length, (i) {
+            final d = DateTime.now().subtract(Duration(days: spots.length - 1 - i));
+            return DateFormat.MMMd().format(d);
+          });
     return LineChart(
       LineChartData(
         gridData: FlGridData(
@@ -1142,7 +1190,14 @@ class _CreditsLineChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 24,
-              getTitlesWidget: (v, _) => Text('Day ${v.toInt()}', style: NeyvoTextStyles.micro),
+              getTitlesWidget: (v, _) {
+                final i = v.toInt();
+                final label = (i >= 0 && i < bottomLabels.length) ? bottomLabels[i] : 'Day ${v.toInt()}';
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(label, style: NeyvoTextStyles.micro, maxLines: 1, overflow: TextOverflow.ellipsis),
+                );
+              },
             ),
           ),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),

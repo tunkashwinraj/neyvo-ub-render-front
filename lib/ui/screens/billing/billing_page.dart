@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../utils/payment_result_dialog.dart';
+import '../../../utils/payment_pending_storage.dart';
 import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../widgets/add_credits_modal.dart';
@@ -30,6 +32,29 @@ class _BillingPageState extends State<BillingPage> {
   void initState() {
     super.initState();
     _load();
+    _maybeShowPaymentResult();
+  }
+
+  void _maybeShowPaymentResult() {
+    final payment = Uri.base.queryParameters['payment'];
+    if (payment == null || payment.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      Map<String, dynamic>? paymentDetails;
+      if (payment.toLowerCase() == 'success') {
+        paymentDetails = getPaymentPending();
+        if (paymentDetails != null) {
+          final amountDollars = paymentDetails['amountDollars'];
+          if (amountDollars != null) {
+            final dollars = amountDollars is int ? amountDollars.toDouble() : (amountDollars as num).toDouble();
+            paymentDetails = Map<String, dynamic>.from(paymentDetails)..['credits'] = (dollars * 100).round();
+          }
+        }
+        removePaymentPending();
+      }
+      await showPaymentResultDialogIfNeeded(context, payment, paymentDetails: paymentDetails);
+      if (mounted) _load();
+    });
   }
 
   Future<void> _load() async {

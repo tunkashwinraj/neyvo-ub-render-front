@@ -12,6 +12,24 @@ import 'ui/screens/calls/test_call_page.dart';
 import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';
 
+/// Maps legacy Pulse paths to canonical (tab-matching) route names for deep links.
+String? _legacyPulsePathToCanonical(String path) {
+  switch (path) {
+    case '/pulse/dashboard':
+      return PulseRouteNames.dashboard;
+    case '/pulse/agents':
+      return PulseRouteNames.agents;
+    case '/pulse/phone-numbers':
+      return PulseRouteNames.phoneNumbers;
+    case '/pulse/calls':
+      return PulseRouteNames.calls;
+    case '/pulse/analytics':
+      return PulseRouteNames.analytics;
+    default:
+      return null;
+  }
+}
+
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -107,7 +125,12 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
       default:
         if ((settings.name ?? '').startsWith('/pulse/')) {
-          return MaterialPageRoute(builder: (_) => PulseShell(initialRouteName: settings.name));
+          // Legacy path → canonical (tab-matching) route so old deep links open the correct tab.
+          final name = settings.name!;
+          final canonical = _legacyPulsePathToCanonical(name);
+          return MaterialPageRoute(
+            builder: (_) => PulseShell(initialRouteName: canonical ?? name),
+          );
         }
         return MaterialPageRoute(
           builder: (_) => Scaffold(

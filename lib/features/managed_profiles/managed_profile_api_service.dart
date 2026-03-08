@@ -80,6 +80,19 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> updateProfile(String profileId, Map<String, dynamic> body) async =>
       _patch('/api/managed-profiles/$profileId', body);
 
+  static Future<Map<String, dynamic>> listKnowledgeItems(String profileId) async =>
+      _get('/api/managed-profiles/$profileId/knowledge/items');
+
+  static Future<Map<String, dynamic>> addKnowledgeItem(
+    String profileId, {
+    required String question,
+    required String answer,
+  }) async =>
+      _post('/api/managed-profiles/$profileId/knowledge/items', {
+        'question': question,
+        'answer': answer,
+      });
+
   static Future<Map<String, dynamic>> aiSuggest(String profileId, String message) async =>
       _post('/api/managed-profiles/$profileId/ai-suggest', {'message': message});
 

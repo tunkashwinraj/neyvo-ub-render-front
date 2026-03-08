@@ -368,7 +368,7 @@ class _WalletPageState extends State<WalletPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _tableHeader(),
-                                ..._transactions.map((t) => _transactionRow(t)),
+                                ..._transactions.asMap().entries.map((e) => _transactionRow(e.value, e.key as int)),
                                 if (_loadingMore)
                                   const Padding(
                                     padding: EdgeInsets.all(12),
@@ -417,10 +417,34 @@ class _WalletPageState extends State<WalletPage> {
           SizedBox(width: 72, child: Text('Type', style: NeyvoTextStyles.label)),
           SizedBox(width: 100, child: Text('Amount', style: NeyvoTextStyles.label)),
           Expanded(child: Text('Reason', style: NeyvoTextStyles.label)),
+          SizedBox(width: 90, child: Text('Last balance', style: NeyvoTextStyles.label)),
           const SizedBox(width: 90),
         ],
       ),
     );
+  }
+
+  /// Balance after this transaction (running balance). Uses API balance_after when present, else computed from current balance and list order (newest first).
+  int _balanceAfterTransaction(int index, Map<String, dynamic> t) {
+    final fromApi = t['balance_after'];
+    if (fromApi != null) {
+      if (fromApi is int) return fromApi;
+      if (fromApi is num) return fromApi.toInt();
+    }
+    final currentCredits = (_wallet != null ? (_wallet!['credits'] as num?)?.toInt() ?? (_wallet!['wallet_credits'] as num?)?.toInt() : null) ?? 0;
+    int sumAbove = 0;
+    for (int i = 0; i < index; i++) {
+      final c = _transactions[i]['credits'] as num?;
+      sumAbove += (c?.toInt() ?? 0);
+    }
+    return currentCredits - sumAbove;
+  }
+
+  /// Last balance = balance before this transaction (before its credit/debit was applied). Not the current balance.
+  int _balanceBeforeTransaction(int index, Map<String, dynamic> t) {
+    final after = _balanceAfterTransaction(index, t);
+    final credits = (t['credits'] as num?)?.toInt() ?? (t['amount'] as num?)?.toInt() ?? 0;
+    return after - credits;
   }
 
   void _openBilling() async {
@@ -467,7 +491,7 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  Widget _transactionRow(Map<String, dynamic> t) {
+  Widget _transactionRow(Map<String, dynamic> t, int index) {
     final type = (t['type'] ?? '').toString().toLowerCase();
     final creditsVal = (t['credits'] as num?)?.toInt() ?? (t['amount'] as num?)?.toInt() ?? 0;
     final isCredit = creditsVal >= 0;
@@ -541,6 +565,13 @@ class _WalletPageState extends State<WalletPage> {
             ),
             Expanded(
               child: Text(desc, style: NeyvoTextStyles.body, overflow: TextOverflow.ellipsis, maxLines: 2),
+            ),
+            SizedBox(
+              width: 90,
+              child: Text(
+                '${_balanceBeforeTransaction(index, t)} credits',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+              ),
             ),
             SizedBox(
               width: 90,

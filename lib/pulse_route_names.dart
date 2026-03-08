@@ -3,7 +3,7 @@
 
 abstract class PulseRouteNames {
   static const String auth = '/pulse/auth';
-  static const String dashboard = '/pulse/dashboard';
+  static const String dashboard = '/pulse/home';
   static const String launch = '/pulse/launch';
   static const String outbound = '/pulse/outbound';
   static const String students = '/pulse/students';
@@ -27,13 +27,13 @@ abstract class PulseRouteNames {
   static const String usage = '/pulse/usage';
   static const String voiceTier = '/pulse/voice-tier';
   static const String developerConsole = '/pulse/developer-console';
-  static const String phoneNumbers = '/pulse/phone-numbers';
-  static const String calls = '/pulse/calls';
+  static const String phoneNumbers = '/pulse/lines';
+  static const String calls = '/pulse/call-logs';
   static const String dialer = '/pulse/dialer';
   static const String billing = '/pulse/billing';
   static const String subscriptionPlan = '/pulse/subscription-plan';
   static const String addons = '/pulse/addons';
-  static const String agents = '/pulse/agents';
+  static const String agents = '/pulse/operators';
   static const String agentDetail = '/pulse/agent-detail';
   static const String managedProfiles = '/pulse/managed-profiles';
   static const String managedProfileDetail = '/pulse/managed-profile-detail';
@@ -45,7 +45,7 @@ abstract class PulseRouteNames {
   static const String projectDetail = '/pulse/project-detail';
   static const String voiceLibrary = '/pulse/voice-library';
   static const String exports = '/pulse/exports';
-  static const String analytics = '/pulse/analytics';
+  static const String analytics = '/pulse/insights';
   static const String businessSetup = '/pulse/business-setup';
   static const String setupCenter = '/pulse/setup';
   static const String voiceStudio = '/pulse/voice-studio';

@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../features/business_intelligence/bi_wizard_api_service.dart';
 import '../../../features/business_intelligence/business_model_completeness.dart';
+import '../../../pulse_route_names.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../screens/business_setup_page.dart';
 import '../../../features/managed_profiles/managed_profile_api_service.dart';
@@ -489,14 +490,14 @@ class _BusinessSetupInterviewPageState
                       Row(
                         children: [
                           FilledButton.icon(
-                            onPressed: () => Navigator.of(context).pushReplacementNamed('/pulse/agents'),
+                            onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.agents),
                             icon: const Icon(Icons.smart_toy_outlined, size: 18),
                             label: const Text('Go to Agents'),
                             style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                           ),
                           const SizedBox(width: 12),
                           OutlinedButton.icon(
-                            onPressed: () => Navigator.of(context).pushReplacementNamed('/pulse/phone-numbers'),
+                            onPressed: () => Navigator.of(context).pushReplacementNamed(PulseRouteNames.phoneNumbers),
                             icon: const Icon(Icons.phone_outlined, size: 18),
                             label: const Text('Configure Numbers'),
                           ),

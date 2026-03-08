@@ -23,6 +23,7 @@ import '../features/managed_profiles/profile_detail_page.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
 import '../ui/screens/calls/test_call_page.dart';
@@ -57,6 +58,8 @@ class PulseShell extends StatefulWidget {
 
 class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  /// When true, content is driven by _selectedIndex only (user tapped a sidebar tab). When false and initialRoute was wallet, we show Wallet page while Billing is selected.
+  bool _userHasChangedTab = false;
   int? _walletCredits;
   final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
   final GlobalKey<ManagedProfilesPageState> _managedProfilesListKey = GlobalKey<ManagedProfilesPageState>();
@@ -166,7 +169,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     if (name != null && name.isNotEmpty) {
       final items = _navItems;
       int idx = items.indexWhere((n) => n.route == name);
-      // Wallet is not in sidebar; it lives under Billing. After Stripe redirect to /pulse/wallet?payment=success, show Wallet page with Billing tab selected.
+      // Wallet is not in sidebar; it lives under Billing. Direct /pulse/wallet (e.g. View transactions) shows Wallet page with Billing tab selected in sidebar.
       if (idx < 0 && name == PulseRouteNames.wallet) {
         idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
       }
@@ -430,7 +433,11 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         label: item.label,
                         isActive: selected,
                         onTap: () {
-                          setState(() => _selectedIndex = i);
+                          setState(() {
+                            _selectedIndex = i;
+                            _userHasChangedTab = true;
+                          });
+                          if (kIsWeb) url_helper.updateBrowserUrl(item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
                           if (item.label == 'Numbers') _loadNumbersSummary();
                         },
@@ -578,7 +585,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               final items = _navItems;
                               var idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
                               if (idx < 0) idx = items.indexWhere((n) => n.route == PulseRouteNames.settings);
-                              if (idx >= 0) setState(() => _selectedIndex = idx);
+                              if (idx >= 0) {
+                                setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
+                                if (kIsWeb) url_helper.updateBrowserUrl(items[idx].route);
+                              }
                             },
                             borderRadius: BorderRadius.circular(100),
                             child: Container(
@@ -661,7 +671,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                           if (value == 'settings') {
                             final items = _navItems;
                             final idx = items.indexWhere((n) => n.label == 'Settings');
-                            if (idx >= 0) setState(() => _selectedIndex = idx);
+                            if (idx >= 0) {
+                              setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
+                              if (kIsWeb) url_helper.updateBrowserUrl(items[idx].route);
+                            }
                           } else if (value == 'signout') {
                             _signOut();
                           }
@@ -707,7 +720,10 @@ extension on _PulseShellState {
   void _navigateToRoute(String route) {
     final items = _navItems;
     final idx = items.indexWhere((n) => n.route == route);
-    if (idx >= 0) setState(() => _selectedIndex = idx);
+    if (idx >= 0) {
+      setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
+      if (kIsWeb) url_helper.updateBrowserUrl(route);
+    }
   }
 
   Future<void> _showOrgSwitchDialog() async {
@@ -788,17 +804,19 @@ extension on _PulseShellState {
   /// Map the currently selected nav route to the active page widget.
   Widget _buildCurrentPage() {
     // When opened via "View plans" / "View voice tiers" from Billing, show that page (not in sidebar).
-    // When returning from Stripe with /pulse/wallet?payment=success, show Wallet page so user sees success and transactions.
+    // When opened at /pulse/wallet we show Wallet page and Billing is selected; once user taps another tab, content follows _selectedIndex so other tabs work.
     final initialRoute = widget.initialRouteName;
     if (initialRoute == PulseRouteNames.voiceTier) return const VoiceTierPage();
     if (initialRoute == PulseRouteNames.subscriptionPlan) return const PlanSelectorPage();
-    if (initialRoute == PulseRouteNames.wallet) return const WalletPage();
 
     final items = _navItems;
-    if (_selectedIndex < 0 || _selectedIndex >= items.length) {
+    final route = _selectedIndex >= 0 && _selectedIndex < items.length ? items[_selectedIndex].route : null;
+    final showingWalletBecauseInitial = initialRoute == PulseRouteNames.wallet && !_userHasChangedTab && route == PulseRouteNames.billing;
+    if (showingWalletBecauseInitial) return const WalletPage();
+
+    if (_selectedIndex < 0 || _selectedIndex >= items.length || route == null) {
       return const PulseDashboardPage();
     }
-    final route = items[_selectedIndex].route;
     switch (route) {
       case PulseRouteNames.dashboard:
         return const PulseDashboardPage();
