@@ -153,11 +153,17 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     setState(() {
       _filteredStudents = _allStudents.where((s) {
         final name = (s['name']?.toString() ?? '').toLowerCase();
+        final first = (s['first_name']?.toString() ?? '').toLowerCase();
+        final last = (s['last_name']?.toString() ?? '').toLowerCase();
+        final combined = ('$first $last').trim();
         final phone = (s['phone']?.toString() ?? '').toLowerCase();
         final email = (s['email']?.toString() ?? '').toLowerCase();
         final studentId = (s['student_id']?.toString() ?? '').toLowerCase();
         final matchesSearch = query.isEmpty ||
             name.contains(query) ||
+            first.contains(query) ||
+            last.contains(query) ||
+            combined.contains(query) ||
             phone.contains(query) ||
             email.contains(query) ||
             studentId.contains(query);
@@ -287,8 +293,13 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
 
   Future<void> _quickCall(Map<String, dynamic> student) async {
     final phone = student['phone']?.toString() ?? '';
-    final name = student['name']?.toString() ?? '';
-    if (phone.isEmpty || name.isEmpty) {
+    final first = (student['first_name']?.toString() ?? '').trim();
+    final last = (student['last_name']?.toString() ?? '').trim();
+    final legacyName = (student['name']?.toString() ?? '').trim();
+    final name = (first.isNotEmpty || last.isNotEmpty)
+        ? ('$first $last').trim()
+        : legacyName;
+    if (phone.isEmpty || name.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Phone and name required')),
       );
@@ -554,7 +565,12 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         }
                         final s = _filteredStudents[i - 1] as Map<String, dynamic>;
                         final id = s['id'] as String? ?? '';
-                        final name = s['name'] as String? ?? '—';
+                        final first = (s['first_name'] as String? ?? '').trim();
+                        final last = (s['last_name'] as String? ?? '').trim();
+                        final legacyName = (s['name'] as String? ?? '').trim();
+                        final displayName = (first.isNotEmpty || last.isNotEmpty)
+                            ? ('$first $last').trim()
+                            : (legacyName.isNotEmpty ? legacyName : '—');
                         final phone = s['phone'] as String? ?? '';
                         final balance = s['balance'] as String? ?? '';
                         final dueDate = s['due_date']?.toString() ?? '';
@@ -591,10 +607,10 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                         activeColor: NeyvoTheme.primary,
                                       ),
                                     ),
-                                  CircleAvatar(
+                                      CircleAvatar(
                                     backgroundColor: NeyvoTheme.primary.withOpacity(0.1),
                                     child: Text(
-                                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
                                       style: TextStyle(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
                                     ),
                                   ),
@@ -603,7 +619,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(name, style: NeyvoType.titleMedium),
+                                        Text(displayName, style: NeyvoType.titleMedium),
                                         const SizedBox(height: 2),
                                         Text(phone, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
                                         if (isOverdue && _isEducationOrg)
@@ -894,7 +910,18 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
       }
       return '';
     }
-    final preview = rows.take(5).map((r) => get(r, ['name', 'name']) + ' | ' + get(r, ['phone', 'phone', 'mobile'])).toList();
+    final preview = rows
+        .take(5)
+        .map((r) {
+          final first = get(r, ['first_name', 'firstname']);
+          final last = get(r, ['last_name', 'lastname']);
+          final legacyName = get(r, ['name']);
+          final displayName = (first.isNotEmpty || last.isNotEmpty)
+              ? ('$first $last').trim()
+              : legacyName;
+          return displayName + ' | ' + get(r, ['phone', 'phone', 'mobile']);
+        })
+        .toList();
     final navigator = Navigator.of(context);
     final go = await showDialog<bool>(
       context: context,
@@ -912,7 +939,10 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 child: Text(p, style: NeyvoType.bodySmall),
               )),
               const SizedBox(height: NeyvoSpacing.md),
-              Text('Required columns: name (or Name), phone (or Phone). Optional: email, balance, due_date, late_fee, notes.', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+              Text(
+                'Required columns: either name OR first_name (plus phone). Optional: last_name, email, balance, due_date, late_fee, notes.',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+              ),
             ],
           ),
         ),
@@ -925,13 +955,16 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     if (go != true || !mounted) return;
     int created = 0;
     for (final r in rows) {
-      final name = get(r, ['name']);
+      final firstName = get(r, ['first_name', 'firstname']);
+      final legacyName = get(r, ['name']);
+      final name = firstName.isNotEmpty ? firstName : legacyName;
       final phone = get(r, ['phone', 'mobile', 'cell']);
       if (name.isEmpty || phone.isEmpty) continue;
       try {
         await NeyvoPulseApi.createStudent(
           name: name,
           phone: phone,
+          firstName: firstName.isNotEmpty ? firstName : null,
           email: get(r, ['email']).isEmpty ? null : get(r, ['email']),
           balance: get(r, ['balance']).isEmpty ? null : get(r, ['balance']),
           dueDate: get(r, ['due_date', 'duedate', 'due date']).isEmpty ? null : get(r, ['due_date', 'duedate', 'due date']),
@@ -951,6 +984,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Future<void> _openAddStudent() async {
+    final firstNameC = TextEditingController();
+    final lastNameC = TextEditingController();
     final nameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
@@ -966,11 +1001,32 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
       builder: (ctx) => AlertDialog(
         title: const Text('Add student'),
         content: SingleChildScrollView(
-          child: Column(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(controller: nameC, decoration: const InputDecoration(labelText: 'Name *', hintText: 'Full name')),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: firstNameC,
+                      decoration: const InputDecoration(labelText: 'First name *', hintText: 'First name'),
+                    ),
+                  ),
+                  const SizedBox(width: NeyvoSpacing.md),
+                  Expanded(
+                    child: TextField(
+                      controller: lastNameC,
+                      decoration: const InputDecoration(labelText: 'Last name (optional)', hintText: 'Last name'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: nameC,
+                decoration: const InputDecoration(labelText: 'Display name (optional)', hintText: 'Defaults to first name'),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(
                 controller: phoneC,
@@ -1001,11 +1057,14 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
           TextButton(onPressed: () => navigator.pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final name = nameC.text.trim();
+              final firstName = firstNameC.text.trim();
+              final lastName = lastNameC.text.trim();
+              final legacyName = nameC.text.trim();
+              final name = legacyName.isNotEmpty ? legacyName : firstName;
               final phoneRaw = phoneC.text.trim();
               final phone = normalizePhoneInput(phoneRaw);
-              if (name.isEmpty || phoneRaw.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and phone required')));
+              if (firstName.isEmpty || phoneRaw.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('First name and phone required')));
                 return;
               }
               if (phone.isEmpty) {
@@ -1018,6 +1077,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 await NeyvoPulseApi.createStudent(
                   name: name,
                   phone: phone,
+                  firstName: firstName,
+                  lastName: lastName.isNotEmpty ? lastName : null,
                   email: emailC.text.trim().isEmpty ? null : emailC.text.trim(),
                   balance: balanceC.text.trim().isEmpty ? null : balanceC.text.trim(),
                   dueDate: dueDateC.text.trim().isEmpty ? null : dueDateC.text.trim(),
@@ -1171,7 +1232,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Template: name,phone,email,student_id,balance,due_date,late_fee,notes')),
+          const SnackBar(content: Text('Template: name,phone,email,student_id,balance,due_date,late_fee,notes (first_name/last_name also supported)')),
         );
       }
     }
@@ -1248,7 +1309,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Required columns: name, phone. The first non-comment row must be the header (name, phone, …). Lines starting with # and blank rows are ignored.',
+                    'Required columns: either name OR first_name (plus phone). The first non-comment row must be the header. Lines starting with # and blank rows are ignored.',
                     style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted),
                     textAlign: TextAlign.center,
                   ),

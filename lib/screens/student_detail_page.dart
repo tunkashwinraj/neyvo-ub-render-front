@@ -30,6 +30,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   late TabController _tabController;
   
   final _name = TextEditingController();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _balance = TextEditingController();
@@ -57,6 +59,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   @override
   void dispose() {
     _tabController.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     _name.dispose();
     _phone.dispose();
     _email.dispose();
@@ -105,6 +109,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
           _selectedAgentId ??= agentsList.isNotEmpty ? (agentsList.first['id'] ?? agentsList.first['agent_id'])?.toString() : null;
           _loading = false;
           _name.text = s['name']?.toString() ?? '';
+          _firstName.text = s['first_name']?.toString() ?? (_name.text);
+          _lastName.text = s['last_name']?.toString() ?? '';
           _phone.text = s['phone']?.toString() ?? '';
           _email.text = s['email']?.toString() ?? '';
           _balance.text = s['balance']?.toString() ?? '';
@@ -165,6 +171,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       await NeyvoPulseApi.updateStudent(
         widget.studentId,
         name: _name.text.trim(),
+        firstName: _firstName.text.trim().isNotEmpty ? _firstName.text.trim() : null,
+        lastName: _lastName.text.trim().isNotEmpty ? _lastName.text.trim() : null,
         phone: normalizePhoneInput(_phone.text.trim()),
         email: _email.text.trim().isEmpty ? null : _email.text.trim(),
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
@@ -202,7 +210,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
 
   Future<void> _call() async {
     final phone = normalizePhoneInput(_phone.text.trim());
-    final name = _name.text.trim();
+    final effectiveFirst = _firstName.text.trim().isNotEmpty ? _firstName.text.trim() : _name.text.trim();
+    final name = effectiveFirst;
     if (phone.isEmpty || name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone and name required')));
       return;
@@ -517,7 +526,11 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               // Edit Form
               Text('Contact information', style: NeyvoType.titleMedium),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
+              TextField(controller: _firstName, decoration: const InputDecoration(labelText: 'First name')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(controller: _lastName, decoration: const InputDecoration(labelText: 'Last name')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Display name (legacy / optional)')),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(
                 controller: _phone,
