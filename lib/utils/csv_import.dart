@@ -40,14 +40,25 @@ List<String> _parseCsvLine(String line) {
 /// Parse CSV string into list of rows (each row = list of fields).
 List<List<String>> parseCsv(String text) {
   final lines = text.split(RegExp(r'\r\n|\r|\n'));
-  return lines.where((l) => l.trim().isNotEmpty).map(_parseCsvLine).toList();
+  final rows = <List<String>>[];
+  for (final line in lines) {
+    if (line.trim().isEmpty) continue;
+    if (line.trimLeft().startsWith('#')) continue;
+    final row = _parseCsvLine(line);
+    // Skip rows that are syntactically present but effectively empty, e.g. ",,,,,"
+    if (row.isEmpty || row.every((c) => c.trim().isEmpty)) continue;
+    rows.add(row);
+  }
+  return rows;
 }
 
 /// Parse CSV and return list of maps (first row = headers). Keys lowercased.
 List<Map<String, String>> parseCsvToMaps(String text) {
   final rows = parseCsv(text);
   if (rows.isEmpty) return [];
-  final headers = rows.first.map((e) => e.toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_')).toList();
+  final headers = rows.first
+      .map((e) => e.replaceAll('\uFEFF', '').toLowerCase().trim().replaceAll(RegExp(r'\s+'), '_'))
+      .toList();
   final result = <Map<String, String>>[];
   for (var i = 1; i < rows.length; i++) {
     final row = rows[i];
@@ -55,6 +66,7 @@ List<Map<String, String>> parseCsvToMaps(String text) {
     for (var j = 0; j < headers.length && j < row.length; j++) {
       map[headers[j]] = row[j].trim();
     }
+    if (map.values.every((v) => v.trim().isEmpty)) continue;
     result.add(map);
   }
   return result;

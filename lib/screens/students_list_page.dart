@@ -1081,7 +1081,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   int? _imported;
   int? _updated;
   int? _failed;
-  List<Map<String, dynamic>> _errors = [];
+  List<String> _errors = [];
   List<Map<String, String>> _validRows = [];
   List<String> _errorLines = [];
 
@@ -1182,11 +1182,27 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     try {
       final res = await NeyvoPulseApi.postStudentsImportCsv(_csvText);
       if (mounted) {
+        final rawErrs = res['errors'];
+        final errs = <String>[];
+        if (rawErrs is List) {
+          for (final e in rawErrs) {
+            if (e == null) continue;
+            if (e is String) {
+              if (e.trim().isNotEmpty) errs.add(e.trim());
+            } else if (e is Map) {
+              final msg = (e['error'] ?? e['message'] ?? e['detail'] ?? e).toString();
+              if (msg.trim().isNotEmpty) errs.add(msg.trim());
+            } else {
+              final msg = e.toString();
+              if (msg.trim().isNotEmpty) errs.add(msg.trim());
+            }
+          }
+        }
         setState(() {
           _imported = res['imported'] as int? ?? 0;
           _updated = res['updated'] as int? ?? 0;
           _failed = res['failed'] as int? ?? 0;
-          _errors = List<Map<String, dynamic>>.from((res['errors'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)));
+          _errors = errs;
           _loading = false;
           _step = 3;
         });
@@ -1229,6 +1245,12 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                         ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Required columns: name, phone. The first non-comment row must be the header (name, phone, …). Lines starting with # and blank rows are ignored.',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   TextButton.icon(
@@ -1300,6 +1322,19 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                       const SizedBox(height: 8),
                       Text('${_imported ?? 0} students imported | ${_updated ?? 0} updated', style: NeyvoType.bodyMedium),
                       if ((_failed ?? 0) > 0) Text('${_failed} rows skipped', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error)),
+                      if (_errors.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ExpansionTile(
+                          title: Text('Show ${_errors.length} import errors', style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error)),
+                          children: _errors
+                              .take(50)
+                              .map((e) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(e, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13)),
+                                  ))
+                              .toList(),
+                        ),
+                      ],
                     ],
                   ),
       ),

@@ -735,7 +735,7 @@ class _ImportTabState extends State<_ImportTab> {
   int? _imported;
   int? _updated;
   int? _failed;
-  List<Map<String, dynamic>> _errors = [];
+  List<String> _errors = [];
   List<Map<String, String>> _validRows = [];
   List<String> _errorLines = [];
   DropzoneViewController? _dropzoneController;
@@ -954,13 +954,27 @@ class _ImportTabState extends State<_ImportTab> {
     try {
       final res = await NeyvoPulseApi.postStudentsImportCsv(_csvText);
       if (!mounted) return;
+      final rawErrs = res['errors'];
+      final errs = <String>[];
+      if (rawErrs is List) {
+        for (final e in rawErrs) {
+          if (e == null) continue;
+          if (e is String) {
+            if (e.trim().isNotEmpty) errs.add(e.trim());
+          } else if (e is Map) {
+            final msg = (e['error'] ?? e['message'] ?? e['detail'] ?? e).toString();
+            if (msg.trim().isNotEmpty) errs.add(msg.trim());
+          } else {
+            final msg = e.toString();
+            if (msg.trim().isNotEmpty) errs.add(msg.trim());
+          }
+        }
+      }
       setState(() {
         _imported = res['imported'] as int? ?? 0;
         _updated = res['updated'] as int? ?? 0;
         _failed = res['failed'] as int? ?? 0;
-        _errors = List<Map<String, dynamic>>.from(
-            (res['errors'] as List? ?? [])
-                .map((e) => Map<String, dynamic>.from(e as Map)));
+        _errors = errs;
         _loading = false;
         _step = 3;
       });
@@ -992,7 +1006,7 @@ class _ImportTabState extends State<_ImportTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Upload a CSV or Excel file. Required: name, phone. Optional: email, student_id, balance, due_date, late_fee, notes. Phone accepts any format: (123) 456-7890, 123-456-7890, 1234567890, etc.',
+                      'Upload a CSV or Excel file. Required: name, phone. Optional: email, student_id, balance, due_date, late_fee, notes. Phone accepts any format: (123) 456-7890, 123-456-7890, 1234567890, etc. Tip: the first non-comment row must be the header (name, phone, …). Lines starting with # and blank rows are ignored.',
                       style: NeyvoType.bodyMedium.copyWith(
                           color: NeyvoColors.textSecondary),
                     ),
@@ -1195,6 +1209,27 @@ class _ImportTabState extends State<_ImportTab> {
                           Text('${_failed} rows skipped',
                               style: NeyvoType.bodySmall
                                   .copyWith(color: NeyvoColors.error)),
+                        if (_errors.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ExpansionTile(
+                            title: Text(
+                              'Show ${_errors.length} import errors',
+                              style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error),
+                            ),
+                            children: _errors
+                                .take(50)
+                                .map(
+                                  (e) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      e,
+                                      style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         FilledButton(
                           onPressed: () => setState(() {
