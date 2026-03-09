@@ -1,9 +1,11 @@
 // lib/screens/training_page.dart
-// Phase C: Assistant training – FAQ + policy for school knowledge.
+// Assistant training – org-wide Vector RAG knowledge (replaces legacy FAQ + policy UI).
 
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../widgets/neyvo_empty_state.dart';
 
 class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});
@@ -13,425 +15,521 @@ class TrainingPage extends StatefulWidget {
 }
 
 class _TrainingPageState extends State<TrainingPage> {
-  List<dynamic> _faq = [];
-  Map<String, dynamic> _policy = {};
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final faqRes = await NeyvoPulseApi.listKnowledgeFaq();
-      final policyRes = await NeyvoPulseApi.getKnowledgePolicy();
-      if (mounted) {
-        setState(() {
-          _faq = faqRes['faq'] as List? ?? [];
-          _policy = policyRes['policy'] as Map<String, dynamic>? ?? {};
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _savePolicy(Map<String, String> values) async {
-    try {
-      await NeyvoPulseApi.updateKnowledgePolicy(
-        paymentPolicy: values['payment_policy']?.isEmpty == true ? null : values['payment_policy'],
-        lateFeePolicy: values['late_fee_policy']?.isEmpty == true ? null : values['late_fee_policy'],
-        contactInfo: values['contact_info']?.isEmpty == true ? null : values['contact_info'],
-        defaultDueDays: values['default_due_days']?.isEmpty == true ? null : values['default_due_days'],
-        notes: values['notes']?.isEmpty == true ? null : values['notes'],
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Policy saved')));
-        _load();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
-  Future<void> _addFaq(String question, String answer) async {
-    try {
-      await NeyvoPulseApi.addKnowledgeFaq(question: question, answer: answer);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('FAQ added')));
-        _load();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
-  Future<void> _updateFaq(String id, String question, String answer) async {
-    try {
-      await NeyvoPulseApi.updateKnowledgeFaq(id, question: question, answer: answer);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('FAQ updated')));
-        _load();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
-  Future<void> _deleteFaq(String id) async {
-    try {
-      await NeyvoPulseApi.deleteKnowledgeFaq(id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('FAQ removed')));
-        _load();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_error != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Assistant Training')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(NeyvoSpacing.xl),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error), textAlign: TextAlign.center),
-                const SizedBox(height: NeyvoSpacing.lg),
-                FilledButton(onPressed: _load, child: const Text('Retry')),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Assistant Training'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load, tooltip: 'Refresh'),
-        ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(NeyvoSpacing.lg),
-          children: [
-            Text(
-              'Train your assistant with school-specific knowledge. This is injected into every outbound call.',
-              style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textSecondary),
-            ),
-            const SizedBox(height: NeyvoSpacing.xl),
-            _PolicySection(policy: _policy, onSave: _savePolicy),
-            const SizedBox(height: NeyvoSpacing.xl),
-            _FaqSection(faq: _faq, onAdd: _addFaq, onUpdate: _updateFaq, onDelete: _deleteFaq),
-          ],
-        ),
+      body: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+        child: const TrainingKnowledgeSection(),
       ),
     );
   }
 }
 
-class _PolicySection extends StatefulWidget {
-  final Map<String, dynamic> policy;
-  final Future<void> Function(Map<String, String>) onSave;
-
-  const _PolicySection({required this.policy, required this.onSave});
+class TrainingKnowledgeSection extends StatefulWidget {
+  const TrainingKnowledgeSection({super.key});
 
   @override
-  State<_PolicySection> createState() => _PolicySectionState();
+  State<TrainingKnowledgeSection> createState() => _TrainingKnowledgeSectionState();
 }
 
-class _PolicySectionState extends State<_PolicySection> {
-  late TextEditingController _paymentPolicy;
-  late TextEditingController _lateFeePolicy;
-  late TextEditingController _contactInfo;
-  late TextEditingController _defaultDueDays;
-  late TextEditingController _notes;
+class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
+  bool _loading = false;
+  bool _saving = false;
+  bool _deleting = false;
+  String _searchQuery = '';
+  List<Map<String, dynamic>> _items = const [];
 
   @override
   void initState() {
     super.initState();
-    _paymentPolicy = TextEditingController(text: widget.policy['payment_policy']?.toString() ?? '');
-    _lateFeePolicy = TextEditingController(text: widget.policy['late_fee_policy']?.toString() ?? '');
-    _contactInfo = TextEditingController(text: widget.policy['contact_info']?.toString() ?? '');
-    _defaultDueDays = TextEditingController(text: widget.policy['default_due_days']?.toString() ?? '');
-    _notes = TextEditingController(text: widget.policy['notes']?.toString() ?? '');
+    _loadItems();
   }
 
-  @override
-  void didUpdateWidget(covariant _PolicySection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.policy != widget.policy) {
-      _paymentPolicy.text = widget.policy['payment_policy']?.toString() ?? '';
-      _lateFeePolicy.text = widget.policy['late_fee_policy']?.toString() ?? '';
-      _contactInfo.text = widget.policy['contact_info']?.toString() ?? '';
-      _defaultDueDays.text = widget.policy['default_due_days']?.toString() ?? '';
-      _notes.text = widget.policy['notes']?.toString() ?? '';
+  Future<void> _loadItems() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      final res = await NeyvoPulseApi.listTrainingKnowledgeItems();
+      final raw = (res['items'] as List?) ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _items = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
   }
 
-  @override
-  void dispose() {
-    _paymentPolicy.dispose();
-    _lateFeePolicy.dispose();
-    _contactInfo.dispose();
-    _defaultDueDays.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
+  Future<void> _openAddDialog() async {
+    final questionCtrl = TextEditingController();
+    final answerCtrl = TextEditingController();
+    String? localError;
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('School policy', style: NeyvoType.titleLarge),
-            const SizedBox(height: 4),
-            Text('Used by the assistant to answer policy questions.', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _paymentPolicy,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Payment policy',
-                hintText: 'e.g. Payments due within 30 days; payment plans available.',
-              ),
-            ),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _lateFeePolicy,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Late fee policy',
-                hintText: r'e.g. $75 late fee after due date.',
-              ),
-            ),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _contactInfo,
-              decoration: const InputDecoration(
-                labelText: 'Contact info',
-                hintText: 'e.g. Billing office: 555-0100',
-              ),
-            ),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _defaultDueDays,
-              decoration: const InputDecoration(
-                labelText: 'Default due days',
-                hintText: 'e.g. 30',
-              ),
-            ),
-            const SizedBox(height: NeyvoSpacing.md),
-            TextField(
-              controller: _notes,
-              maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Notes'),
-            ),
-            const SizedBox(height: NeyvoSpacing.lg),
-            FilledButton.icon(
-              onPressed: () => widget.onSave({
-                'payment_policy': _paymentPolicy.text,
-                'late_fee_policy': _lateFeePolicy.text,
-                'contact_info': _contactInfo.text,
-                'default_due_days': _defaultDueDays.text,
-                'notes': _notes.text,
-              }),
-              icon: const Icon(Icons.save, size: 20),
-              label: const Text('Save policy'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FaqSection extends StatelessWidget {
-  final List<dynamic> faq;
-  final Future<void> Function(String question, String answer) onAdd;
-  final Future<void> Function(String id, String question, String answer) onUpdate;
-  final Future<void> Function(String id) onDelete;
-
-  const _FaqSection({
-    required this.faq,
-    required this.onAdd,
-    required this.onUpdate,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              backgroundColor: NeyvoColors.bgBase,
+              title: const Text('Add Knowledge'),
+              content: SizedBox(
+                width: 560,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FAQ', style: NeyvoType.titleLarge),
-                    const SizedBox(height: 4),
-                    Text('Questions and answers the assistant can use.', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                    Text(
+                      'Add a policy, fact, or Q&A pair the agent can retrieve in real-time.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: questionCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Question/Topic',
+                        hintText: 'e.g. What is the tuition payment extension policy?',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: answerCtrl,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Answer/Policy',
+                        hintText: 'Enter a clear answer the caller should hear.',
+                      ),
+                    ),
+                    if (localError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        localError!,
+                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error),
+                      ),
+                    ],
                   ],
                 ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
                 FilledButton.icon(
-                  onPressed: () => _showAddFaqDialog(context),
-                  icon: const Icon(Icons.add, size: 20),
-                  label: const Text('Add FAQ'),
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          final question = questionCtrl.text.trim();
+                          final answer = answerCtrl.text.trim();
+                          if (question.isEmpty || answer.isEmpty) {
+                            if (!ctx.mounted) return;
+                            setLocalState(() {
+                              localError = 'Please fill both Question/Topic and Answer/Policy.';
+                            });
+                            return;
+                          }
+                          setState(() => _saving = true);
+                          try {
+                            await NeyvoPulseApi.addTrainingKnowledgeItem(
+                              question: question,
+                              answer: answer,
+                            );
+                            if (ctx.mounted) Navigator.of(ctx).pop();
+                            await _loadItems();
+                            if (!mounted || !context.mounted) return;
+                            final messenger = ScaffoldMessenger.maybeOf(context);
+                            messenger?.showSnackBar(
+                              const SnackBar(content: Text('Saved to training knowledge base.')),
+                            );
+                          } catch (e) {
+                            if (mounted && ctx.mounted) {
+                              setLocalState(() {
+                                localError = 'Failed to save knowledge. Please try again.';
+                              });
+                              if (context.mounted) {
+                                final messenger = ScaffoldMessenger.maybeOf(context);
+                                messenger?.showSnackBar(
+                                  SnackBar(content: Text('Failed to save knowledge: $e')),
+                                );
+                              }
+                            }
+                          } finally {
+                            if (mounted) setState(() => _saving = false);
+                          }
+                        },
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white),
+                        )
+                      : const Icon(Icons.auto_awesome),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  label: Text(_saving ? 'Saving...' : 'Save'),
                 ),
               ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openEditDialog(Map<String, dynamic> item) async {
+    final itemId = (item['id'] ?? '').toString();
+    final questionCtrl = TextEditingController(text: (item['question'] ?? '').toString());
+    final answerCtrl = TextEditingController(text: (item['answer'] ?? '').toString());
+    String? localError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              backgroundColor: NeyvoColors.bgBase,
+              title: const Text('Edit Knowledge'),
+              content: SizedBox(
+                width: 560,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Update the question or answer. The new version will be re-embedded for calls.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: questionCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Question/Topic',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: answerCtrl,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Answer/Policy',
+                      ),
+                    ),
+                    if (localError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        localError!,
+                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          final question = questionCtrl.text.trim();
+                          final answer = answerCtrl.text.trim();
+                          if (question.isEmpty || answer.isEmpty) {
+                            if (!ctx.mounted) return;
+                            setLocalState(() {
+                              localError = 'Please fill both Question/Topic and Answer/Policy.';
+                            });
+                            return;
+                          }
+                          setState(() => _saving = true);
+                          try {
+                            // Simple update strategy: add new item, then delete old one to avoid missing vectors.
+                            await NeyvoPulseApi.addTrainingKnowledgeItem(
+                              question: question,
+                              answer: answer,
+                            );
+                            if (itemId.isNotEmpty) {
+                              await NeyvoPulseApi.deleteTrainingKnowledgeItem(itemId);
+                            }
+                            if (ctx.mounted) Navigator.of(ctx).pop();
+                            await _loadItems();
+                            if (!mounted || !context.mounted) return;
+                            final messenger = ScaffoldMessenger.maybeOf(context);
+                            messenger?.showSnackBar(
+                              const SnackBar(content: Text('Knowledge updated.')),
+                            );
+                          } catch (e) {
+                            if (mounted && ctx.mounted) {
+                              setLocalState(() {
+                                localError = 'Failed to update knowledge. Please try again.';
+                              });
+                              if (context.mounted) {
+                                final messenger = ScaffoldMessenger.maybeOf(context);
+                                messenger?.showSnackBar(
+                                  SnackBar(content: Text('Update failed: $e')),
+                                );
+                              }
+                            }
+                          } finally {
+                            if (mounted) setState(() => _saving = false);
+                          }
+                        },
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NeyvoColors.teal,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  label: Text(_saving ? 'Saving...' : 'Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteItem(Map<String, dynamic> item) async {
+    if (_deleting) return;
+    final itemId = (item['id'] ?? '').toString().trim();
+    if (itemId.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NeyvoColors.bgBase,
+        title: const Text('Delete knowledge item?'),
+        content: Text(
+          'This will remove the selected knowledge item from the list.',
+          style: NeyvoTextStyles.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: NeyvoColors.error,
+              foregroundColor: NeyvoColors.white,
             ),
-            const SizedBox(height: NeyvoSpacing.md),
-            if (faq.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.lg),
-                child: Text('No FAQ entries yet. Add questions and answers for the assistant.', style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted)),
-              )
-            else
-              ...faq.map((e) {
-                final id = e['id']?.toString() ?? '';
-                final q = e['question']?.toString() ?? '';
-                final a = e['answer']?.toString() ?? '';
-                return Card(
-                  margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                  child: ListTile(
-                    title: Text(q, style: NeyvoType.titleMedium),
-                    subtitle: Text(a, style: NeyvoType.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _deleting = true);
+    try {
+      await NeyvoPulseApi.deleteTrainingKnowledgeItem(itemId);
+      if (!mounted) return;
+      setState(() {
+        _items = _items.where((e) => (e['id'] ?? '').toString() != itemId).toList();
+      });
+      if (!context.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Knowledge item deleted.')),
+      );
+    } catch (e) {
+      if (!mounted || !context.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredItems {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return _items;
+    return _items.where((item) {
+      final question = (item['question'] ?? '').toString().toLowerCase();
+      final answer = (item['answer'] ?? '').toString().toLowerCase();
+      return question.contains(q) || answer.contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filteredItems;
+
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Training Knowledge (Vector RAG)', style: NeyvoTextStyles.heading),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Add org-wide policies and FAQs here. The agent will retrieve these in real time instead of guessing.',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _saving ? null : _openAddDialog,
+                style: FilledButton.styleFrom(
+                  backgroundColor: NeyvoColors.teal,
+                  foregroundColor: NeyvoColors.white,
+                ),
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('Add Knowledge'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            onChanged: (v) => setState(() => _searchQuery = v),
+            decoration: const InputDecoration(
+              hintText: 'Search saved Q&A by keyword',
+              prefixIcon: Icon(Icons.search),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: _loading ? null : _loadItems,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (!_loading && _items.isEmpty)
+            SizedBox(
+              width: double.infinity,
+              child: buildNeyvoEmptyState(
+                context: context,
+                title: 'No training knowledge added yet',
+                subtitle: 'Add your first policy or FAQ to help the agent answer accurately.',
+                buttonLabel: 'Add Knowledge',
+                onAction: _openAddDialog,
+                icon: Icons.psychology_alt_outlined,
+              ),
+            )
+          else if (!_loading && filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'No matches for your search.',
+                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: filtered.map((item) {
+                final question = (item['question'] ?? '').toString();
+                final answer = (item['answer'] ?? '').toString();
+                return Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  decoration: BoxDecoration(
+                    color: NeyvoColors.bgRaised.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: NeyvoColors.borderSubtle),
+                  ),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    title: Text(
+                      question.isEmpty ? 'Untitled question' : question,
+                      style: NeyvoTextStyles.bodyPrimary,
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: NeyvoColors.success.withOpacity(0.16),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: NeyvoColors.success.withOpacity(0.45)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, size: 14, color: NeyvoColors.success),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Vectorized',
+                                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.success),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          onPressed: () => _showEditFaqDialog(context, id, q, a),
+                          tooltip: 'Edit',
+                          onPressed: _saving ? null : () => _openEditDialog(item),
+                          icon: const Icon(Icons.edit_outlined),
+                          color: NeyvoColors.textSecondary,
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline, size: 20, color: NeyvoColors.error),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Remove FAQ?'),
-                                content: const Text('This question and answer will be removed from the assistant knowledge.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                  FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
-                                ],
-                              ),
-                            );
-                            if (confirm == true) await onDelete(id);
-                          },
+                          tooltip: 'Delete',
+                          onPressed: _deleting ? null : () => _deleteItem(item),
+                          icon: const Icon(Icons.delete_outline),
+                          color: NeyvoColors.error,
                         ),
                       ],
                     ),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          answer.isEmpty ? 'No answer text.' : answer,
+                          style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+                        ),
+                      ),
+                    ],
                   ),
                 );
-              }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddFaqDialog(BuildContext context) {
-    final qC = TextEditingController();
-    final aC = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add FAQ'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: qC, decoration: const InputDecoration(labelText: 'Question'), maxLines: 2),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: aC, decoration: const InputDecoration(labelText: 'Answer'), maxLines: 3),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              if (qC.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              await onAdd(qC.text.trim(), aC.text.trim());
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditFaqDialog(BuildContext context, String id, String question, String answer) {
-    final qC = TextEditingController(text: question);
-    final aC = TextEditingController(text: answer);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit FAQ'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: qC, decoration: const InputDecoration(labelText: 'Question'), maxLines: 2),
-              const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: aC, decoration: const InputDecoration(labelText: 'Answer'), maxLines: 3),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              if (qC.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              await onUpdate(id, qC.text.trim(), aC.text.trim());
-            },
-            child: const Text('Save'),
-          ),
+              }).toList(),
+            ),
         ],
       ),
     );
   }
 }
+

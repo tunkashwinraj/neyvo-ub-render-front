@@ -460,6 +460,26 @@ class NeyvoPulseApi {
     );
   }
 
+  /// Org-wide training knowledge items (Vector RAG – replaces legacy FAQ/policy UI).
+  static Future<Map<String, dynamic>> listTrainingKnowledgeItems() async =>
+      _get('/api/pulse/knowledge/items');
+
+  static Future<Map<String, dynamic>> addTrainingKnowledgeItem({
+    required String question,
+    required String answer,
+  }) async =>
+      _post('/api/pulse/knowledge/items', {
+        'question': question,
+        'answer': answer,
+      });
+
+  static Future<void> deleteTrainingKnowledgeItem(String itemId) async {
+    await SpeariaApi.deleteJson(
+      '/api/pulse/knowledge/items/$itemId',
+      params: <String, dynamic>{'account_id': _defaultAccountId},
+    );
+  }
+
   /// Phase D: Audit log (who viewed/edited what)
   static Future<Map<String, dynamic>> getAuditLog({
     String? resource,
