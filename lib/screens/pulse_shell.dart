@@ -556,7 +556,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                // Top bar: 52px, bgBase, borderSubtle. Title left; credits pill + avatar right
+                // Top bar: 52px, bgBase, borderSubtle. Credits pill + avatar right (section title is on each page)
                 Container(
                   height: 52,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -566,12 +566,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Text(
-                          _selectedIndex < _navItems.length ? _navItems[_selectedIndex].label : 'Home',
-                          style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
-                        ),
-                      ),
+                      const Spacer(),
                       // Live status dot (animated)
                       AnimatedBuilder(
                         animation: _livePulse,
