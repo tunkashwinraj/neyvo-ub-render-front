@@ -9,7 +9,6 @@ import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
-import 'widgets/knowledge_base_section.dart';
 
 class ManagedProfileDetailPage extends StatefulWidget {
   const ManagedProfileDetailPage({
@@ -68,7 +67,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -586,7 +585,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       indicatorColor: NeyvoColors.teal,
                       tabs: const [
                         Tab(text: 'Personality'),
-                        Tab(text: 'Knowledge'),
                         Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
                         Tab(text: 'Additional settings'),
@@ -598,7 +596,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       controller: _tabs,
                       children: [
                         _tabPersonality(),
-                        _tabKnowledge(),
                         _tabAiStudio(),
                         _tabVoice(),
                         _tabAdditionalSettings(),
@@ -686,17 +683,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _tabKnowledge() {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        KnowledgeBaseSection(
-          profileId: widget.profileId,
         ),
       ],
     );
