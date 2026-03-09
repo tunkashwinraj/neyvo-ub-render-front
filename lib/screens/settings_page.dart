@@ -481,50 +481,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
             padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md),
           ),
         ),
-        const SizedBox(height: NeyvoSpacing.xl),
-        Card(
-          color: NeyvoTheme.bgCard,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md, horizontal: NeyvoSpacing.lg),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        children: [
-                          Icon(Icons.account_balance_wallet_outlined, color: NeyvoTheme.teal, size: 24),
-                          const SizedBox(width: 12),
-                          Text('Billing', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Container(width: 1, height: 32, color: NeyvoTheme.border),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.wallet),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        children: [
-                          Icon(Icons.account_balance_outlined, color: NeyvoTheme.teal, size: 24),
-                          const SizedBox(width: 12),
-                          Text('Wallet', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         const SizedBox(height: NeyvoSpacing.lg),
         Card(
           color: NeyvoTheme.bgCard,
