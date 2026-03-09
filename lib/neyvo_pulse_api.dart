@@ -392,6 +392,28 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> listCalls({String? studentId}) async =>
       _get('/api/pulse/calls', params: studentId != null ? {'student_id': studentId} : null);
 
+  /// Delete one or more call log entries by their ids (as returned in listCalls).
+  /// Uses DELETE /api/pulse/calls?ids=id1,id2,...
+  static Future<Map<String, dynamic>> deleteCalls(List<String> callIds) async {
+    if (callIds.isEmpty) {
+      return {'ok': true, 'deleted': 0};
+    }
+    final ids = callIds.where((e) => e.trim().isNotEmpty).map((e) => e.trim()).toList();
+    if (ids.isEmpty) {
+      return {'ok': false, 'error': 'no_valid_ids'};
+    }
+    final res = await SpeariaApi.deleteJson(
+      '/api/pulse/calls',
+      params: {
+        'ids': ids.join(','),
+      },
+    );
+    if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return {'ok': false, 'error': 'invalid_response'};
+  }
+
   /// GET /api/pulse/calls/by-id/<call_id> – single call by vapi_call_id (for Wallet → Call detail).
   static Future<Map<String, dynamic>> getCallById(String callId) async =>
       _get('/api/pulse/calls/by-id/${Uri.encodeComponent(callId)}');

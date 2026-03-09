@@ -35,6 +35,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   String _filterDirection = 'outbound'; // all, inbound, outbound (default to outbound)
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
+  final Set<String> _selectedCallIds = <String>{};
+  bool _selectionMode = false;
 
   @override
   void initState() {
@@ -57,6 +59,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _selectionMode = false;
+      _selectedCallIds.clear();
     });
     try {
       final res = await NeyvoPulseApi.listCalls();
@@ -165,6 +169,92 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       });
       _filteredCalls = list;
     });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedCallIds.clear();
+      _selectionMode = false;
+    });
+  }
+
+  void _toggleSelectionForCall(Map<String, dynamic> call) {
+    final id = call['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    setState(() {
+      if (_selectedCallIds.contains(id)) {
+        _selectedCallIds.remove(id);
+      } else {
+        _selectedCallIds.add(id);
+      }
+      _selectionMode = _selectedCallIds.isNotEmpty;
+    });
+  }
+
+  void _selectAllVisible() {
+    setState(() {
+      _selectedCallIds
+        ..clear()
+        ..addAll(_filteredCalls.map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '').where((id) => id.isNotEmpty));
+      _selectionMode = _selectedCallIds.isNotEmpty;
+    });
+  }
+
+  Future<void> _onDeleteSelected() async {
+    if (_selectedCallIds.isEmpty) return;
+    final count = _selectedCallIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete calls'),
+          content: Text('Are you sure you want to delete $count selected call${count == 1 ? '' : 's'}? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    try {
+      final ids = _selectedCallIds.toList();
+      final res = await NeyvoPulseApi.deleteCalls(ids);
+      if (res['ok'] != true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error']?.toString() ?? 'Failed to delete calls')),
+          );
+        }
+        return;
+      }
+      setState(() {
+        _allCalls = _allCalls.where((c) {
+          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
+          return !_selectedCallIds.contains(id);
+        }).toList();
+        _selectedCallIds.clear();
+        _selectionMode = false;
+        _filterCalls();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted $count call${count == 1 ? '' : 's'}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete calls: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _exportCsv() async {
@@ -427,7 +517,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.all(NeyvoSpacing.md),
-                      itemCount: _filteredCalls.length + 1,
+                      itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
                       itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
@@ -443,7 +533,10 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                   TextButton(
                                     onPressed: () {
                                       _searchController.clear();
-                                      setState(() { _filterStatus = 'all'; _filterOutcome = 'all'; });
+                                      setState(() {
+                                        _filterStatus = 'all';
+                                        _filterOutcome = 'all';
+                                      });
                                       _filterCalls();
                                     },
                                     child: const Text('Clear filters'),
@@ -452,7 +545,38 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             ),
                           );
                         }
-                        final call = _filteredCalls[i - 1] as Map<String, dynamic>;
+                        if (_selectionMode && i == 1) {
+                          final totalVisible = _filteredCalls.length;
+                          final selectedCount = _selectedCallIds.length;
+                          final allSelected = selectedCount > 0 && selectedCount >= totalVisible;
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, 0, NeyvoSpacing.md, NeyvoSpacing.sm),
+                            child: Row(
+                              children: [
+                                Text(
+                                  '$selectedCount selected',
+                                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+                                ),
+                                const Spacer(),
+                                if (selectedCount > 0)
+                                  FilledButton.icon(
+                                    onPressed: _onDeleteSelected,
+                                    icon: const Icon(Icons.delete_outline),
+                                    label: const Text('Delete'),
+                                  ),
+                                const SizedBox(width: NeyvoSpacing.sm),
+                                TextButton(
+                                  onPressed: allSelected ? _clearSelection : _selectAllVisible,
+                                  child: Text(allSelected ? 'Clear' : 'Select all'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        final idx = _selectionMode ? i - 2 : i - 1;
+                        final call = _filteredCalls[idx] as Map<String, dynamic>;
+                        final callId = call['id']?.toString() ?? '';
+                        final isSelected = callId.isNotEmpty && _selectedCallIds.contains(callId);
                         final status = call['status']?.toString() ?? 'unknown';
                         final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? 'Unknown').toString();
                         final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '').toString();
@@ -484,154 +608,204 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                          child: ExpansionTile(
-                            trailing: IconButton(
-                              icon: const Icon(Icons.open_in_new),
-                              tooltip: 'View full details',
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                          child: InkWell(
+                            onLongPress: () {
+                              if (!_selectionMode) {
+                                setState(() {
+                                  _selectionMode = true;
+                                  _selectedCallIds
+                                    ..clear()
+                                    ..add(callId);
+                                });
+                              }
+                            },
+                            onTap: _selectionMode
+                                ? () => _toggleSelectionForCall(call)
+                                : null,
+                            child: ExpansionTile(
+                              trailing: IconButton(
+                                icon: const Icon(Icons.open_in_new),
+                                tooltip: 'View full details',
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                                ),
                               ),
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor: statusColor.withOpacity(0.1),
-                              child: Icon(_getStatusIcon(status), color: statusColor),
-                            ),
-                            title: Row(
-                              children: [
-                                Expanded(child: Text(studentName, style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary))),
-                                if (successMetric == 'payment_received')
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: NeyvoTheme.success.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(6),
+                              leading: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_selectionMode)
+                                    Checkbox(
+                                      value: isSelected,
+                                      onChanged: (_) => _toggleSelectionForCall(call),
                                     ),
-                                    child: Text('Resolution achieved', style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w600)),
+                                  CircleAvatar(
+                                    backgroundColor: statusColor.withOpacity(0.1),
+                                    child: Icon(_getStatusIcon(status), color: statusColor),
                                   ),
-                              ],
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (studentPhone.isNotEmpty) Text('Phone: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (agentName.isNotEmpty) Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (showNumberCalled) Text('Number dialed: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (outcome.isNotEmpty && outcome != 'unknown') Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                if (date.isNotEmpty) Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                Row(
-                                  children: [
+                                ],
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      studentName,
+                                      style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+                                    ),
+                                  ),
+                                  if (successMetric == 'payment_received')
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: statusColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: NeyvoTheme.success.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
-                                        status.toUpperCase(),
+                                        'Resolution achieved',
                                         style: NeyvoType.labelSmall.copyWith(
-                                          color: statusColor,
+                                          color: NeyvoTheme.success,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ),
-                                    if (routedIntent.isNotEmpty) ...[
-                                      const SizedBox(width: NeyvoSpacing.sm),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (studentPhone.isNotEmpty)
+                                    Text('Phone: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                  if (agentName.isNotEmpty)
+                                    Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                  if (showNumberCalled)
+                                    Text('Number dialed: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                  if (outcome.isNotEmpty && outcome != 'unknown')
+                                    Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                  if (date.isNotEmpty)
+                                    Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                  Row(
+                                    children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: NeyvoTheme.bgSurface,
-                                          borderRadius: BorderRadius.circular(999),
-                                          border: Border.all(color: NeyvoTheme.border),
+                                          color: statusColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          'Routed: ${routedIntent[0].toUpperCase()}${routedIntent.substring(1)}',
-                                          style: NeyvoType.bodySmall.copyWith(fontSize: 11, color: NeyvoTheme.textMuted),
+                                          status.toUpperCase(),
+                                          style: NeyvoType.labelSmall.copyWith(
+                                            color: statusColor,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
+                                      if (routedIntent.isNotEmpty) ...[
+                                        const SizedBox(width: NeyvoSpacing.sm),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: NeyvoTheme.bgSurface,
+                                            borderRadius: BorderRadius.circular(999),
+                                            border: Border.all(color: NeyvoTheme.border),
+                                          ),
+                                          child: Text(
+                                            'Routed: ${routedIntent[0].toUpperCase()}${routedIntent.substring(1)}',
+                                            style: NeyvoType.bodySmall.copyWith(fontSize: 11, color: NeyvoTheme.textMuted),
+                                          ),
+                                        ),
+                                      ],
+                                      if (durationStr != '—') ...[
+                                        const SizedBox(width: NeyvoSpacing.sm),
+                                        Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                      ],
+                                      if (creditsStr != null) ...[
+                                        const SizedBox(width: NeyvoSpacing.sm),
+                                        Tooltip(
+                                          message: tooltipStr ?? creditsStr,
+                                          child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
+                                        ),
+                                      ],
+                                      if (outcomeType != null && outcomeType.isNotEmpty) ...[
+                                        const SizedBox(width: NeyvoSpacing.sm),
+                                        Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                      ],
                                     ],
-                                    if (durationStr != '—') ...[
-                                      const SizedBox(width: NeyvoSpacing.sm),
-                                      Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                    ],
-                                    if (creditsStr != null) ...[
-                                      const SizedBox(width: NeyvoSpacing.sm),
-                                      Tooltip(
-                                        message: tooltipStr ?? creditsStr,
-                                        child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
+                                  ),
+                                  if (attributedAmount != null && attributedAmount.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        'Payment received: $attributedAmount${attributedAt != null && attributedAt.isNotEmpty ? " ($attributedAt)" : ""}',
+                                        style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w500),
                                       ),
-                                    ],
-                                    if (outcomeType != null && outcomeType.isNotEmpty) ...[
-                                      const SizedBox(width: NeyvoSpacing.sm),
-                                      Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                    ],
-                                  ],
-                                ),
-                                if (attributedAmount != null && attributedAmount.isNotEmpty)
+                                    ),
+                                ],
+                              ),
+                              children: [
+                                if (recordingUrl != null && recordingUrl.isNotEmpty)
                                   Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text('Payment received: $attributedAmount${attributedAt != null && attributedAt.isNotEmpty ? " ($attributedAt)" : ""}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w500)),
+                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.sm, NeyvoSpacing.md, 0),
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final uri = Uri.tryParse(recordingUrl);
+                                        if (uri != null && await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      },
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
+                                          const SizedBox(width: NeyvoSpacing.sm),
+                                          Text(
+                                            'Listen to recording',
+                                            style: NeyvoType.bodyMedium.copyWith(
+                                              color: NeyvoTheme.teal,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                if (transcript.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                      decoration: BoxDecoration(
+                                        color: NeyvoTheme.bgHover,
+                                        borderRadius: BorderRadius.circular(NeyvoRadius.sm),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Transcript',
+                                            style: NeyvoType.labelLarge.copyWith(
+                                              color: NeyvoTheme.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: NeyvoSpacing.sm),
+                                          Text(
+                                            transcript,
+                                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Padding(
+                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                    child: Text(
+                                      'No transcript available',
+                                      style: NeyvoType.bodySmall.copyWith(
+                                        color: NeyvoTheme.textMuted,
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),
-                            children: [
-                              if (recordingUrl != null && recordingUrl.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.sm, NeyvoSpacing.md, 0),
-                                  child: InkWell(
-                                    onTap: () async {
-                                      final uri = Uri.tryParse(recordingUrl);
-                                      if (uri != null && await canLaunchUrl(uri)) {
-                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                      }
-                                    },
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
-                                        const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('Listen to recording', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.teal, decoration: TextDecoration.underline)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              if (transcript.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.all(NeyvoSpacing.md),
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
-                                    decoration: BoxDecoration(
-                                      color: NeyvoTheme.bgHover,
-                                      borderRadius: BorderRadius.circular(NeyvoRadius.sm),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Transcript',
-                                          style: NeyvoType.labelLarge.copyWith(
-                                            color: NeyvoTheme.textSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(height: NeyvoSpacing.sm),
-                                        Text(
-                                          transcript,
-                                          style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              else
-                                Padding(
-                                  padding: const EdgeInsets.all(NeyvoSpacing.md),
-                                  child: Text(
-                                    'No transcript available',
-                                    style: NeyvoType.bodySmall.copyWith(
-                                      color: NeyvoTheme.textMuted,
-                                    ),
-                                  ),
-                                ),
-                            ],
                           ),
                         );
                       },
