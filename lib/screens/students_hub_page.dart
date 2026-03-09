@@ -104,7 +104,8 @@ class _DirectoryTabState extends State<_DirectoryTab> {
   static String _normalizePhoneUs(String raw) => normalizePhoneInput(raw);
 
   Future<void> openAddStudentDialog() async {
-    final nameC = TextEditingController();
+    final firstNameC = TextEditingController();
+    final lastNameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
     final balanceC = TextEditingController();
@@ -133,12 +134,28 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          TextField(
-                            controller: nameC,
-                            decoration: const InputDecoration(
-                              labelText: 'Name *',
-                              hintText: 'Full name',
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: firstNameC,
+                                  decoration: const InputDecoration(
+                                    labelText: 'First name *',
+                                    hintText: 'First name',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: NeyvoSpacing.md),
+                              Expanded(
+                                child: TextField(
+                                  controller: lastNameC,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Last name (optional)',
+                                    hintText: 'Last name',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
                           TextField(
@@ -222,11 +239,12 @@ class _DirectoryTabState extends State<_DirectoryTab> {
           ),
           FilledButton(
             onPressed: () async {
-              final name = nameC.text.trim();
+              final firstName = firstNameC.text.trim();
+              final lastName = lastNameC.text.trim();
               final phoneRaw = phoneC.text.trim();
-              if (name.isEmpty || phoneRaw.isEmpty) {
+              if (firstName.isEmpty || phoneRaw.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Name and phone required')),
+                  const SnackBar(content: Text('First name and phone required')),
                 );
                 return;
               }
@@ -243,8 +261,11 @@ class _DirectoryTabState extends State<_DirectoryTab> {
               }
               try {
                 await NeyvoPulseApi.createStudent(
-                  name: name,
+                  // Treat first name as canonical name for compatibility.
+                  name: firstName,
                   phone: phone,
+                  firstName: firstName,
+                  lastName: lastName.isNotEmpty ? lastName : null,
                   email: emailC.text.trim().isEmpty ? null : emailC.text.trim(),
                   balance:
                       balanceC.text.trim().isEmpty ? null : balanceC.text.trim(),
@@ -271,7 +292,8 @@ class _DirectoryTabState extends State<_DirectoryTab> {
       ),
     );
 
-    nameC.dispose();
+    firstNameC.dispose();
+    lastNameC.dispose();
     phoneC.dispose();
     emailC.dispose();
     balanceC.dispose();
@@ -1006,7 +1028,8 @@ class _ImportTabState extends State<_ImportTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Upload a CSV or Excel file. Required: name, phone. Optional: email, student_id, balance, due_date, late_fee, notes. Phone accepts any format: (123) 456-7890, 123-456-7890, 1234567890, etc. Tip: the first non-comment row must be the header (name, phone, …). Lines starting with # and blank rows are ignored.',
+                      'Upload a CSV or Excel file. Required: either name OR first_name (plus phone). Optional: last_name, email, student_id, balance, due_date, late_fee, notes. '
+                      'Phone accepts any format: (123) 456-7890, 123-456-7890, 1234567890, etc. Tip: the first non-comment row must be the header. Lines starting with # and blank rows are ignored.',
                       style: NeyvoType.bodyMedium.copyWith(
                           color: NeyvoColors.textSecondary),
                     ),
