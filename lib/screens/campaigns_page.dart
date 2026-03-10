@@ -1417,6 +1417,38 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       onSelectionChanged: (v) => setState(() => _detailStatusFilter = v.first),
                     ),
                     const Spacer(),
+                    if (_detailStatusFilter == 'pending')
+                      TextButton.icon(
+                        icon: const Icon(Icons.play_circle_outline, size: 20),
+                        label: const Text('Call pending'),
+                        onPressed: () async {
+                          try {
+                            final res = await NeyvoPulseApi.reclaimStuckCampaign(campaignId);
+                            if (!mounted) return;
+                            final ok = res['ok'] == true;
+                            final issues = (res['issues'] as List?)?.join(', ');
+                            final text = ok
+                                ? 'Checked pending calls and refilled capacity if needed.'
+                                : 'Checked pending calls.${issues != null && issues.isNotEmpty ? ' Issues: $issues' : ''}';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(text),
+                                backgroundColor: ok ? NeyvoTheme.success : NeyvoTheme.warning,
+                                duration: const Duration(seconds: 5),
+                              ),
+                            );
+                            setState(() => _campaignDetailRefreshKey++);
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Unable to trigger pending calls: $e'),
+                                backgroundColor: NeyvoTheme.error,
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     Text(
                       'Active: $activeCount • Queued: $queuedCount • Retry: $retryWaitCount',
                       style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
