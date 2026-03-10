@@ -869,6 +869,11 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> verifyCampaign(String campaignId) async =>
       _get('/api/pulse/campaigns/$campaignId/verify');
 
+  /// Manually reclaim stuck calls and refill the pool for a campaign.
+  /// POST /api/pulse/campaigns/<id>/reclaim-stuck
+  static Future<Map<String, dynamic>> reclaimStuckCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/reclaim-stuck', {});
+
   /// Preview audience count and sample for financial filters (education campaigns).
   static Future<Map<String, dynamic>> getCampaignsPreviewAudience({
     bool? hasBalance,
