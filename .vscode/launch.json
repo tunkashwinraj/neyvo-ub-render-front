@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter (web, no browser) – Run Without Debugging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "noDebug": true,
+      "args": [
+        "-d",
+        "web-server",
+        "--web-port=9090",
+        "--dart-define=NEYVO_PULSE=true",
+        "--dart-define=BACKEND_BASE=http://127.0.0.1:8000"
+      ]
+    },
+    {
+      "name": "Flutter (web, no browser)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "-d",
+        "web-server",
+        "--web-port=9090",
+        "--dart-define=NEYVO_PULSE=true",
+        "--dart-define=BACKEND_BASE=http://127.0.0.1:8000"
+      ]
+    },
+    {
+      "name": "Flutter (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "-d",
+        "chrome",
+        "--web-port=9090",
+        "--dart-define=NEYVO_PULSE=true",
+        "--dart-define=BACKEND_BASE=http://127.0.0.1:8000"
+      ]
+    }
+  ]
+}
