@@ -21,13 +21,13 @@
   import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
-  /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
-  /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
-  /// 2) Runtime: when backend is ub-neyvo-back.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
-  String get _kFallbackAccountId {
+/// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
+/// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
+/// 2) Runtime: when backend is ub-neyvo-back-znhe.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
+String get _kFallbackAccountId {
     const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
     if (fromEnv.isNotEmpty) return fromEnv;
-    if (SpeariaApi.baseUrl.contains('ub-neyvo-back.onrender.com')) return '870065';
+  if (SpeariaApi.baseUrl.contains('ub-neyvo-back-znhe.onrender.com')) return '870065';
     return '';
   }
 
@@ -42,14 +42,14 @@
       await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
     }
 
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      SpeariaApi.setUserId(user?.uid);
-      if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
-    });
-    SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
-    if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
+  FirebaseAuth.instance.authStateChanges().listen((User? user) {
+    SpeariaApi.setUserId(user?.uid);
+    if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
+  });
+  SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
+  if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
-    SpeariaApi.setBaseUrl('https://ub-neyvo-back.onrender.com');
+  SpeariaApi.setBaseUrl('https://ub-neyvo-back-znhe.onrender.com');
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
 
     tz.initializeTimeZones();
@@ -121,6 +121,7 @@
     PulseRouteNames.agency,
     PulseRouteNames.voiceStudio,
     PulseRouteNames.testCall,
+    PulseRouteNames.health,
   };
 
   String? _initialRouteFromPath(String? path, {required bool hasPaymentParam}) {

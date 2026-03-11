@@ -23,6 +23,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
   List<Map<String, dynamic>> _campaigns = [];
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _agents = [];
+  /// For contact-list campaigns only: quick lookup so the audience picker can show if a contact is already in another campaign.
+  /// Key: student id, Value: list of campaign names.
+  Map<String, List<String>> _studentCampaignNames = {};
+  /// Latest known call time for each student (for audience picker hints).
+  Map<String, DateTime> _lastCallAtByStudentId = {};
   /// Combined list for operator dropdown: each has 'value' (agent:id or profile:id), 'name', 'type' (agent|profile).
   List<Map<String, dynamic>> _operatorsForCampaign = [];
   List<Map<String, dynamic>> _templates = [];
@@ -42,6 +47,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   // Wizard state
   final _nameController = TextEditingController();
+  final _audienceSearchController = TextEditingController();
   String _filterType = 'all'; // all, balance_above, balance_below, has_due_date, overdue
   final _balanceMinController = TextEditingController();
   final _balanceMaxController = TextEditingController();
@@ -85,6 +91,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   void dispose() {
     _detailRefreshTimer?.cancel();
     _nameController.dispose();
+    _audienceSearchController.dispose();
     _balanceMinController.dispose();
     _balanceMaxController.dispose();
     _smartBalanceMinController.dispose();
@@ -125,6 +132,28 @@ class _CampaignsPageState extends State<CampaignsPage> {
       final studentsRes = await NeyvoPulseApi.listStudents();
       final studentsList = studentsRes['students'] as List? ?? [];
       _students = studentsList.cast<Map<String, dynamic>>();
+
+      // Latest call time per student (best-effort; used only for small UI hints).
+      try {
+        final callsRes = await NeyvoPulseApi.listCalls();
+        final calls = (callsRes['calls'] as List?) ?? [];
+        final latest = <String, DateTime>{};
+        for (final raw in calls) {
+          if (raw is! Map) continue;
+          final call = Map<String, dynamic>.from(raw as Map);
+          final sid = (call['student_id'] ?? call['studentId'] ?? '').toString().trim();
+          if (sid.isEmpty) continue;
+          final created = call['created_at'] ?? call['date'] ?? call['timestamp'];
+          DateTime? dt;
+          if (created is String) dt = DateTime.tryParse(created);
+          if (created is int) dt = DateTime.fromMillisecondsSinceEpoch(created);
+          if (created is double) dt = DateTime.fromMillisecondsSinceEpoch(created.toInt());
+          if (dt == null) continue;
+          final prev = latest[sid];
+          if (prev == null || dt.isAfter(prev)) latest[sid] = dt;
+        }
+        _lastCallAtByStudentId = latest;
+      } catch (_) {}
       _agents = agents;
       _operatorsForCampaign = operators;
       _templates = await _loadTemplates();
@@ -226,9 +255,154 @@ class _CampaignsPageState extends State<CampaignsPage> {
     try {
       final res = await NeyvoPulseApi.listCampaigns();
       final list = res['campaigns'] as List? ?? [];
-      return list.cast<Map<String, dynamic>>();
+      final campaigns = list.cast<Map<String, dynamic>>();
+      // Build a student->campaigns lookup (only where the campaign explicitly stores student_ids).
+      final byStudent = <String, Set<String>>{};
+      for (final c in campaigns) {
+        final ids = c['student_ids'];
+        if (ids is! List) continue; // filter-based campaigns don't list student ids
+        final cname = (c['name'] ?? c['id'] ?? 'Campaign').toString().trim();
+        if (cname.isEmpty) continue;
+        for (final raw in ids) {
+          final sid = (raw ?? '').toString().trim();
+          if (sid.isEmpty) continue;
+          (byStudent[sid] ??= <String>{}).add(cname);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _studentCampaignNames = byStudent.map((k, v) => MapEntry(k, v.toList()..sort()));
+        });
+      }
+      return campaigns;
     } catch (_) {
       return [];
+    }
+  }
+
+  String? _campaignHintForStudent(String studentId) {
+    final names = _studentCampaignNames[studentId];
+    if (names == null || names.isEmpty) return null;
+    const maxShow = 2;
+    final shown = names.take(maxShow).join(', ');
+    final more = names.length - maxShow;
+    return more > 0 ? 'In campaigns: $shown +$more more' : 'In campaigns: $shown';
+  }
+
+  String? _calledBeforeHintForStudent(String studentId) {
+    final dt = _lastCallAtByStudentId[studentId];
+    if (dt == null) return null;
+    final formatted = UserTimezoneService.format(dt.toIso8601String());
+    if (formatted.trim().isEmpty) return null;
+    return 'Called before: $formatted';
+  }
+
+  bool _isVoicemailText(String text) {
+    final t = text.toLowerCase();
+    return t.contains('voicemail') ||
+        t.contains('left a message') ||
+        t.contains('left message') ||
+        t.contains('after the tone') ||
+        t.contains('mailbox') ||
+        t.contains('beep');
+  }
+
+  bool _isCallbackRequestedText(String text) {
+    final t = text.toLowerCase();
+    return t.contains('callback') ||
+        t.contains('call back') ||
+        t.contains('call-back') ||
+        t.contains('scheduled a callback') ||
+        t.contains('schedule a callback') ||
+        t.contains('requested a callback');
+  }
+
+  /// Map each student's campaign call to one of: Answered, Voicemail, Not Connected.
+  /// Returns { outcome, callbackRequested } where callbackRequested suppresses retry.
+  Map<String, dynamic> _deriveCampaignCallOutcome({
+    required Map<String, dynamic> callItem,
+    required Map<String, dynamic>? callDetail,
+  }) {
+    final itemStatus = (callItem['status'] ?? '').toString().toLowerCase().trim();
+    final summary = (callDetail?['summary'] ?? callItem['summary'] ?? '').toString();
+    final transcript = (callDetail?['transcript_snippet'] ?? callItem['transcript'] ?? '').toString();
+    final endedReason = (callDetail?['ended_reason'] ?? callItem['ended_reason'] ?? '').toString();
+
+    final combined = ('$summary\n$transcript\n$endedReason').trim();
+    final callbackMentioned = combined.isNotEmpty && _isCallbackRequestedText(combined);
+
+    // Not Connected: explicit failure or no transcript/summary at all.
+    final hasAnyText = transcript.trim().isNotEmpty || summary.trim().isNotEmpty;
+    if (itemStatus == 'failed' || (!hasAnyText && itemStatus != 'completed')) {
+      // Callback is only meaningful for Answered conversations.
+      return {'outcome': 'Not Connected', 'callbackRequested': false};
+    }
+
+    if (_isVoicemailText(combined)) {
+      // Voicemail scripts often say “call back”; ignore that for retry.
+      return {'outcome': 'Voicemail', 'callbackRequested': false};
+    }
+
+    // If we have any conversational content (or completed) and not voicemail, treat as Answered.
+    if (itemStatus == 'completed' || hasAnyText) {
+      return {'outcome': 'Answered', 'callbackRequested': callbackMentioned};
+    }
+
+    return {'outcome': 'Not Connected', 'callbackRequested': false};
+  }
+
+  Future<void> _retryCampaignCalls({
+    required Map<String, dynamic> originalCampaign,
+    required List<String> studentIds,
+  }) async {
+    if (studentIds.isEmpty) return;
+    if (!_ensureHasPhoneNumber()) return;
+    if (!_hasCreditsToRun && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing.'),
+        backgroundColor: NeyvoTheme.warning,
+        duration: const Duration(seconds: 5),
+      ));
+      return;
+    }
+    final baseName = (originalCampaign['name'] ?? 'Campaign').toString().trim();
+    final date = DateTime.now().toIso8601String().substring(0, 10);
+    final retryName = '$baseName (Retry $date)';
+    final agentId = (originalCampaign['agent_id'] ?? '').toString().trim();
+    final profileId = (originalCampaign['profile_id'] ?? '').toString().trim();
+    final templateId = (originalCampaign['template_id'] ?? '').toString().trim();
+
+    try {
+      final created = await NeyvoPulseApi.createCampaign(
+        name: retryName,
+        agentId: agentId.isNotEmpty ? agentId : null,
+        profileId: profileId.isNotEmpty ? profileId : null,
+        templateId: templateId.isNotEmpty ? templateId : null,
+        studentIds: studentIds,
+        audienceType: 'contact_list',
+        filters: null,
+        scheduledAt: null,
+      );
+      final newCampaign = (created['campaign'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      final newId = (newCampaign['id'] ?? '').toString().trim();
+      if (newId.isEmpty) throw Exception('Campaign created but no id returned');
+
+      final res = await NeyvoPulseApi.startCampaign(newId, phoneNumberId: _selectedStartPhoneNumberId);
+      if (!mounted) return;
+      _showCampaignStartResult(res, isRerun: false);
+      setState(() {
+        _selectedCampaignId = newId;
+        _detailStatusFilter = 'all';
+        _campaignDetailRefreshKey++;
+      });
+      _startDetailAutoRefresh();
+    } on ApiException catch (e) {
+      if (mounted) _showInsufficientCreditsSnackBar(e);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Retry failed: $e'), backgroundColor: NeyvoTheme.error),
+      );
     }
   }
 
@@ -960,17 +1134,31 @@ class _CampaignsPageState extends State<CampaignsPage> {
     return FutureBuilder<Map<String, dynamic>>(
       // Stable key so the detail screen doesn't fully rebuild/flash on every auto-refresh.
       key: ValueKey('campaign_detail_$campaignId'),
-      future: Future.wait([
-        NeyvoPulseApi.getCampaign(campaignId),
-        NeyvoPulseApi.getCampaignCalls(campaignId),
-        NeyvoPulseApi.getCampaignMetrics(campaignId),
-        NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500),
-      ]).then((list) => {
-            'campaign': list[0]['campaign'],
-            'calls': (list[1]['calls'] as List?) ?? [],
-            'metrics': (list[2]['metrics'] as Map?) ?? {},
-            'items': (list[3]['items'] as List?) ?? [],
-          }),
+      future: () async {
+        final campaignRes = await NeyvoPulseApi.getCampaign(campaignId);
+        final camp = Map<String, dynamic>.from((campaignRes['campaign'] as Map?) ?? const {});
+        final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
+        final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
+
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId);
+        final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
+        final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
+        final reportF = isTerminal ? NeyvoPulseApi.getCampaignReport(campaignId) : Future.value(<String, dynamic>{});
+
+        final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
+        final callsRes = results[0] as Map<String, dynamic>;
+        final metricsRes = results[1] as Map<String, dynamic>;
+        final itemsRes = results[2] as Map<String, dynamic>;
+        final reportRes = results[3] as Map<String, dynamic>;
+
+        return {
+          'campaign': camp,
+          'calls': (callsRes['calls'] as List?) ?? [],
+          'metrics': (metricsRes['metrics'] as Map?) ?? {},
+          'items': (itemsRes['items'] as List?) ?? [],
+          'report': reportRes,
+        };
+      }(),
       builder: (context, snapshot) {
         // Store latest good payload in cache.
         if (snapshot.hasData) {
@@ -1003,6 +1191,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final metrics = Map<String, dynamic>.from((data['metrics'] as Map? ?? const {}));
         final items = (data['items'] as List?)?.cast<dynamic>().map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
         final status = c['status']?.toString() ?? 'draft';
+        final statusLower = status.toLowerCase().trim();
+        final isTerminal = statusLower == 'completed' || statusLower.startsWith('stopped') || statusLower == 'cancelled' || statusLower == 'deleted';
+        final report = (data['report'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        final callDetails = (report['call_details'] as Map?)?.map(
+              (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+            ) ??
+            const <String, Map<String, dynamic>>{};
         final canStart = status == 'draft' || status == 'scheduled';
         final canRerun = status == 'completed' || status == 'running';
         final canEdit = status == 'draft' || status == 'scheduled';
@@ -1047,6 +1242,47 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 .where((e) => e.isNotEmpty)
                 .toList() ??
             <String>[];
+
+        String operatorLabel() {
+          final pid = (c['profile_id'] ?? '').toString().trim();
+          final aid = (c['agent_id'] ?? '').toString().trim();
+          if (pid.isNotEmpty) {
+            final list = _operatorsForCampaign.where((o) => o['value'] == 'profile:$pid').toList();
+            if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
+          }
+          if (aid.isNotEmpty) {
+            final list = _operatorsForCampaign.where((o) => o['value'] == 'agent:$aid').toList();
+            if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
+          }
+          return '—';
+        }
+
+        String outboundNumberLabel() {
+          final campaignPnId = (c['campaign_phone_number_id'] ?? '').toString().trim();
+          if (campaignPnId.isNotEmpty) {
+            for (final n in _outboundPhoneNumbers) {
+              final id = (n['phone_number_id'] ?? n['id'] ?? '').toString().trim();
+              if (id == campaignPnId) {
+                return (n['label'] ?? n['role'] ?? n['phone_number'] ?? id).toString();
+              }
+            }
+            return campaignPnId;
+          }
+          if (status == 'draft' || status == 'scheduled') {
+            return 'Not started yet';
+          }
+          return '—';
+        }
+
+        String audienceSummary() {
+          if (c['student_ids'] != null) {
+            return '${(c['student_ids'] as List).length} contacts selected';
+          }
+          if (c['filters'] != null) {
+            return 'Filters: ${c['filters']?.toString() ?? '—'}';
+          }
+          return '—';
+        }
         return Scaffold(
           backgroundColor: NeyvoTheme.bgPrimary,
           appBar: AppBar(
@@ -1314,58 +1550,18 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           ],
                         ),
                         const Divider(height: NeyvoSpacing.xl),
-                        ListTile(title: Text('Created', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(formatDate(created), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(title: Text('Started', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(formatDate(started), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(title: Text('Script template', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(templateName ?? '—', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(
-                          title: const Text('Operator'),
-                          trailing: Text(
-                            () {
-                              final pid = (c['profile_id'] ?? '').toString().trim();
-                              final aid = (c['agent_id'] ?? '').toString().trim();
-                              if (pid.isNotEmpty) {
-                                final list = _operatorsForCampaign.where((o) => o['value'] == 'profile:$pid').toList();
-                                if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
-                              }
-                              if (aid.isNotEmpty) {
-                                final list = _operatorsForCampaign.where((o) => o['value'] == 'agent:$aid').toList();
-                                if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
-                              }
-                              return '—';
-                            }(),
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                        ),
-                        ListTile(
-                          title: const Text('Outbound number'),
-                          trailing: Text(
-                            () {
-                              final campaignPnId = (c['campaign_phone_number_id'] ?? '').toString().trim();
-                              if (campaignPnId.isNotEmpty) {
-                                for (final n in _outboundPhoneNumbers) {
-                                  final id = (n['phone_number_id'] ?? n['id'] ?? '').toString().trim();
-                                  if (id == campaignPnId) {
-                                    return (n['label'] ?? n['role'] ?? n['phone_number'] ?? id).toString();
-                                  }
-                                }
-                                return campaignPnId;
-                              }
-                              if (status == 'draft' || status == 'scheduled')
-                                return 'Not started yet';
-                              return '—';
-                            }(),
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                        ),
+                        _metaRow('Created', formatDate(created)),
+                        _metaRow('Started', formatDate(started)),
+                        _metaRow('Script template', templateName ?? '—'),
+                        _metaRow('Operator', operatorLabel()),
+                        _metaRow('Outbound number', outboundNumberLabel()),
                         if ((c['filters'] ?? c['student_ids']) != null) ...[
-                          ListTile(
-                            title: const Text('Audience'),
-                            subtitle: Text(
-                              c['student_ids'] != null
-                                  ? '${(c['student_ids'] as List).length} contacts selected'
-                                  : 'Filters: ${c['filters']?.toString() ?? '—'}',
-                              style: NeyvoType.bodySmall,
-                            ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Text('Audience', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                          const SizedBox(height: NeyvoSpacing.xs),
+                          Text(
+                            audienceSummary(),
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                           ),
                           if (items.isNotEmpty)
                             ConstrainedBox(
@@ -1417,6 +1613,30 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       onSelectionChanged: (v) => setState(() => _detailStatusFilter = v.first),
                     ),
                     const Spacer(),
+                    if (isTerminal) ...[
+                      Builder(builder: (context) {
+                        final eligibleIds = items.where((it) {
+                          final st = (it['status'] ?? '').toString().toLowerCase().trim();
+                          final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
+                          final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
+                          final derived = _deriveCampaignCallOutcome(callItem: it, callDetail: detail);
+                          final outcome = (derived['outcome'] ?? '').toString();
+                          final callbackRequested = derived['callbackRequested'] == true;
+                          if (callbackRequested) return false;
+                          if (outcome == 'Voicemail' || outcome == 'Not Connected') return true;
+                          // Some failures may still be 'failed' without details; treat as Not Connected.
+                          return st == 'failed';
+                        }).map((it) => (it['student_id'] ?? '').toString().trim()).where((id) => id.isNotEmpty).toSet().toList();
+
+                        if (eligibleIds.isEmpty) return const SizedBox.shrink();
+                        return TextButton.icon(
+                          icon: const Icon(Icons.redo, size: 20),
+                          label: Text('Retry all (${eligibleIds.length})'),
+                          onPressed: () => _retryCampaignCalls(originalCampaign: c, studentIds: eligibleIds),
+                        );
+                      }),
+                      const SizedBox(width: NeyvoSpacing.sm),
+                    ],
                     if (_detailStatusFilter == 'pending')
                       TextButton.icon(
                         icon: const Icon(Icons.play_circle_outline, size: 20),
@@ -1509,27 +1729,71 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
                   return Card(
                     color: NeyvoTheme.bgCard,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 420),
-                      child: ListView.separated(
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
                           final it = visible[i];
                           final st = sOf(it);
                           final name = (it['student_name'] ?? it['name'] ?? '—').toString();
                           final phone = (it['student_phone'] ?? it['phone'] ?? '—').toString();
                           final attempt = it['attempt'];
+                          final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
+                          final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
+                          final derived = isTerminal
+                              ? _deriveCampaignCallOutcome(callItem: it, callDetail: detail)
+                              : const <String, dynamic>{};
+                          final outcome = (derived['outcome'] ?? '').toString();
+                          final callbackRequested = derived['callbackRequested'] == true;
+
+                          Color outcomeColor(String o) {
+                            switch (o) {
+                              case 'Answered':
+                                return NeyvoTheme.success;
+                              case 'Voicemail':
+                                return NeyvoTheme.warning;
+                              case 'Not Connected':
+                                return NeyvoTheme.error;
+                              default:
+                                return NeyvoTheme.textMuted;
+                            }
+                          }
+
+                          final subtitleLines = <String>[
+                            '$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}',
+                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome',
+                            if (isTerminal && outcome == 'Answered' && callbackRequested) 'Callback requested',
+                          ].where((e) => e.trim().isNotEmpty).toList();
+                          final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
+                          final canRetryThis = isTerminal &&
+                              studentId.isNotEmpty &&
+                              !callbackRequested &&
+                              (outcome == 'Voicemail' || outcome == 'Not Connected');
                           return ListTile(
                             leading: Icon(Icons.person_outline, color: statusColor(st)),
                             title: Text(name, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                            subtitle: Text('$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                            trailing: st == 'completed'
-                                ? const Icon(Icons.check_circle_outline, color: NeyvoTheme.success)
-                                : (st == 'failed' ? const Icon(Icons.error_outline, color: NeyvoTheme.error) : null),
+                            subtitle: Text(
+                              subtitleLines.join('\n'),
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: canRetryThis
+                                ? TextButton(
+                                    onPressed: () => _retryCampaignCalls(originalCampaign: c, studentIds: [studentId]),
+                                    child: const Text('Retry Call'),
+                                  )
+                                : (st == 'completed'
+                                    ? const Icon(Icons.check_circle_outline, color: NeyvoTheme.success)
+                                    : (st == 'failed'
+                                        ? const Icon(Icons.error_outline, color: NeyvoTheme.error)
+                                        : (isTerminal && outcome.isNotEmpty)
+                                            ? Icon(Icons.circle, size: 12, color: outcomeColor(outcome))
+                                            : null)),
                           );
-                        },
-                      ),
+                      },
                     ),
                   );
                 }),
@@ -1610,6 +1874,32 @@ class _CampaignsPageState extends State<CampaignsPage> {
       backgroundColor: NeyvoTheme.bgHover,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _metaRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              (value.isEmpty ? '—' : value),
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1896,24 +2186,57 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 ],
               ),
               const SizedBox(height: NeyvoSpacing.sm),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 280),
-                child: ListView.builder(
+              TextField(
+                controller: _audienceSearchController,
+                decoration: const InputDecoration(
+                  labelText: 'Search contacts',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: NeyvoSpacing.sm),
+              Builder(builder: (context) {
+                final q = _audienceSearchController.text.trim().toLowerCase();
+                final visible = q.isEmpty
+                    ? filtered
+                    : filtered.where((s) {
+                        final name = (s['name'] ?? '').toString().toLowerCase();
+                        final phone = (s['phone'] ?? '').toString().toLowerCase();
+                        final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
+                        return name.contains(q) || phone.contains(q) || sid.contains(q);
+                      }).toList();
+                return ListView.builder(
                   shrinkWrap: true,
-                  itemCount: filtered.length,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: visible.length,
                   itemBuilder: (context, i) {
-                    final s = filtered[i];
+                    final s = visible[i];
                     final id = s['id'] as String? ?? '';
+                    final campaignHint = id.isEmpty ? null : _campaignHintForStudent(id);
+                    final calledBeforeHint = id.isEmpty ? null : _calledBeforeHintForStudent(id);
                     final selected = !_manualAudienceSelection || _selectedStudentIds.contains(id);
                     return CheckboxListTile(
-                      title: Text(s['name']?.toString() ?? '—'),
-                      subtitle: Text('${s['phone'] ?? ''} • ${s['balance'] ?? ''}'),
+                      isThreeLine: true,
+                      title: Text(
+                        s['name']?.toString() ?? '—',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [
+                          '${s['phone'] ?? ''} • ${s['balance'] ?? ''}'.trim(),
+                          if (campaignHint != null && campaignHint.isNotEmpty) campaignHint,
+                          if (calledBeforeHint != null && calledBeforeHint.isNotEmpty) calledBeforeHint,
+                        ].where((e) => e.isNotEmpty).join('\n'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       value: selected,
                       onChanged: _manualAudienceSelection ? (v) => _toggleStudent(id) : null,
                     );
                   },
-                ),
-              ),
+                );
+              }),
             ],
           ],
         ),

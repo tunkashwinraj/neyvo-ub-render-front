@@ -40,6 +40,7 @@ import 'students_hub_page.dart';
 import 'team_page.dart';
 import 'training_page.dart';
 import 'audit_log_page.dart';
+import 'health_check_page.dart';
 
 class PulseShell extends StatefulWidget {
   const PulseShell({
@@ -101,6 +102,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'audit_log'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
     _NavItem('Training', Icons.quiz_outlined, PulseRouteNames.training, 'settings'), // temporary: FAQ + policy
+    _NavItem('Health', Icons.monitor_heart_outlined, PulseRouteNames.health, 'settings'),
     _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
     _NavItem('Settings', Icons.settings_outlined, PulseRouteNames.settings, 'settings'),
   ];
@@ -857,6 +859,8 @@ extension on _PulseShellState {
         return const TestCallPage();
       case PulseRouteNames.analytics:
         return const AnalyticsPage();
+      case PulseRouteNames.health:
+        return const HealthCheckPage();
       case PulseRouteNames.integrations:
         return const IntegrationsPage();
       case PulseRouteNames.billing:
