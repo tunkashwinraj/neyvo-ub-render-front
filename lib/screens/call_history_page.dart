@@ -340,10 +340,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     
     return Scaffold(
       appBar: AppBar(title: const Text('Call History')),
-      body: Column(
-        children: [
-          // Search + inline filters (single row)
-          Container(
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              // Search + inline filters (single row)
+              Container(
             padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.md, vertical: NeyvoSpacing.sm),
             decoration: BoxDecoration(
               color: NeyvoTheme.bgSurface,
@@ -494,31 +498,32 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                 ),
               ],
             ),
-          ),
-          
-          // Calls List
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _load,
-              child: _filteredCalls.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
-                          const SizedBox(height: NeyvoSpacing.md),
-                          Text(
-                            _allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
-                            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+              ),
+              
+              // Calls List (single page scroll: list does not scroll independently)
+              if (_filteredCalls.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
+                      const SizedBox(height: NeyvoSpacing.md),
+                      Text(
+                        _allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
+                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+                        textAlign: TextAlign.center,
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(NeyvoSpacing.md),
-                      itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
-                      itemBuilder: (context, i) {
+                    ],
+                  ),
+                )
+              else
+                ListView.builder(
+                  padding: const EdgeInsets.all(NeyvoSpacing.md),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
+                  itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
                             padding: const EdgeInsets.all(NeyvoSpacing.md),
@@ -810,11 +815,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             ),
                           ),
                         );
-                      },
-                    ),
-            ),
+                  },
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
