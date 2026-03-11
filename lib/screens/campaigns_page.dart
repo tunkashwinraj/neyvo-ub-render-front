@@ -23,6 +23,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
   List<Map<String, dynamic>> _campaigns = [];
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _agents = [];
+  /// For contact-list campaigns only: quick lookup so the audience picker can show if a contact is already in another campaign.
+  /// Key: student id, Value: list of campaign names.
+  Map<String, List<String>> _studentCampaignNames = {};
+  /// Latest known call time for each student (for audience picker hints).
+  Map<String, DateTime> _lastCallAtByStudentId = {};
   /// Combined list for operator dropdown: each has 'value' (agent:id or profile:id), 'name', 'type' (agent|profile).
   List<Map<String, dynamic>> _operatorsForCampaign = [];
   List<Map<String, dynamic>> _templates = [];
@@ -42,6 +47,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   // Wizard state
   final _nameController = TextEditingController();
+  final _audienceSearchController = TextEditingController();
   String _filterType = 'all'; // all, balance_above, balance_below, has_due_date, overdue
   final _balanceMinController = TextEditingController();
   final _balanceMaxController = TextEditingController();
@@ -85,6 +91,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   void dispose() {
     _detailRefreshTimer?.cancel();
     _nameController.dispose();
+    _audienceSearchController.dispose();
     _balanceMinController.dispose();
     _balanceMaxController.dispose();
     _smartBalanceMinController.dispose();
@@ -125,6 +132,28 @@ class _CampaignsPageState extends State<CampaignsPage> {
       final studentsRes = await NeyvoPulseApi.listStudents();
       final studentsList = studentsRes['students'] as List? ?? [];
       _students = studentsList.cast<Map<String, dynamic>>();
+
+      // Latest call time per student (best-effort; used only for small UI hints).
+      try {
+        final callsRes = await NeyvoPulseApi.listCalls();
+        final calls = (callsRes['calls'] as List?) ?? [];
+        final latest = <String, DateTime>{};
+        for (final raw in calls) {
+          if (raw is! Map) continue;
+          final call = Map<String, dynamic>.from(raw as Map);
+          final sid = (call['student_id'] ?? call['studentId'] ?? '').toString().trim();
+          if (sid.isEmpty) continue;
+          final created = call['created_at'] ?? call['date'] ?? call['timestamp'];
+          DateTime? dt;
+          if (created is String) dt = DateTime.tryParse(created);
+          if (created is int) dt = DateTime.fromMillisecondsSinceEpoch(created);
+          if (created is double) dt = DateTime.fromMillisecondsSinceEpoch(created.toInt());
+          if (dt == null) continue;
+          final prev = latest[sid];
+          if (prev == null || dt.isAfter(prev)) latest[sid] = dt;
+        }
+        _lastCallAtByStudentId = latest;
+      } catch (_) {}
       _agents = agents;
       _operatorsForCampaign = operators;
       _templates = await _loadTemplates();
@@ -226,10 +255,46 @@ class _CampaignsPageState extends State<CampaignsPage> {
     try {
       final res = await NeyvoPulseApi.listCampaigns();
       final list = res['campaigns'] as List? ?? [];
-      return list.cast<Map<String, dynamic>>();
+      final campaigns = list.cast<Map<String, dynamic>>();
+      // Build a student->campaigns lookup (only where the campaign explicitly stores student_ids).
+      final byStudent = <String, Set<String>>{};
+      for (final c in campaigns) {
+        final ids = c['student_ids'];
+        if (ids is! List) continue; // filter-based campaigns don't list student ids
+        final cname = (c['name'] ?? c['id'] ?? 'Campaign').toString().trim();
+        if (cname.isEmpty) continue;
+        for (final raw in ids) {
+          final sid = (raw ?? '').toString().trim();
+          if (sid.isEmpty) continue;
+          (byStudent[sid] ??= <String>{}).add(cname);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _studentCampaignNames = byStudent.map((k, v) => MapEntry(k, v.toList()..sort()));
+        });
+      }
+      return campaigns;
     } catch (_) {
       return [];
     }
+  }
+
+  String? _campaignHintForStudent(String studentId) {
+    final names = _studentCampaignNames[studentId];
+    if (names == null || names.isEmpty) return null;
+    const maxShow = 2;
+    final shown = names.take(maxShow).join(', ');
+    final more = names.length - maxShow;
+    return more > 0 ? 'In campaigns: $shown +$more more' : 'In campaigns: $shown';
+  }
+
+  String? _calledBeforeHintForStudent(String studentId) {
+    final dt = _lastCallAtByStudentId[studentId];
+    if (dt == null) return null;
+    final formatted = UserTimezoneService.format(dt.toIso8601String());
+    if (formatted.trim().isEmpty) return null;
+    return 'Called before: $formatted';
   }
 
   void _startDetailAutoRefresh() {
@@ -1896,22 +1961,70 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 ],
               ),
               const SizedBox(height: NeyvoSpacing.sm),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 520),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: filtered.length,
+              TextField(
+                controller: _audienceSearchController,
+                decoration: const InputDecoration(
+                  labelText: 'Search contacts',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: NeyvoSpacing.sm),
+              SizedBox(
+                height: 520,
+                width: double.infinity,
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                  primary: false,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: (() {
+                    final q = _audienceSearchController.text.trim().toLowerCase();
+                    if (q.isEmpty) return filtered.length;
+                    return filtered.where((s) {
+                      final name = (s['name'] ?? '').toString().toLowerCase();
+                      final phone = (s['phone'] ?? '').toString().toLowerCase();
+                      final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
+                      return name.contains(q) || phone.contains(q) || sid.contains(q);
+                    }).length;
+                  })(),
                   itemBuilder: (context, i) {
-                    final s = filtered[i];
+                    final q = _audienceSearchController.text.trim().toLowerCase();
+                    final visible = q.isEmpty
+                        ? filtered
+                        : filtered.where((s) {
+                            final name = (s['name'] ?? '').toString().toLowerCase();
+                            final phone = (s['phone'] ?? '').toString().toLowerCase();
+                            final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
+                            return name.contains(q) || phone.contains(q) || sid.contains(q);
+                          }).toList();
+                    if (i >= visible.length) return const SizedBox.shrink();
+                    final s = visible[i];
                     final id = s['id'] as String? ?? '';
+                    final campaignHint = id.isEmpty ? null : _campaignHintForStudent(id);
+                    final calledBeforeHint = id.isEmpty ? null : _calledBeforeHintForStudent(id);
                     final selected = !_manualAudienceSelection || _selectedStudentIds.contains(id);
                     return CheckboxListTile(
-                      title: Text(s['name']?.toString() ?? '—'),
-                      subtitle: Text('${s['phone'] ?? ''} • ${s['balance'] ?? ''}'),
+                      isThreeLine: true,
+                      title: Text(
+                        s['name']?.toString() ?? '—',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [
+                          '${s['phone'] ?? ''} • ${s['balance'] ?? ''}'.trim(),
+                          if (campaignHint != null && campaignHint.isNotEmpty) campaignHint,
+                          if (calledBeforeHint != null && calledBeforeHint.isNotEmpty) calledBeforeHint,
+                        ].where((e) => e.isNotEmpty).join('\n'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       value: selected,
                       onChanged: _manualAudienceSelection ? (v) => _toggleStudent(id) : null,
                     );
                   },
+                ),
                 ),
               ),
             ],
