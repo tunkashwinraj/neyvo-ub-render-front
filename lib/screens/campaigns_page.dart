@@ -297,6 +297,113 @@ class _CampaignsPageState extends State<CampaignsPage> {
     return 'Called before: $formatted';
   }
 
+  bool _isVoicemailText(String text) {
+    final t = text.toLowerCase();
+    return t.contains('voicemail') ||
+        t.contains('left a message') ||
+        t.contains('left message') ||
+        t.contains('after the tone') ||
+        t.contains('mailbox') ||
+        t.contains('beep');
+  }
+
+  bool _isCallbackRequestedText(String text) {
+    final t = text.toLowerCase();
+    return t.contains('callback') ||
+        t.contains('call back') ||
+        t.contains('call-back') ||
+        t.contains('scheduled a callback') ||
+        t.contains('schedule a callback') ||
+        t.contains('requested a callback');
+  }
+
+  /// Map each student's campaign call to one of: Answered, Voicemail, Not Connected.
+  /// Returns { outcome, callbackRequested } where callbackRequested suppresses retry.
+  Map<String, dynamic> _deriveCampaignCallOutcome({
+    required Map<String, dynamic> callItem,
+    required Map<String, dynamic>? callDetail,
+  }) {
+    final itemStatus = (callItem['status'] ?? '').toString().toLowerCase().trim();
+    final summary = (callDetail?['summary'] ?? callItem['summary'] ?? '').toString();
+    final transcript = (callDetail?['transcript_snippet'] ?? callItem['transcript'] ?? '').toString();
+    final endedReason = (callDetail?['ended_reason'] ?? callItem['ended_reason'] ?? '').toString();
+
+    final combined = ('$summary\n$transcript\n$endedReason').trim();
+    final callbackRequested = combined.isNotEmpty && _isCallbackRequestedText(combined);
+
+    // Not Connected: explicit failure or no transcript/summary at all.
+    final hasAnyText = transcript.trim().isNotEmpty || summary.trim().isNotEmpty;
+    if (itemStatus == 'failed' || (!hasAnyText && itemStatus != 'completed')) {
+      return {'outcome': 'Not Connected', 'callbackRequested': callbackRequested};
+    }
+
+    if (_isVoicemailText(combined)) {
+      return {'outcome': 'Voicemail', 'callbackRequested': callbackRequested};
+    }
+
+    // If we have any conversational content (or completed) and not voicemail, treat as Answered.
+    if (itemStatus == 'completed' || hasAnyText) {
+      return {'outcome': 'Answered', 'callbackRequested': callbackRequested};
+    }
+
+    return {'outcome': 'Not Connected', 'callbackRequested': callbackRequested};
+  }
+
+  Future<void> _retryCampaignCalls({
+    required Map<String, dynamic> originalCampaign,
+    required List<String> studentIds,
+  }) async {
+    if (studentIds.isEmpty) return;
+    if (!_ensureHasPhoneNumber()) return;
+    if (!_hasCreditsToRun && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing.'),
+        backgroundColor: NeyvoTheme.warning,
+        duration: const Duration(seconds: 5),
+      ));
+      return;
+    }
+    final baseName = (originalCampaign['name'] ?? 'Campaign').toString().trim();
+    final date = DateTime.now().toIso8601String().substring(0, 10);
+    final retryName = '$baseName (Retry $date)';
+    final agentId = (originalCampaign['agent_id'] ?? '').toString().trim();
+    final profileId = (originalCampaign['profile_id'] ?? '').toString().trim();
+    final templateId = (originalCampaign['template_id'] ?? '').toString().trim();
+
+    try {
+      final created = await NeyvoPulseApi.createCampaign(
+        name: retryName,
+        agentId: agentId.isNotEmpty ? agentId : null,
+        profileId: profileId.isNotEmpty ? profileId : null,
+        templateId: templateId.isNotEmpty ? templateId : null,
+        studentIds: studentIds,
+        audienceType: 'contact_list',
+        filters: null,
+        scheduledAt: null,
+      );
+      final newCampaign = (created['campaign'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      final newId = (newCampaign['id'] ?? '').toString().trim();
+      if (newId.isEmpty) throw Exception('Campaign created but no id returned');
+
+      final res = await NeyvoPulseApi.startCampaign(newId, phoneNumberId: _selectedStartPhoneNumberId);
+      if (!mounted) return;
+      _showCampaignStartResult(res, isRerun: false);
+      setState(() {
+        _selectedCampaignId = newId;
+        _detailStatusFilter = 'all';
+        _campaignDetailRefreshKey++;
+      });
+      _startDetailAutoRefresh();
+    } on ApiException catch (e) {
+      if (mounted) _showInsufficientCreditsSnackBar(e);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Retry failed: $e'), backgroundColor: NeyvoTheme.error),
+      );
+    }
+  }
+
   void _startDetailAutoRefresh() {
     _detailRefreshTimer?.cancel();
     _detailRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -1025,17 +1132,31 @@ class _CampaignsPageState extends State<CampaignsPage> {
     return FutureBuilder<Map<String, dynamic>>(
       // Stable key so the detail screen doesn't fully rebuild/flash on every auto-refresh.
       key: ValueKey('campaign_detail_$campaignId'),
-      future: Future.wait([
-        NeyvoPulseApi.getCampaign(campaignId),
-        NeyvoPulseApi.getCampaignCalls(campaignId),
-        NeyvoPulseApi.getCampaignMetrics(campaignId),
-        NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500),
-      ]).then((list) => {
-            'campaign': list[0]['campaign'],
-            'calls': (list[1]['calls'] as List?) ?? [],
-            'metrics': (list[2]['metrics'] as Map?) ?? {},
-            'items': (list[3]['items'] as List?) ?? [],
-          }),
+      future: () async {
+        final campaignRes = await NeyvoPulseApi.getCampaign(campaignId);
+        final camp = Map<String, dynamic>.from((campaignRes['campaign'] as Map?) ?? const {});
+        final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
+        final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
+
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId);
+        final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
+        final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
+        final reportF = isTerminal ? NeyvoPulseApi.getCampaignReport(campaignId) : Future.value(<String, dynamic>{});
+
+        final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
+        final callsRes = results[0] as Map<String, dynamic>;
+        final metricsRes = results[1] as Map<String, dynamic>;
+        final itemsRes = results[2] as Map<String, dynamic>;
+        final reportRes = results[3] as Map<String, dynamic>;
+
+        return {
+          'campaign': camp,
+          'calls': (callsRes['calls'] as List?) ?? [],
+          'metrics': (metricsRes['metrics'] as Map?) ?? {},
+          'items': (itemsRes['items'] as List?) ?? [],
+          'report': reportRes,
+        };
+      }(),
       builder: (context, snapshot) {
         // Store latest good payload in cache.
         if (snapshot.hasData) {
@@ -1068,6 +1189,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final metrics = Map<String, dynamic>.from((data['metrics'] as Map? ?? const {}));
         final items = (data['items'] as List?)?.cast<dynamic>().map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
         final status = c['status']?.toString() ?? 'draft';
+        final statusLower = status.toLowerCase().trim();
+        final isTerminal = statusLower == 'completed' || statusLower.startsWith('stopped') || statusLower == 'cancelled' || statusLower == 'deleted';
+        final report = (data['report'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        final callDetails = (report['call_details'] as Map?)?.map(
+              (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+            ) ??
+            const <String, Map<String, dynamic>>{};
         final canStart = status == 'draft' || status == 'scheduled';
         final canRerun = status == 'completed' || status == 'running';
         final canEdit = status == 'draft' || status == 'scheduled';
@@ -1482,6 +1610,30 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       onSelectionChanged: (v) => setState(() => _detailStatusFilter = v.first),
                     ),
                     const Spacer(),
+                    if (isTerminal) ...[
+                      Builder(builder: (context) {
+                        final eligibleIds = items.where((it) {
+                          final st = (it['status'] ?? '').toString().toLowerCase().trim();
+                          final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
+                          final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
+                          final derived = _deriveCampaignCallOutcome(callItem: it, callDetail: detail);
+                          final outcome = (derived['outcome'] ?? '').toString();
+                          final callbackRequested = derived['callbackRequested'] == true;
+                          if (callbackRequested) return false;
+                          if (outcome == 'Voicemail' || outcome == 'Not Connected') return true;
+                          // Some failures may still be 'failed' without details; treat as Not Connected.
+                          return st == 'failed';
+                        }).map((it) => (it['student_id'] ?? '').toString().trim()).where((id) => id.isNotEmpty).toSet().toList();
+
+                        if (eligibleIds.isEmpty) return const SizedBox.shrink();
+                        return TextButton.icon(
+                          icon: const Icon(Icons.redo, size: 20),
+                          label: Text('Retry all (${eligibleIds.length})'),
+                          onPressed: () => _retryCampaignCalls(originalCampaign: c, studentIds: eligibleIds),
+                        );
+                      }),
+                      const SizedBox(width: NeyvoSpacing.sm),
+                    ],
                     if (_detailStatusFilter == 'pending')
                       TextButton.icon(
                         icon: const Icon(Icons.play_circle_outline, size: 20),
@@ -1585,13 +1737,58 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           final name = (it['student_name'] ?? it['name'] ?? '—').toString();
                           final phone = (it['student_phone'] ?? it['phone'] ?? '—').toString();
                           final attempt = it['attempt'];
+                          final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
+                          final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
+                          final derived = isTerminal
+                              ? _deriveCampaignCallOutcome(callItem: it, callDetail: detail)
+                              : const <String, dynamic>{};
+                          final outcome = (derived['outcome'] ?? '').toString();
+                          final callbackRequested = derived['callbackRequested'] == true;
+
+                          Color outcomeColor(String o) {
+                            switch (o) {
+                              case 'Answered':
+                                return NeyvoTheme.success;
+                              case 'Voicemail':
+                                return NeyvoTheme.warning;
+                              case 'Not Connected':
+                                return NeyvoTheme.error;
+                              default:
+                                return NeyvoTheme.textMuted;
+                            }
+                          }
+
+                          final subtitleLines = <String>[
+                            '$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}',
+                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome',
+                            if (isTerminal && callbackRequested) 'Callback requested',
+                          ].where((e) => e.trim().isNotEmpty).toList();
+                          final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
+                          final canRetryThis = isTerminal &&
+                              studentId.isNotEmpty &&
+                              !callbackRequested &&
+                              (outcome == 'Voicemail' || outcome == 'Not Connected');
                           return ListTile(
                             leading: Icon(Icons.person_outline, color: statusColor(st)),
                             title: Text(name, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                            subtitle: Text('$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                            trailing: st == 'completed'
-                                ? const Icon(Icons.check_circle_outline, color: NeyvoTheme.success)
-                                : (st == 'failed' ? const Icon(Icons.error_outline, color: NeyvoTheme.error) : null),
+                            subtitle: Text(
+                              subtitleLines.join('\n'),
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: canRetryThis
+                                ? TextButton(
+                                    onPressed: () => _retryCampaignCalls(originalCampaign: c, studentIds: [studentId]),
+                                    child: const Text('Retry Call'),
+                                  )
+                                : (st == 'completed'
+                                    ? const Icon(Icons.check_circle_outline, color: NeyvoTheme.success)
+                                    : (st == 'failed'
+                                        ? const Icon(Icons.error_outline, color: NeyvoTheme.error)
+                                        : (isTerminal && outcome.isNotEmpty)
+                                            ? Icon(Icons.circle, size: 12, color: outcomeColor(outcome))
+                                            : null)),
                           );
                         },
                       ),
