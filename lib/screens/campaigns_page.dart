@@ -1792,6 +1792,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                                             ? Icon(Icons.circle, size: 12, color: outcomeColor(outcome))
                                             : null)),
                           );
+                      },
                     ),
                   );
                 }),
