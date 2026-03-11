@@ -51,6 +51,7 @@ abstract class PulseRouteNames {
   static const String voiceStudio = '/pulse/voice-studio';
   static const String testCall = '/pulse/test-call';
   static const String ubModelOverview = '/pulse/ub-model-overview';
+  static const String health = '/pulse/health-check';
 
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';
