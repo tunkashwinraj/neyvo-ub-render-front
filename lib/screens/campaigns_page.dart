@@ -1242,6 +1242,47 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 .where((e) => e.isNotEmpty)
                 .toList() ??
             <String>[];
+
+        String operatorLabel() {
+          final pid = (c['profile_id'] ?? '').toString().trim();
+          final aid = (c['agent_id'] ?? '').toString().trim();
+          if (pid.isNotEmpty) {
+            final list = _operatorsForCampaign.where((o) => o['value'] == 'profile:$pid').toList();
+            if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
+          }
+          if (aid.isNotEmpty) {
+            final list = _operatorsForCampaign.where((o) => o['value'] == 'agent:$aid').toList();
+            if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
+          }
+          return '—';
+        }
+
+        String outboundNumberLabel() {
+          final campaignPnId = (c['campaign_phone_number_id'] ?? '').toString().trim();
+          if (campaignPnId.isNotEmpty) {
+            for (final n in _outboundPhoneNumbers) {
+              final id = (n['phone_number_id'] ?? n['id'] ?? '').toString().trim();
+              if (id == campaignPnId) {
+                return (n['label'] ?? n['role'] ?? n['phone_number'] ?? id).toString();
+              }
+            }
+            return campaignPnId;
+          }
+          if (status == 'draft' || status == 'scheduled') {
+            return 'Not started yet';
+          }
+          return '—';
+        }
+
+        String audienceSummary() {
+          if (c['student_ids'] != null) {
+            return '${(c['student_ids'] as List).length} contacts selected';
+          }
+          if (c['filters'] != null) {
+            return 'Filters: ${c['filters']?.toString() ?? '—'}';
+          }
+          return '—';
+        }
         return Scaffold(
           backgroundColor: NeyvoTheme.bgPrimary,
           appBar: AppBar(
@@ -1509,58 +1550,18 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           ],
                         ),
                         const Divider(height: NeyvoSpacing.xl),
-                        ListTile(title: Text('Created', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(formatDate(created), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(title: Text('Started', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(formatDate(started), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(title: Text('Script template', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)), trailing: Text(templateName ?? '—', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
-                        ListTile(
-                          title: const Text('Operator'),
-                          trailing: Text(
-                            () {
-                              final pid = (c['profile_id'] ?? '').toString().trim();
-                              final aid = (c['agent_id'] ?? '').toString().trim();
-                              if (pid.isNotEmpty) {
-                                final list = _operatorsForCampaign.where((o) => o['value'] == 'profile:$pid').toList();
-                                if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
-                              }
-                              if (aid.isNotEmpty) {
-                                final list = _operatorsForCampaign.where((o) => o['value'] == 'agent:$aid').toList();
-                                if (list.isNotEmpty) return list.first['name']?.toString() ?? '—';
-                              }
-                              return '—';
-                            }(),
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                        ),
-                        ListTile(
-                          title: const Text('Outbound number'),
-                          trailing: Text(
-                            () {
-                              final campaignPnId = (c['campaign_phone_number_id'] ?? '').toString().trim();
-                              if (campaignPnId.isNotEmpty) {
-                                for (final n in _outboundPhoneNumbers) {
-                                  final id = (n['phone_number_id'] ?? n['id'] ?? '').toString().trim();
-                                  if (id == campaignPnId) {
-                                    return (n['label'] ?? n['role'] ?? n['phone_number'] ?? id).toString();
-                                  }
-                                }
-                                return campaignPnId;
-                              }
-                              if (status == 'draft' || status == 'scheduled')
-                                return 'Not started yet';
-                              return '—';
-                            }(),
-                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                          ),
-                        ),
+                        _metaRow('Created', formatDate(created)),
+                        _metaRow('Started', formatDate(started)),
+                        _metaRow('Script template', templateName ?? '—'),
+                        _metaRow('Operator', operatorLabel()),
+                        _metaRow('Outbound number', outboundNumberLabel()),
                         if ((c['filters'] ?? c['student_ids']) != null) ...[
-                          ListTile(
-                            title: const Text('Audience'),
-                            subtitle: Text(
-                              c['student_ids'] != null
-                                  ? '${(c['student_ids'] as List).length} contacts selected'
-                                  : 'Filters: ${c['filters']?.toString() ?? '—'}',
-                              style: NeyvoType.bodySmall,
-                            ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Text('Audience', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                          const SizedBox(height: NeyvoSpacing.xs),
+                          Text(
+                            audienceSummary(),
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                           ),
                           if (items.isNotEmpty)
                             ConstrainedBox(
@@ -1873,6 +1874,32 @@ class _CampaignsPageState extends State<CampaignsPage> {
       backgroundColor: NeyvoTheme.bgHover,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _metaRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              (value.isEmpty ? '—' : value),
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
