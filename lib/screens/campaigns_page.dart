@@ -1897,7 +1897,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ),
               const SizedBox(height: NeyvoSpacing.sm),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 280),
+                constraints: const BoxConstraints(maxHeight: 520),
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: filtered.length,
