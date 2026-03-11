@@ -329,24 +329,26 @@ class _CampaignsPageState extends State<CampaignsPage> {
     final endedReason = (callDetail?['ended_reason'] ?? callItem['ended_reason'] ?? '').toString();
 
     final combined = ('$summary\n$transcript\n$endedReason').trim();
-    final callbackRequested = combined.isNotEmpty && _isCallbackRequestedText(combined);
+    final callbackMentioned = combined.isNotEmpty && _isCallbackRequestedText(combined);
 
     // Not Connected: explicit failure or no transcript/summary at all.
     final hasAnyText = transcript.trim().isNotEmpty || summary.trim().isNotEmpty;
     if (itemStatus == 'failed' || (!hasAnyText && itemStatus != 'completed')) {
-      return {'outcome': 'Not Connected', 'callbackRequested': callbackRequested};
+      // Callback is only meaningful for Answered conversations.
+      return {'outcome': 'Not Connected', 'callbackRequested': false};
     }
 
     if (_isVoicemailText(combined)) {
-      return {'outcome': 'Voicemail', 'callbackRequested': callbackRequested};
+      // Voicemail scripts often say “call back”; ignore that for retry.
+      return {'outcome': 'Voicemail', 'callbackRequested': false};
     }
 
     // If we have any conversational content (or completed) and not voicemail, treat as Answered.
     if (itemStatus == 'completed' || hasAnyText) {
-      return {'outcome': 'Answered', 'callbackRequested': callbackRequested};
+      return {'outcome': 'Answered', 'callbackRequested': callbackMentioned};
     }
 
-    return {'outcome': 'Not Connected', 'callbackRequested': callbackRequested};
+    return {'outcome': 'Not Connected', 'callbackRequested': false};
   }
 
   Future<void> _retryCampaignCalls({
@@ -1726,12 +1728,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
                   return Card(
                     color: NeyvoTheme.bgCard,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 420),
-                      child: ListView.separated(
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: visible.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
                           final it = visible[i];
                           final st = sOf(it);
                           final name = (it['student_name'] ?? it['name'] ?? '—').toString();
@@ -1761,7 +1763,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           final subtitleLines = <String>[
                             '$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}',
                             if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome',
-                            if (isTerminal && callbackRequested) 'Callback requested',
+                            if (isTerminal && outcome == 'Answered' && callbackRequested) 'Callback requested',
                           ].where((e) => e.trim().isNotEmpty).toList();
                           final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
                           final canRetryThis = isTerminal &&
@@ -1790,8 +1792,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
                                             ? Icon(Icons.circle, size: 12, color: outcomeColor(outcome))
                                             : null)),
                           );
-                        },
-                      ),
                     ),
                   );
                 }),
@@ -2167,35 +2167,21 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: NeyvoSpacing.sm),
-              SizedBox(
-                height: 520,
-                width: double.infinity,
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                  primary: false,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: (() {
-                    final q = _audienceSearchController.text.trim().toLowerCase();
-                    if (q.isEmpty) return filtered.length;
-                    return filtered.where((s) {
-                      final name = (s['name'] ?? '').toString().toLowerCase();
-                      final phone = (s['phone'] ?? '').toString().toLowerCase();
-                      final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
-                      return name.contains(q) || phone.contains(q) || sid.contains(q);
-                    }).length;
-                  })(),
+              Builder(builder: (context) {
+                final q = _audienceSearchController.text.trim().toLowerCase();
+                final visible = q.isEmpty
+                    ? filtered
+                    : filtered.where((s) {
+                        final name = (s['name'] ?? '').toString().toLowerCase();
+                        final phone = (s['phone'] ?? '').toString().toLowerCase();
+                        final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
+                        return name.contains(q) || phone.contains(q) || sid.contains(q);
+                      }).toList();
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: visible.length,
                   itemBuilder: (context, i) {
-                    final q = _audienceSearchController.text.trim().toLowerCase();
-                    final visible = q.isEmpty
-                        ? filtered
-                        : filtered.where((s) {
-                            final name = (s['name'] ?? '').toString().toLowerCase();
-                            final phone = (s['phone'] ?? '').toString().toLowerCase();
-                            final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
-                            return name.contains(q) || phone.contains(q) || sid.contains(q);
-                          }).toList();
-                    if (i >= visible.length) return const SizedBox.shrink();
                     final s = visible[i];
                     final id = s['id'] as String? ?? '';
                     final campaignHint = id.isEmpty ? null : _campaignHintForStudent(id);
@@ -2221,9 +2207,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       onChanged: _manualAudienceSelection ? (v) => _toggleStudent(id) : null,
                     );
                   },
-                ),
-                ),
-              ),
+                );
+              }),
             ],
           ],
         ),
