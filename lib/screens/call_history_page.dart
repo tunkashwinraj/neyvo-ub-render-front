@@ -786,9 +786,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                             ),
                                           ),
                                           const SizedBox(height: NeyvoSpacing.sm),
-                                          Text(
+                                          SelectableText(
                                             transcript,
-                                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                                            style: NeyvoType.bodySmall.copyWith(
+                                              color: NeyvoTheme.textPrimary,
+                                            ),
                                           ),
                                         ],
                                       ),
