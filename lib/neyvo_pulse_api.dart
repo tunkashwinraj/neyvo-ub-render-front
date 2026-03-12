@@ -1172,6 +1172,33 @@ class NeyvoPulseApi {
         if (friendlyName != null && friendlyName.isNotEmpty) 'friendly_name': friendlyName,
       });
 
+  /// POST /api/numbers/import – import an existing carrier number into VAPI and link it to this org.
+  /// Credentials are provided one-time and are not stored server-side.
+  static Future<Map<String, dynamic>> importNumber({
+    required String provider,
+    required String numberE164,
+    String? friendlyName,
+    bool setAsPrimary = true,
+    String? twilioAccountSid,
+    String? twilioAuthToken,
+    String? telnyxApiKey,
+    String? vonageApiKey,
+    String? vonageApiSecret,
+  }) async {
+    final body = <String, dynamic>{
+      'provider': provider.trim(),
+      'number': numberE164.trim(),
+      'set_as_primary': setAsPrimary,
+      if (friendlyName != null && friendlyName.trim().isNotEmpty) 'friendly_name': friendlyName.trim(),
+      if (twilioAccountSid != null && twilioAccountSid.trim().isNotEmpty) 'twilioAccountSid': twilioAccountSid.trim(),
+      if (twilioAuthToken != null && twilioAuthToken.trim().isNotEmpty) 'twilioAuthToken': twilioAuthToken.trim(),
+      if (telnyxApiKey != null && telnyxApiKey.trim().isNotEmpty) 'telnyxApiKey': telnyxApiKey.trim(),
+      if (vonageApiKey != null && vonageApiKey.trim().isNotEmpty) 'vonageApiKey': vonageApiKey.trim(),
+      if (vonageApiSecret != null && vonageApiSecret.trim().isNotEmpty) 'vonageApiSecret': vonageApiSecret.trim(),
+    };
+    return _post('/api/numbers/import', body);
+  }
+
   /// GET /api/numbers/search — list available numbers with optional filters.
   /// Pass country, type (local|mobile|tollfree), limit, areaCode, voiceEnabled, smsEnabled, mmsEnabled, includeSuggested.
   static Future<Map<String, dynamic>> searchNumbers({

@@ -26,6 +26,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
 
   final Map<String, bool> _attaching = {};
   bool _syncingFromVapi = false;
+  bool _importing = false;
 
   @override
   void initState() {
@@ -87,6 +88,204 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
       setState(() => _syncingFromVapi = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  Future<void> _openImportNumber() async {
+    final numberCtrl = TextEditingController();
+    final friendlyCtrl = TextEditingController(text: 'Production Line');
+    String provider = 'twilio';
+    bool setAsPrimary = true;
+
+    final twilioSidCtrl = TextEditingController();
+    final twilioTokenCtrl = TextEditingController();
+    final telnyxKeyCtrl = TextEditingController();
+    final vonageKeyCtrl = TextEditingController();
+    final vonageSecretCtrl = TextEditingController();
+
+    String? err;
+
+    Future<void> submit(StateSetter setInner) async {
+      final number = numberCtrl.text.trim();
+      if (number.isEmpty || !number.startsWith('+')) {
+        setInner(() => err = 'Enter a valid E.164 number (e.g. +12035551234).');
+        return;
+      }
+      if (provider == 'twilio' && (twilioSidCtrl.text.trim().isEmpty || twilioTokenCtrl.text.trim().isEmpty)) {
+        setInner(() => err = 'Twilio Account SID and Auth Token are required.');
+        return;
+      }
+      if (provider == 'telnyx' && telnyxKeyCtrl.text.trim().isEmpty) {
+        setInner(() => err = 'Telnyx API key is required.');
+        return;
+      }
+      if (provider == 'vonage' && (vonageKeyCtrl.text.trim().isEmpty || vonageSecretCtrl.text.trim().isEmpty)) {
+        setInner(() => err = 'Vonage API key and secret are required.');
+        return;
+      }
+
+      setInner(() {
+        err = null;
+      });
+      setState(() => _importing = true);
+      try {
+        final res = await NeyvoPulseApi.importNumber(
+          provider: provider,
+          numberE164: number,
+          friendlyName: friendlyCtrl.text.trim().isEmpty ? null : friendlyCtrl.text.trim(),
+          setAsPrimary: setAsPrimary,
+          twilioAccountSid: twilioSidCtrl.text.trim(),
+          twilioAuthToken: twilioTokenCtrl.text.trim(),
+          telnyxApiKey: telnyxKeyCtrl.text.trim(),
+          vonageApiKey: vonageKeyCtrl.text.trim(),
+          vonageApiSecret: vonageSecretCtrl.text.trim(),
+        );
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        await _load();
+        if (!mounted) return;
+        final msg = (res['message'] ?? 'Number imported and linked.').toString();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      } catch (e) {
+        setInner(() => err = e.toString());
+      } finally {
+        if (mounted) setState(() => _importing = false);
+      }
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NeyvoColors.bgOverlay,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 14,
+            bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text('Import a number', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _importing ? null : () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (err != null) ...[
+                Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+                const SizedBox(height: 10),
+              ],
+              DropdownButtonFormField<String>(
+                value: provider,
+                items: const [
+                  DropdownMenuItem(value: 'twilio', child: Text('Twilio')),
+                  DropdownMenuItem(value: 'telnyx', child: Text('Telnyx')),
+                  DropdownMenuItem(value: 'vonage', child: Text('Vonage')),
+                ],
+                onChanged: _importing ? null : (v) => setInner(() => provider = v ?? 'twilio'),
+                decoration: const InputDecoration(labelText: 'Provider'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: numberCtrl,
+                enabled: !_importing,
+                decoration: const InputDecoration(
+                  labelText: 'Number (E.164)',
+                  hintText: 'e.g. +12035551234',
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: friendlyCtrl,
+                enabled: !_importing,
+                decoration: const InputDecoration(
+                  labelText: 'Friendly name (optional)',
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Checkbox(
+                    value: setAsPrimary,
+                    onChanged: _importing ? null : (v) => setInner(() => setAsPrimary = v ?? true),
+                  ),
+                  const Expanded(child: Text('Set as primary')),
+                ],
+              ),
+              const SizedBox(height: 6),
+              if (provider == 'twilio') ...[
+                TextField(
+                  controller: twilioSidCtrl,
+                  enabled: !_importing,
+                  decoration: const InputDecoration(labelText: 'Twilio Account SID'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: twilioTokenCtrl,
+                  enabled: !_importing,
+                  decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
+                  obscureText: true,
+                ),
+              ] else if (provider == 'telnyx') ...[
+                TextField(
+                  controller: telnyxKeyCtrl,
+                  enabled: !_importing,
+                  decoration: const InputDecoration(labelText: 'Telnyx API Key'),
+                  obscureText: true,
+                ),
+              ] else if (provider == 'vonage') ...[
+                TextField(
+                  controller: vonageKeyCtrl,
+                  enabled: !_importing,
+                  decoration: const InputDecoration(labelText: 'Vonage API Key'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: vonageSecretCtrl,
+                  enabled: !_importing,
+                  decoration: const InputDecoration(labelText: 'Vonage API Secret'),
+                  obscureText: true,
+                ),
+              ],
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _importing ? null : () => submit(setInner),
+                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                icon: _importing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
+                    : const Icon(Icons.upload, size: 18),
+                label: Text(_importing ? 'Importing…' : 'Import & link'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Credentials are used one-time to import this number into VAPI and are not stored.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    numberCtrl.dispose();
+    friendlyCtrl.dispose();
+    twilioSidCtrl.dispose();
+    twilioTokenCtrl.dispose();
+    telnyxKeyCtrl.dispose();
+    vonageKeyCtrl.dispose();
+    vonageSecretCtrl.dispose();
   }
 
   /// Primary number (if any) – imported or assigned as primary. Shown in its own section.
@@ -217,6 +416,11 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.sync, size: 18),
                 label: Text(_syncingFromVapi ? 'Refreshing…' : 'Refresh'),
+              ),
+              TextButton.icon(
+                onPressed: _importing ? null : _openImportNumber,
+                icon: const Icon(Icons.upload, size: 18),
+                label: const Text('Import number'),
               ),
               TextButton.icon(
                 onPressed: _openBuyNumber,
