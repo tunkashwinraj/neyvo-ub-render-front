@@ -14,6 +14,37 @@ class NeyvoPulseApi {
     _defaultAccountId = (id == null || id.trim().isEmpty) ? '' : id.trim();
   }
 
+  // High-level campaign error codes used by the frontend for tailored UX.
+  // These are parsed from ApiException.payload['error'] when available.
+  static const Set<String> _campaignErrorCodes = {
+    'AUDIENCE_FIELD_ON_BASICS_ENDPOINT',
+    'AUDIENCE_LOCKED',
+    'NO_AUDIENCE_MODE',
+    'NO_AUDIENCE',
+    'INVALID_PHONES',
+    'MISSING_ASSISTANT',
+    'MISSING_PHONE_NUMBER',
+    'INSUFFICIENT_CREDITS',
+    'VALIDATION_FAILED',
+    'SNAPSHOT_NOT_READY',
+    'CAMPAIGN_RUNNING',
+  };
+
+  /// Extract a normalized campaign error code from an ApiException, or null if none.
+  static String? campaignErrorCodeFrom(ApiException e) {
+    final payload = e.payload;
+    if (payload is Map && payload['error'] is String) {
+      final code = (payload['error'] as String).toUpperCase();
+      if (_campaignErrorCodes.contains(code)) return code;
+    }
+    // Some backend errors may only be surfaced via e.message.
+    final m = e.message.toUpperCase();
+    for (final code in _campaignErrorCodes) {
+      if (m.contains(code)) return code;
+    }
+    return null;
+  }
+
   static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (_defaultAccountId.isNotEmpty) p['account_id'] = p['account_id'] ?? _defaultAccountId;
@@ -823,7 +854,7 @@ class NeyvoPulseApi {
   }
 
   // -------------------------------------------------------------------------
-  // Campaigns (bulk outbound calls by filters)
+  // Campaigns (bulk outbound calls by filters, snapshot-based execution)
   // -------------------------------------------------------------------------
 
   /// List campaigns for the school.
@@ -893,65 +924,159 @@ class NeyvoPulseApi {
     return _get('/api/pulse/campaigns/preview-audience', params: params.isEmpty ? null : params);
   }
 
-  /// Create a campaign (name, agentId, audience filters or student_ids, template_id, scheduled_at).
-  /// When agentId is set, the campaign uses that agent's voice/prompt for outbound calls.
-  static Future<Map<String, dynamic>> createCampaign({
+  // ---------------- Campaign basics (no audience fields) ----------------
+
+  /// Create campaign basics only (name/agent/profile/template/limits/schedule).
+  /// Backend rejects any audience fields on this endpoint.
+  static Future<Map<String, dynamic>> createCampaignBasics({
     required String name,
     String? agentId,
     String? profileId,
     String? templateId,
-    List<String>? studentIds,
-    Map<String, dynamic>? filters,
-    String? audienceType,
+    int? maxConcurrent,
+    int? maxAttempts,
     DateTime? scheduledAt,
+    String? notes,
   }) async {
     final body = <String, dynamic>{
       'name': name,
       if (agentId != null && agentId.isNotEmpty) 'agent_id': agentId,
       if (profileId != null && profileId.isNotEmpty) 'profile_id': profileId,
-      if (templateId != null) 'template_id': templateId,
-      if (studentIds != null) 'student_ids': studentIds,
-      if (filters != null) 'filters': filters,
-      if (audienceType != null) 'audience_type': audienceType,
+      if (templateId != null && templateId.isNotEmpty) 'template_id': templateId,
+      if (maxConcurrent != null) 'max_concurrent': maxConcurrent,
+      if (maxAttempts != null) 'max_attempts': maxAttempts,
       if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
     };
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = _defaultAccountId;
     return _post('/api/pulse/campaigns', body);
   }
 
-  /// Update campaign (name, agentId, profileId, template_id, student_ids, filters, scheduled_at). Only when status is draft or scheduled.
+  /// Backwards-compatible wrapper for legacy callers.
+  /// NOTE: audience-related arguments are intentionally ignored to respect
+  /// backend invariants. Use createCampaignBasics + updateCampaignAudience instead.
+  static Future<Map<String, dynamic>> createCampaign({
+    required String name,
+    String? agentId,
+    String? profileId,
+    String? templateId,
+    List<String>? studentIds, // ignored
+    Map<String, dynamic>? filters, // ignored
+    String? audienceType, // ignored
+    DateTime? scheduledAt,
+  }) {
+    return createCampaignBasics(
+      name: name,
+      agentId: agentId,
+      profileId: profileId,
+      templateId: templateId,
+      scheduledAt: scheduledAt,
+    );
+  }
+
+  /// Update campaign basics (no audience changes).
+  static Future<Map<String, dynamic>> updateCampaignBasics(
+    String campaignId, {
+    String? name,
+    String? agentId,
+    String? profileId,
+    String? templateId,
+    int? maxConcurrent,
+    int? maxAttempts,
+    DateTime? scheduledAt,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{};
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = _defaultAccountId;
+    if (name != null) body['name'] = name;
+    if (agentId != null) body['agent_id'] = agentId.isEmpty ? null : agentId;
+    if (profileId != null) body['profile_id'] = profileId.isEmpty ? null : profileId;
+    if (templateId != null) body['template_id'] = templateId;
+    if (maxConcurrent != null) body['max_concurrent'] = maxConcurrent;
+    if (maxAttempts != null) body['max_attempts'] = maxAttempts;
+    if (scheduledAt != null) body['scheduled_at'] = scheduledAt.toIso8601String();
+    if (notes != null) body['notes'] = notes;
+    return _patch('/api/pulse/campaigns/$campaignId', body);
+  }
+
+  /// Backwards-compatible wrapper that now only updates basics.
   static Future<Map<String, dynamic>> updateCampaign(
     String campaignId, {
     String? name,
     String? agentId,
     String? profileId,
     String? templateId,
-    List<String>? studentIds,
-    Map<String, dynamic>? filters,
+    List<String>? studentIds, // ignored
+    Map<String, dynamic>? filters, // ignored
     DateTime? scheduledAt,
-  }) async {
-    final body = <String, dynamic>{'account_id': _defaultAccountId};
-    if (name != null) body['name'] = name;
-    if (agentId != null) body['agent_id'] = agentId.isEmpty ? null : agentId;
-    if (profileId != null) body['profile_id'] = profileId.isEmpty ? null : profileId;
-    if (templateId != null) body['template_id'] = templateId;
-    if (studentIds != null) body['student_ids'] = studentIds;
-    if (filters != null) body['filters'] = filters;
-    if (scheduledAt != null) body['scheduled_at'] = scheduledAt.toIso8601String();
-    return _patch('/api/pulse/campaigns/$campaignId', body);
+  }) {
+    return updateCampaignBasics(
+      campaignId,
+      name: name,
+      agentId: agentId,
+      profileId: profileId,
+      templateId: templateId,
+      scheduledAt: scheduledAt,
+    );
   }
 
-  /// Start a campaign (places outbound calls sequentially; may take a while). Can rerun completed campaigns.
-  /// Optionally pass [phoneNumberId] to use a specific outbound number for this run (from getOutboundPhoneNumbers).
-  static Future<Map<String, dynamic>> startCampaign(
+  // ---------------- Audience & snapshot endpoints ----------------
+
+  /// Configure campaign audience. This is the ONLY place audience_mode / filters / student_ids are sent.
+  static Future<Map<String, dynamic>> updateCampaignAudience(
     String campaignId, {
+    required String audienceMode, // 'FILTERS' | 'MANUAL'
+    Map<String, dynamic>? audienceFilters,
     List<String>? studentIds,
+  }) async {
+    final body = <String, dynamic>{
+      'audience_mode': audienceMode,
+      if (_defaultAccountId.isNotEmpty) 'account_id': _defaultAccountId,
+    };
+    if (audienceMode == 'FILTERS') {
+      body['audience_filters'] = audienceFilters ?? <String, dynamic>{};
+    } else if (audienceMode == 'MANUAL') {
+      body['student_ids'] = studentIds ?? <String>[];
+    }
+    final v = await SpeariaApi.patchJson('/api/pulse/campaigns/$campaignId/audience', body: body);
+    return Map<String, dynamic>.from(v as Map);
+  }
+
+  /// Build immutable audience snapshot + validation.
+  static Future<Map<String, dynamic>> prepareCampaign(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/prepare', {});
+
+  /// Latest validation + snapshot status.
+  static Future<Map<String, dynamic>> getCampaignValidation(String campaignId) async =>
+      _get('/api/pulse/campaigns/$campaignId/validation');
+
+  /// Paginated immutable audience snapshot.
+  static Future<Map<String, dynamic>> getCampaignAudienceSnapshot(
+    String campaignId, {
+    int limit = 50,
+    int offset = 0,
+    String? source, // FILTERS | MANUAL
+    bool? hasError,
+  }) async {
+    final params = <String, dynamic>{
+      'limit': limit,
+      'offset': offset,
+      if (source != null && source.isNotEmpty) 'source': source,
+      if (hasError != null) 'has_error': hasError,
+    };
+    return _get('/api/pulse/campaigns/$campaignId/audience-snapshot', params: params);
+  }
+
+  /// Start a snapshot-validated campaign run. This endpoint enforces that a complete,
+  /// valid snapshot exists and will surface SNAPSHOT_NOT_READY / VALIDATION_FAILED codes.
+  static Future<Map<String, dynamic>> startCampaignSnapshotRun(
+    String campaignId, {
     int? maxConcurrent,
     int? maxAttempts,
     String? phoneNumberId,
   }) async {
     final body = <String, dynamic>{
-      'account_id': _defaultAccountId,
-      if (studentIds != null) 'student_ids': studentIds,
+      if (_defaultAccountId.isNotEmpty) 'account_id': _defaultAccountId,
       if (maxConcurrent != null) 'max_concurrent': maxConcurrent,
       if (maxAttempts != null) 'max_attempts': maxAttempts,
       if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
@@ -962,6 +1087,26 @@ class NeyvoPulseApi {
       timeout: const Duration(seconds: 120),
     );
   }
+
+  /// Backwards-compatible wrapper; deprecated. Use startCampaignSnapshotRun instead.
+  static Future<Map<String, dynamic>> startCampaign(
+    String campaignId, {
+    List<String>? studentIds, // ignored
+    int? maxConcurrent,
+    int? maxAttempts,
+    String? phoneNumberId,
+  }) {
+    return startCampaignSnapshotRun(
+      campaignId,
+      maxConcurrent: maxConcurrent,
+      maxAttempts: maxAttempts,
+      phoneNumberId: phoneNumberId,
+    );
+  }
+
+  /// Rebuild audience: deletes snapshot and unlocks audience config.
+  static Future<Map<String, dynamic>> rebuildCampaignAudience(String campaignId) async =>
+      _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {});
 
   /// Pause a running campaign (stops refilling the pool; active calls still finish).
   static Future<Map<String, dynamic>> pauseCampaign(String campaignId) async =>

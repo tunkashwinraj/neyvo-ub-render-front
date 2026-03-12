@@ -11,6 +11,12 @@ import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
+import '../features/campaigns/campaign_wizard_controller.dart';
+import '../features/campaigns/campaign_error_mapper.dart';
+import '../features/campaigns/campaign_telemetry.dart';
+
+// Temporary feature flag for the new snapshot-based campaign wizard.
+const bool kUseNewCampaignWizard = true;
 
 class CampaignsPage extends StatefulWidget {
   const CampaignsPage({super.key});
@@ -81,6 +87,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
   int? _creditsPerMinute;
   bool _useTemplate = false;
 
+  // New wizard controller (snapshot-safe flow).
+  CampaignWizardController _wizard = CampaignWizardController();
+  bool _wizardBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -90,12 +100,215 @@ class _CampaignsPageState extends State<CampaignsPage> {
   @override
   void dispose() {
     _detailRefreshTimer?.cancel();
+    _wizard.dispose();
     _nameController.dispose();
     _audienceSearchController.dispose();
     _balanceMinController.dispose();
     _balanceMaxController.dispose();
     _smartBalanceMinController.dispose();
     super.dispose();
+  }
+
+  Future<void> _wizardPrimaryAction() async {
+    if (_wizardBusy) return;
+    setState(() => _wizardBusy = true);
+    try {
+      if (_wizardStep == 0) {
+        final name = _nameController.text.trim();
+        if (name.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Enter campaign name')),
+            );
+          }
+          return;
+        }
+        _wizard.name = name;
+        await _wizard.createBasics();
+        if (_wizard.campaignId == null || _wizard.campaignId!.isEmpty) {
+          throw Exception('Campaign created but no id returned');
+        }
+        if (mounted) setState(() => _wizardStep++);
+        return;
+      }
+
+      if (_wizardStep == 1) {
+        // Persist audience via PATCH /campaigns/{id}/audience
+        final ok = await _persistWizardAudience();
+        if (!ok) return;
+        if (mounted) setState(() => _wizardStep++);
+        return;
+      }
+
+      if (_wizardStep == 2) {
+        if (mounted) setState(() => _wizardStep++);
+        return;
+      }
+    } finally {
+      if (mounted) setState(() => _wizardBusy = false);
+    }
+  }
+
+  /// Launch from wizard (Review & Launch step): start snapshot run and open campaign detail.
+  Future<void> _onWizardLaunch() async {
+    if (_wizardBusy) return;
+    if (!_wizard.canLaunch) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lock audience first (Preview & Prepare step) and ensure validation passes.'),
+            backgroundColor: NeyvoTheme.warning,
+          ),
+        );
+      }
+      return;
+    }
+    if (!_ensureHasPhoneNumber()) return;
+    setState(() => _wizardBusy = true);
+    try {
+      final res = await _wizard.launch(phoneNumberId: _selectedStartPhoneNumberId);
+      if (!mounted) return;
+      campaignLaunched(_wizard.campaignId!, initiated: res['total_initiated'] as int?, failed: res['total_failed'] as int?);
+      _showCampaignStartResult(res, isRerun: false);
+      final id = _wizard.campaignId;
+      setState(() {
+        _showCreateWizard = false;
+        _wizardStep = 0;
+        _selectedCampaignId = id;
+        _campaignDetailRefreshKey++;
+      });
+      _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      final code = NeyvoPulseApi.campaignErrorCodeFrom(e);
+      if (code == 'SNAPSHOT_NOT_READY' || code == 'VALIDATION_FAILED') {
+        final info = campaignErrorInfo(code);
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Cannot launch'),
+            content: Text([info.message, info.suggestedAction].whereType<String>().where((e) => e.isNotEmpty).join(' ')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() => _wizardStep = 2);
+                },
+                child: const Text('Go to Prepare'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _wizardBusy = false);
+    }
+  }
+
+  Future<bool> _persistWizardAudience() async {
+    // Filters (education smart filter) -> FILTERS mode
+    final useFilters = _isEducationOrg && _audienceMode == 'filters';
+    if (useFilters) {
+      if (_previewAudienceCount == null || _previewAudienceCount! <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No students match the selected filters')),
+          );
+        }
+        return false;
+      }
+      final filters = <String, dynamic>{
+        'has_balance': _smartHasBalance,
+        'is_overdue': _smartOverdueOnly,
+        if (_smartBalanceMinController.text.trim().isNotEmpty)
+          'balance_min': double.tryParse(
+            _smartBalanceMinController.text.replaceAll(RegExp(r'[^0-9.]'), ''),
+          ),
+        if (_smartDueBefore != null && _smartDueBefore!.isNotEmpty) 'due_before': _smartDueBefore,
+      };
+      try {
+        await _wizard.saveAudienceFilters(filters);
+        return true;
+      } on ApiException catch (e) {
+        final code = NeyvoPulseApi.campaignErrorCodeFrom(e);
+        if (code == 'AUDIENCE_LOCKED' && mounted) {
+          await showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Audience is locked'),
+              content: const Text(
+                'Audience is locked for this campaign. Use Rebuild Audience to change it or create a new campaign.',
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+              ],
+            ),
+          );
+          return false;
+        }
+        rethrow;
+      }
+    }
+
+    // Otherwise -> MANUAL mode (deterministic list of student_ids)
+    final ids = _manualAudienceSelection
+        ? _selectedStudentIds.toList()
+        : _filteredStudents
+            .map((s) => (s['id'] ?? '').toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+    if (_manualAudienceSelection && ids.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No contacts selected')),
+        );
+      }
+      return false;
+    }
+    if (ids.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No contacts in audience')),
+        );
+      }
+      return false;
+    }
+    try {
+      await _wizard.saveAudienceManual(ids);
+      return true;
+    } on ApiException catch (e) {
+      final code = NeyvoPulseApi.campaignErrorCodeFrom(e);
+      if (code == 'AUDIENCE_LOCKED' && mounted) {
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Audience is locked'),
+            content: const Text(
+              'Audience is locked for this campaign. Use Rebuild Audience to change it or create a new campaign.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ],
+          ),
+        );
+        return false;
+      }
+      rethrow;
+    }
   }
 
   Future<void> _load() async {
@@ -594,6 +807,71 @@ class _CampaignsPageState extends State<CampaignsPage> {
     }
   }
 
+  void _showCampaignAudienceSnapshotDialog(BuildContext context, String campaignId) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: NeyvoTheme.bgSurface,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 400),
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: NeyvoPulseApi.getCampaignAudienceSnapshot(campaignId, limit: 200),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return Padding(
+                  padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                  child: Center(child: snap.hasError ? Text(snap.error.toString(), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)) : const CircularProgressIndicator()),
+                );
+              }
+              final data = snap.data!;
+              final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+              final total = (data['total'] as int?) ?? items.length;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text('Audience snapshot ($total)', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary))),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: items.length,
+                      itemBuilder: (context, i) {
+                        final it = items[i];
+                        final name = (it['name'] ?? it['student_name'] ?? '—').toString();
+                        final phone = (it['phone'] ?? it['student_phone'] ?? '').toString();
+                        return ListTile(
+                          title: Text(name, style: NeyvoType.bodyMedium),
+                          subtitle: phone.isNotEmpty ? Text(phone, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)) : null,
+                        );
+                      },
+                    ),
+                  ),
+                  if (total > items.length)
+                    Padding(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      child: Text('Showing ${items.length} of $total', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showCampaignStartResult(Map<String, dynamic> res, {bool isRerun = false}) {
     final initiated = res['total_initiated'] ?? 0;
     final failed = res['total_failed'] ?? 0;
@@ -919,7 +1197,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showCreateWizard) {
+    if (_showCreateWizard && kUseNewCampaignWizard) {
       return _buildWizard();
     }
 
@@ -942,14 +1220,17 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ),
             const SizedBox(width: NeyvoSpacing.sm),
             FilledButton.icon(
-              onPressed: () => setState(() {
-                _showCreateWizard = true;
-                _wizardStep = 0;
-                _nameController.clear();
-                _selectedStudentIds.clear();
-                _manualAudienceSelection = false;
-                _selectAll = false;
-              }),
+              onPressed: !_hasPhoneNumber
+                  ? null
+                  : () => setState(() {
+                        _wizard.reset();
+                        _showCreateWizard = true;
+                        _wizardStep = 0;
+                        _nameController.clear();
+                        _selectedStudentIds.clear();
+                        _manualAudienceSelection = false;
+                        _selectAll = false;
+                      }),
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Create Campaign'),
               style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
@@ -987,14 +1268,17 @@ class _CampaignsPageState extends State<CampaignsPage> {
           ),
           const SizedBox(width: NeyvoSpacing.sm),
           FilledButton.icon(
-            onPressed: () => setState(() {
-              _showCreateWizard = true;
-              _wizardStep = 0;
-              _nameController.clear();
-              _selectedStudentIds.clear();
-              _manualAudienceSelection = false;
-              _selectAll = false;
-            }),
+            onPressed: !_hasPhoneNumber
+                ? null
+                : () => setState(() {
+                      _wizard.reset();
+                      _showCreateWizard = true;
+                      _wizardStep = 0;
+                      _nameController.clear();
+                      _selectedStudentIds.clear();
+                      _manualAudienceSelection = false;
+                      _selectAll = false;
+                    }),
             icon: const Icon(Icons.add, size: 20),
             label: const Text('Create Campaign'),
             style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
@@ -1045,7 +1329,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 title: 'No campaigns yet',
                 subtitle: 'Launch your first outbound campaign. Select an agent, upload contacts, and start calling.',
                 buttonLabel: 'Create Campaign',
-                onAction: () => setState(() => _showCreateWizard = true),
+                onAction: () => setState(() {
+                  _wizard.reset();
+                  _showCreateWizard = true;
+                  _wizardStep = 0;
+                }),
                 icon: Icons.campaign_outlined,
               )
             else
@@ -1144,12 +1432,14 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
         final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
         final reportF = isTerminal ? NeyvoPulseApi.getCampaignReport(campaignId) : Future.value(<String, dynamic>{});
+        final validationF = NeyvoPulseApi.getCampaignValidation(campaignId);
 
-        final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
+        final results = await Future.wait([callsF, metricsF, itemsF, reportF, validationF]);
         final callsRes = results[0] as Map<String, dynamic>;
         final metricsRes = results[1] as Map<String, dynamic>;
         final itemsRes = results[2] as Map<String, dynamic>;
         final reportRes = results[3] as Map<String, dynamic>;
+        final validationRes = results[4] as Map<String, dynamic>;
 
         return {
           'campaign': camp,
@@ -1157,6 +1447,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
           'metrics': (metricsRes['metrics'] as Map?) ?? {},
           'items': (itemsRes['items'] as List?) ?? [],
           'report': reportRes,
+          'validation': validationRes,
         };
       }(),
       builder: (context, snapshot) {
@@ -1194,6 +1485,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final statusLower = status.toLowerCase().trim();
         final isTerminal = statusLower == 'completed' || statusLower.startsWith('stopped') || statusLower == 'cancelled' || statusLower == 'deleted';
         final report = (data['report'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        final validation = (data['validation'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        final snapshotStatus = (validation['snapshot_status'] ?? '').toString();
+        final snapshotAudienceSize = (validation['snapshot_audience_size'] as int?) ?? 0;
+        final validationOk = validation['validation_report'] is Map && (validation['validation_report'] as Map)['ok'] == true;
         final callDetails = (report['call_details'] as Map?)?.map(
               (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
             ) ??
@@ -1490,6 +1785,78 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     ),
                   ),
                 ),
+                if (canEdit || snapshotStatus.isNotEmpty) ...[
+                  const SizedBox(height: NeyvoSpacing.md),
+                  Card(
+                    color: NeyvoTheme.bgCard,
+                    child: Padding(
+                      padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Audience snapshot', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          Row(
+                            children: [
+                              Text(
+                                'Status: ${snapshotStatus.isEmpty ? 'none' : snapshotStatus}  •  $snapshotAudienceSize contacts',
+                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                              ),
+                              if (validationOk) ...[
+                                const SizedBox(width: NeyvoSpacing.sm),
+                                Icon(Icons.check_circle_outline, size: 18, color: NeyvoTheme.success),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Row(
+                            children: [
+                              if (canEdit)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: NeyvoSpacing.sm),
+                                  child: OutlinedButton.icon(
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    label: const Text('Rebuild audience'),
+                                    onPressed: () async {
+                                      try {
+                                        await NeyvoPulseApi.rebuildCampaignAudience(campaignId);
+                                        if (!mounted) return;
+                                        campaignRebuildAudience(campaignId);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Audience unlocked. You can change it and prepare again.'), backgroundColor: NeyvoTheme.success),
+                                        );
+                                        setState(() {
+                                          _campaignDetailRefreshKey++;
+                                          _wizard.campaignId = campaignId;
+                                          _wizard.name = (c['name'] ?? '').toString();
+                                          _editingCampaignId = campaignId;
+                                          _editCampaignData = Map<String, dynamic>.from(c);
+                                          _wizardStep = 1;
+                                          _showCreateWizard = true;
+                                          _selectedCampaignId = null;
+                                        });
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.people_outline, size: 18),
+                                label: const Text('View audience snapshot'),
+                                onPressed: () => _showCampaignAudienceSnapshotDialog(context, campaignId),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: NeyvoSpacing.md),
                 Card(
                   color: NeyvoTheme.bgCard,
@@ -1904,7 +2271,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   Widget _buildWizard() {
-    final steps = ['Name & goal', 'Audience', 'Script', 'Schedule', 'Review'];
+    final steps = ['Basics', 'Audience', 'Preview & Prepare', 'Review & Launch'];
     return Scaffold(
       backgroundColor: NeyvoTheme.bgPrimary,
       appBar: AppBar(
@@ -1951,9 +2318,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
             const SizedBox(height: NeyvoSpacing.xl),
             if (_wizardStep == 0) _stepName(),
             if (_wizardStep == 1) _stepAudience(),
-            if (_wizardStep == 2) _stepScript(),
-            if (_wizardStep == 3) _stepSchedule(),
-            if (_wizardStep == 4) _stepReview(),
+            if (_wizardStep == 2) _stepPreviewPrepare(),
+            if (_wizardStep == 3) _stepReviewLaunch(),
             const SizedBox(height: NeyvoSpacing.xl),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -1965,17 +2331,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   ),
                 const SizedBox(width: NeyvoSpacing.md),
                 FilledButton(
-                  onPressed: () {
-                    if (_wizardStep < steps.length - 1) {
-                      setState(() => _wizardStep++);
-                    } else {
-                      _launchCampaign();
-                    }
-                  },
+                  onPressed: _wizardBusy
+                      ? null
+                      : (_wizardStep == steps.length - 1 ? (_wizard.canLaunch ? _onWizardLaunch : null) : _wizardPrimaryAction),
                   style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
-                  child: Text(_wizardStep == steps.length - 1
-                      ? (_editingCampaignId != null ? 'Save changes' : 'Create campaign')
-                      : 'Next'),
+                  child: Text(_wizardStep == steps.length - 1 ? 'Launch campaign' : 'Next'),
                 ),
               ],
             ),
@@ -2238,6 +2598,186 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 );
               }),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepPreviewPrepare() {
+    final report = _wizard.validationReport;
+    final errors = (report?['errors'] as List?)?.cast<dynamic>() ?? [];
+    final warnings = (report?['warnings'] as List?)?.cast<dynamic>() ?? [];
+    final computed = (report?['computed'] as Map?)?.cast<String, dynamic>() ?? {};
+    return Card(
+      color: NeyvoTheme.bgCard,
+      child: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Preview & Prepare', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: NeyvoSpacing.sm),
+            Text(
+              'Lock the audience and run validation. You can launch only after validation passes.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
+            OutlinedButton.icon(
+              onPressed: _wizardBusy || !_wizard.canPrepare
+                  ? null
+                  : () async {
+                      setState(() => _wizardBusy = true);
+                      try {
+                        await _wizard.prepareSnapshot();
+                        if (mounted) campaignPrepared(_wizard.campaignId ?? '', audienceSize: _wizard.snapshotAudienceSize);
+                      } on ApiException catch (e) {
+                        if (mounted) {
+                          final code = NeyvoPulseApi.campaignErrorCodeFrom(e);
+                          campaignPrepareFailed(_wizard.campaignId ?? '', errorCode: code);
+                          final info = campaignErrorInfo(code);
+                          final info = campaignErrorInfo(code);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text([info.message, info.suggestedAction].whereType<String>().where((e) => e.isNotEmpty).join(' ')),
+                              backgroundColor: NeyvoTheme.error,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+                          );
+                        }
+                      } finally {
+                        if (mounted) setState(() => _wizardBusy = false);
+                      }
+                    },
+              icon: _wizardBusy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.lock),
+              label: Text(_wizardBusy ? 'Preparing…' : 'Lock Audience & Run Validation'),
+            ),
+            if (report != null) ...[
+              const SizedBox(height: NeyvoSpacing.lg),
+              if (errors.isNotEmpty) ...[
+                ...errors.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline, size: 18, color: NeyvoTheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(e.toString(), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error))),
+                    ],
+                  ),
+                )),
+                const SizedBox(height: NeyvoSpacing.sm),
+              ],
+              if (warnings.isNotEmpty) ...[
+                ...warnings.map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.warning_amber, size: 18, color: NeyvoTheme.warning),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(w.toString(), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning))),
+                    ],
+                  ),
+                )),
+                const SizedBox(height: NeyvoSpacing.sm),
+              ],
+              if (computed.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(NeyvoSpacing.md),
+                  decoration: BoxDecoration(color: NeyvoTheme.bgHover, borderRadius: BorderRadius.circular(8)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Summary', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      const SizedBox(height: 4),
+                      ...computed.entries.map((e) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text('${e.key}: ${e.value}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary)),
+                      )),
+                    ],
+                  ),
+                ),
+              if (_wizard.snapshotStatus.isNotEmpty && _wizard.snapshotStatus != 'none')
+                Padding(
+                  padding: const EdgeInsets.only(top: NeyvoSpacing.md),
+                  child: Text(
+                    'Snapshot: ${_wizard.snapshotStatus} • ${_wizard.snapshotAudienceSize} contacts',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepReviewLaunch() {
+    final ok = _wizard.validationReport?['ok'] == true;
+    return Card(
+      color: NeyvoTheme.bgCard,
+      child: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Review & Launch', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: NeyvoSpacing.lg),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Configuration', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      const SizedBox(height: 4),
+                      _metaRow('Name', _wizard.name),
+                      _metaRow('Audience mode', _wizard.audienceMode ?? '—'),
+                      if (_selectedOperatorValue != null && _selectedOperatorValue!.isNotEmpty)
+                        _metaRow('Operator', () {
+                          final list = _operatorsForCampaign.where((o) => o['value'] == _selectedOperatorValue).toList();
+                          return list.isEmpty ? '—' : (list.first['name']?.toString() ?? '—');
+                        }()),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: NeyvoSpacing.xl),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Audience snapshot', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      const SizedBox(height: 4),
+                      Text('${_wizard.snapshotAudienceSize} contacts', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                      Text('Status: ${_wizard.snapshotStatus}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+                      const SizedBox(height: 8),
+                      Chip(
+                        label: Text(ok ? 'Validation passed' : 'Validation required'),
+                        backgroundColor: ok ? NeyvoTheme.success.withValues(alpha: 0.2) : NeyvoTheme.warning.withValues(alpha: 0.2),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
+            if (!_wizard.canLaunch)
+              Padding(
+                padding: const EdgeInsets.only(bottom: NeyvoSpacing.md),
+                child: Text(
+                  'Go back to Preview & Prepare and run "Lock Audience & Run Validation" to enable Launch.',
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning),
+                ),
+              ),
           ],
         ),
       ),
