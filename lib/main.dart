@@ -21,6 +21,10 @@
   import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
+  const String _kDefaultBaseUrl = String.fromEnvironment(
+    'SPEARIA_BASE_URL',
+    defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
+  );
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
 /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
 /// 2) Runtime: when backend is ub-neyvo-back-znhe.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
@@ -49,7 +53,9 @@ String get _kFallbackAccountId {
   SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
   if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
-  SpeariaApi.setBaseUrl('https://ub-neyvo-back-znhe.onrender.com');
+  // Configure backend base URL once. In dev you can override via:
+  // flutter run -d chrome --web-port 9095 --dart-define=SPEARIA_BASE_URL=http://127.0.0.1:8000
+  SpeariaApi.setBaseUrl(_kDefaultBaseUrl);
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
 
     tz.initializeTimeZones();

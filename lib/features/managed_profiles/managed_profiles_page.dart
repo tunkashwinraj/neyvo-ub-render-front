@@ -31,16 +31,25 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await ManagedProfileApiService.listProfiles();
       final list = (res['profiles'] as List?)?.cast<dynamic>() ?? [];
+      if (!mounted) return;
       setState(() {
         _profiles = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         _loading = false;
       });
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 

@@ -7,11 +7,33 @@ import '../api/spearia_api.dart';
 class NeyvoPulseApi {
   static String _defaultAccountId = '';
 
+  // Simple in-memory session cache for core entities to avoid redundant calls
+  // across pages during a single app session.
+  static Map<String, dynamic>? _cachedAccountInfo;
+  static DateTime? _cachedAccountInfoAt;
+  static Map<String, dynamic>? _cachedBillingWallet;
+  static DateTime? _cachedBillingWalletAt;
+  static Map<String, dynamic>? _cachedNumbers;
+  static DateTime? _cachedNumbersAt;
+  static Map<String, dynamic>? _cachedMyRole;
+  static DateTime? _cachedMyRoleAt;
+
+  static const Duration _cacheTtl = Duration(seconds: 60);
+
   static String get defaultAccountId => _defaultAccountId;
 
   /// Set the account id from API (e.g. getAccountInfo). When empty, requests omit account_id and backend uses its default.
   static void setDefaultAccountId(String? id) {
     _defaultAccountId = (id == null || id.trim().isEmpty) ? '' : id.trim();
+    // When switching accounts, clear cached per-account data.
+    _cachedAccountInfo = null;
+    _cachedAccountInfoAt = null;
+    _cachedBillingWallet = null;
+    _cachedBillingWalletAt = null;
+    _cachedNumbers = null;
+    _cachedNumbersAt = null;
+    _cachedMyRole = null;
+    _cachedMyRoleAt = null;
   }
 
   // High-level campaign error codes used by the frontend for tailored UX.
@@ -73,7 +95,18 @@ class NeyvoPulseApi {
   /// GET /api/pulse/account – account_id (short 6–8 digit, for display and API), account_name, onboarding_completed,
   /// surfaces_enabled, active_surface, wallet_credits. Optional: org_doc_id or business_doc_id (Firestore doc id for
   /// real-time listener), org_collection; primary_phone_e164, primary_phone_number_id (for Phone Numbers page).
-  static Future<Map<String, dynamic>> getAccountInfo() async => _get('/api/pulse/account');
+  static Future<Map<String, dynamic>> getAccountInfo() async {
+    final now = DateTime.now();
+    if (_cachedAccountInfo != null &&
+        _cachedAccountInfoAt != null &&
+        now.difference(_cachedAccountInfoAt!) < _cacheTtl) {
+      return _cachedAccountInfo!;
+    }
+    final res = await _get('/api/pulse/account');
+    _cachedAccountInfo = res;
+    _cachedAccountInfoAt = now;
+    return res;
+  }
 
   /// PATCH /api/pulse/account – update onboarding_completed, active_surface, surfaces_enabled, name.
   /// Uses _patch so account_id is sent (same org as GET /account).
@@ -245,7 +278,12 @@ class NeyvoPulseApi {
       });
 
   // Analytics (unified dashboard)
-  static Future<Map<String, dynamic>> getAnalyticsOverview() async => _get('/api/analytics/overview');
+  static Future<Map<String, dynamic>> getAnalyticsOverview({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/analytics/overview', params: params.isEmpty ? null : params);
+  }
   static Future<Map<String, dynamic>> getAnalyticsComms({String? from, String? to}) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
@@ -428,8 +466,13 @@ class NeyvoPulseApi {
   }
 
   // Calls
-  static Future<Map<String, dynamic>> listCalls({String? studentId}) async =>
-      _get('/api/pulse/calls', params: studentId != null ? {'student_id': studentId} : null);
+  static Future<Map<String, dynamic>> listCalls({String? studentId, String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (studentId != null) params['student_id'] = studentId;
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
+  }
 
   /// Delete one or more call log entries by their ids (as returned in listCalls).
   /// Uses DELETE /api/pulse/calls?ids=id1,id2,...
@@ -458,8 +501,12 @@ class NeyvoPulseApi {
       _get('/api/pulse/calls/by-id/${Uri.encodeComponent(callId)}');
 
   /// Phase D: Resolution/success summary for dashboard
-  static Future<Map<String, dynamic>> getCallsSuccessSummary() async =>
-      _get('/api/pulse/calls/success-summary');
+  static Future<Map<String, dynamic>> getCallsSuccessSummary({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/pulse/calls/success-summary', params: params.isEmpty ? null : params);
+  }
 
   /// Callback analytics across students (scheduled/completed/exhausted/etc.).
   static Future<Map<String, dynamic>> getCallbacksAnalytics() async =>
@@ -600,8 +647,18 @@ class NeyvoPulseApi {
   }
 
   /// Phase D RBAC: get current user's role
-  static Future<Map<String, dynamic>> getMyRole() async =>
-      _get('/api/pulse/members/me');
+  static Future<Map<String, dynamic>> getMyRole() async {
+    final now = DateTime.now();
+    if (_cachedMyRole != null &&
+        _cachedMyRoleAt != null &&
+        now.difference(_cachedMyRoleAt!) < _cacheTtl) {
+      return _cachedMyRole!;
+    }
+    final res = await _get('/api/pulse/members/me');
+    _cachedMyRole = res;
+    _cachedMyRoleAt = now;
+    return res;
+  }
 
   /// Invite a team member by email with role and optional permissions.
   /// Name is required; staff_id, phone, department, title, office, extension, campus are optional.
@@ -1132,8 +1189,18 @@ class NeyvoPulseApi {
   // Billing (wallet, tier, usage)
   // -------------------------------------------------------------------------
 
-  static Future<Map<String, dynamic>> getBillingWallet() async =>
-      _get('/api/billing/wallet');
+  static Future<Map<String, dynamic>> getBillingWallet() async {
+    final now = DateTime.now();
+    if (_cachedBillingWallet != null &&
+        _cachedBillingWalletAt != null &&
+        now.difference(_cachedBillingWalletAt!) < _cacheTtl) {
+      return _cachedBillingWallet!;
+    }
+    final res = await _get('/api/billing/wallet');
+    _cachedBillingWallet = res;
+    _cachedBillingWalletAt = now;
+    return res;
+  }
 
   /// Create Stripe Checkout session for wallet pack or custom amount. Returns { url }.
   /// Use pack ('starter','growth','scale') or amountDollars (20–100000).
@@ -1298,8 +1365,18 @@ class NeyvoPulseApi {
   // -------------------------------------------------------------------------
 
   /// GET /api/numbers – list owned numbers (includes attached primary from org). Sends account_id so backend returns merged list.
-  static Future<Map<String, dynamic>> listNumbers() async =>
-      _get('/api/numbers', params: {'account_id': _defaultAccountId});
+  static Future<Map<String, dynamic>> listNumbers() async {
+    final now = DateTime.now();
+    if (_cachedNumbers != null &&
+        _cachedNumbersAt != null &&
+        now.difference(_cachedNumbersAt!) < _cacheTtl) {
+      return _cachedNumbers!;
+    }
+    final res = await _get('/api/numbers', params: {'account_id': _defaultAccountId});
+    _cachedNumbers = res;
+    _cachedNumbersAt = now;
+    return res;
+  }
 
   /// POST /api/numbers/sync-from-vapi – link all VAPI numbers that are not yet in this account so they appear on the Phone Numbers page.
   static Future<Map<String, dynamic>> syncNumbersFromVapi() async =>
