@@ -78,7 +78,7 @@ class _CallsPageState extends State<CallsPage> {
   Widget _body() {
     switch (_section) {
       case CallsSection.calls:
-        return const CallHistoryPage(initialDirection: 'outbound');
+        return const CallHistoryPage(initialDirection: 'all');
       case CallsSection.dialer:
         return const DialerPage();
       case CallsSection.callbacks:
