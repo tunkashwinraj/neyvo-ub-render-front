@@ -39,7 +39,7 @@ class SpeariaApi {
   static String? _userId; // optional X-User-Id for Pulse RBAC
   static String? _defaultAccountId; // auto-injected if a call forgets it
   static Duration _defaultTimeout = const Duration(seconds: 20);
-  static bool _sendNgrokSkipHeader = true;
+  static bool _sendNgrokSkipHeader = false;
   static bool _autoAdminForAdminPaths = true; // add X-Admin-Token for /admin/*
   static ApiErrorHook? _errorHook;
 
@@ -50,6 +50,8 @@ class SpeariaApi {
   static String? get sessionToken => _sessionToken;
 
   /// Configure once (on app start)
+  /// When baseUrl is not ngrok, the ngrok-skip-browser-warning header is disabled
+  /// to avoid CORS preflight rejections on production (e.g. Render).
   static void setBaseUrl(String url) {
     final u = url.trim();
     if (u.isEmpty) {
@@ -57,6 +59,7 @@ class SpeariaApi {
       return;
     }
     _baseUrl = u.replaceAll(RegExp(r'/+$'), '');
+    _sendNgrokSkipHeader = u.contains('ngrok');
   }
 
   /// Set/clear the logged-in user's session token (sent as `Authorization: Bearer ...`)
