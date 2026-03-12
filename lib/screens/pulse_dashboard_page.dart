@@ -36,7 +36,22 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   Map<String, dynamic>? _perf;
   Map<String, dynamic>? _ubModel;
 
-  String _timeRange = '7d';
+  Map<String, dynamic>? _successSummary;
+  Map<String, dynamic>? _perfPrevious;
+  Map<String, dynamic>? _successSummaryPrevious;
+
+  String _callsSearchQuery = '';
+  String? _callsResultFilter;
+  String? _callsDepartmentFilter;
+
+  List<Map<String, dynamic>> _recentCampaigns = const [];
+  String? _campaignSemesterFilter;
+  String? _campaignStatusFilter;
+
+  // Global date filter (drives all dashboard KPIs and panels).
+  String _datePreset = 'this_week'; // today, yesterday, this_week, this_month, this_year, custom
+  DateTime? _fromDate;
+  DateTime? _toDate;
 
   static const List<String> _recommendedOperators = [
     'Admissions Operator',
@@ -63,23 +78,175 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   @override
   void initState() {
     super.initState();
+    _applyPresetWithoutReload('this_week');
     _load();
   }
 
+  // Compute a concrete date range for a given preset.
+  void _applyPresetWithoutReload(String preset, {DateTimeRange? customRange}) {
+    final now = DateTime.now();
+    DateTime start;
+    DateTime end;
+
+    switch (preset) {
+      case 'today':
+        start = DateTime(now.year, now.month, now.day);
+        end = start.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+        break;
+      case 'yesterday':
+        final y = now.subtract(const Duration(days: 1));
+        start = DateTime(y.year, y.month, y.day);
+        end = start.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+        break;
+      case 'this_month':
+        start = DateTime(now.year, now.month, 1);
+        final nextMonth = DateTime(now.year, now.month + 1, 1);
+        end = nextMonth.subtract(const Duration(microseconds: 1));
+        break;
+      case 'this_year':
+        start = DateTime(now.year, 1, 1);
+        final nextYear = DateTime(now.year + 1, 1, 1);
+        end = nextYear.subtract(const Duration(microseconds: 1));
+        break;
+      case 'custom':
+        if (customRange != null) {
+          start = DateTime(customRange.start.year, customRange.start.month, customRange.start.day);
+          end = DateTime(customRange.end.year, customRange.end.month, customRange.end.day)
+              .add(const Duration(days: 1))
+              .subtract(const Duration(microseconds: 1));
+        } else {
+          // Fallback to this week if custom not provided.
+          final weekday = now.weekday; // 1 = Mon
+          start = DateTime(now.year, now.month, now.day)
+              .subtract(Duration(days: weekday - 1));
+          end = start.add(const Duration(days: 7)).subtract(const Duration(microseconds: 1));
+          preset = 'this_week';
+        }
+        break;
+      case 'this_week':
+      default:
+        final weekday = now.weekday; // 1 = Mon
+        start = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: weekday - 1));
+        end = start.add(const Duration(days: 7)).subtract(const Duration(microseconds: 1));
+        preset = 'this_week';
+        break;
+    }
+
+    _datePreset = preset;
+    _fromDate = start;
+    _toDate = end;
+  }
+
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final initialFirstDate = DateTime(now.year - 1, 1, 1);
+    final initialLastDate = DateTime(now.year + 1, 12, 31);
+
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: initialFirstDate,
+      lastDate: initialLastDate,
+      initialDateRange: _fromDate != null && _toDate != null
+          ? DateTimeRange(start: _fromDate!, end: _toDate!)
+          : null,
+    );
+    if (range == null) return;
+
+    setState(() {
+      _applyPresetWithoutReload('custom', customRange: range);
+    });
+    await _load();
+  }
+
+  String? _rangeLabel() {
+    if (_fromDate == null || _toDate == null) return null;
+    final from = _fromDate!;
+    final to = _toDate!;
+    final sameYear = from.year == to.year;
+    final sameMonth = sameYear && from.month == to.month;
+    String fmtMonth(int m) => _monthAbbrev(m);
+
+    if (sameYear && sameMonth && from.day == to.day) {
+      return '${fmtMonth(from.month)} ${from.day}, ${from.year}';
+    }
+    if (sameYear) {
+      return '${fmtMonth(from.month)} ${from.day} – ${fmtMonth(to.month)} ${to.day}, ${from.year}';
+    }
+    return '${fmtMonth(from.month)} ${from.day}, ${from.year} – ${fmtMonth(to.month)} ${to.day}, ${to.year}';
+  }
+
+  String _monthAbbrev(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    if (month < 1 || month > 12) return '';
+    return months[month - 1];
+  }
+
+  Map<String, String?> _currentIsoRange() {
+    final from = _fromDate;
+    final to = _toDate;
+    if (from == null || to == null) {
+      return {'from': null, 'to': null};
+    }
+    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
+    return {
+      'from': toIsoDay(from),
+      'to': toIsoDay(to),
+    };
+  }
+
+  Map<String, String?> _previousIsoRange() {
+    final from = _fromDate;
+    final to = _toDate;
+    if (from == null || to == null) {
+      return {'from': null, 'to': null};
+    }
+    final days = to.difference(from).inDays + 1;
+    final prevEnd = from.subtract(const Duration(days: 1));
+    final prevStart = prevEnd.subtract(Duration(days: days - 1));
+    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
+    return {
+      'from': toIsoDay(prevStart),
+      'to': toIsoDay(prevEnd),
+    };
+  }
+
   Future<void> _load() async {
+    final range = _currentIsoRange();
+    final from = range['from'];
+    final to = range['to'];
+    final prevRange = _previousIsoRange();
+    final prevFrom = prevRange['from'];
+    final prevTo = prevRange['to'];
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final results = await Future.wait([
-        SetupStatusApiService.getStatus(),
-        ManagedProfileApiService.listProfiles(),
-        NeyvoPulseApi.listNumbers(),
-        NeyvoPulseApi.listCalls(),
-        NeyvoPulseApi.getAnalyticsOverview(),
-        NeyvoPulseApi.getAccountInfo(),
-        NeyvoPulseApi.getUbStatus(),
+        SetupStatusApiService.getStatus(), // 0
+        ManagedProfileApiService.listProfiles(), // 1
+        NeyvoPulseApi.listNumbers(), // 2
+        NeyvoPulseApi.listCalls(from: from, to: to), // 3
+        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 4
+        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 5
+        NeyvoPulseApi.getAccountInfo(), // 6
+        NeyvoPulseApi.getUbStatus(), // 7
+        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 8
+        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 9
       ]);
 
       final setup = results[0] as Map<String, dynamic>;
@@ -87,8 +254,12 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       final numbersRes = results[2] as Map<String, dynamic>;
       final callsRes = results[3] as Map<String, dynamic>;
       final perf = results[4] as Map<String, dynamic>;
-      final account = results[5] as Map<String, dynamic>;
-      final ubRes = results[6] as Map<String, dynamic>;
+      final perfPrev = results[5] as Map<String, dynamic>;
+      final account = results[6] as Map<String, dynamic>;
+      final ubRes = results[7] as Map<String, dynamic>;
+      final successSummary = results[8] as Map<String, dynamic>;
+      final successSummaryPrev = results[9] as Map<String, dynamic>;
+      final campaignsRes = await NeyvoPulseApi.listCampaigns();
 
       final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
       final numbers = (numbersRes['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
@@ -96,6 +267,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       final ubStatus = (ubRes['status'] as String?)?.toLowerCase() ?? 'missing';
 
       final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final campaigns =
+          (campaignsRes['campaigns'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       final firstCallCompleted = calls.any((c) {
         final status = (c['status'] as String?)?.toLowerCase();
         if (status == 'completed' || status == 'success') return true;
@@ -129,6 +302,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         _recentCalls = calls.take(8).toList();
         _perf = perf;
         _ubModel = ubRes is Map ? Map<String, dynamic>.from(ubRes as Map) : null;
+        _successSummary = successSummary;
+        _perfPrevious = perfPrev;
+        _successSummaryPrevious = successSummaryPrev;
+        _recentCampaigns = campaigns.take(8).cast<Map<String, dynamic>>().toList();
         _loading = false;
       });
     } catch (e) {
@@ -266,6 +443,18 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        _GlobalDateFilterBar(
+                          preset: _datePreset,
+                          rangeLabel: _rangeLabel(),
+                          onPresetChanged: (preset) {
+                            setState(() {
+                              _applyPresetWithoutReload(preset);
+                            });
+                            _load();
+                          },
+                          onCustomTap: _pickCustomRange,
+                        ),
+                        const SizedBox(height: 16),
                         _buildHeroSection(orbState, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
@@ -286,8 +475,11 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
   Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ?? _recentCalls.length;
+    final callsTotalPrev = (_perfPrevious?['calls_total'] as num?)?.toInt();
     final resolutionPct = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
         (_perf?['resolution_rate'] as num?)?.toDouble();
+    final resolutionPrev = (_perfPrevious?['resolution_rate_pct'] as num?)?.toDouble() ??
+        (_perfPrevious?['resolution_rate'] as num?)?.toDouble();
     final studentsReached = _computeUniqueStudentsReached();
     final timeSavedHours = (_perf?['time_saved_hours'] as num?)?.toDouble();
 
@@ -302,21 +494,9 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                'University of Bridgeport Voice OS',
-                style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
-              ),
-              const Spacer(),
-              _TimeRangeSelector(
-                value: _timeRange,
-                onChanged: (v) => setState(() {
-                  _timeRange = v;
-                  _load();
-                }),
-              ),
-            ],
+          Text(
+            'University of Bridgeport Voice OS',
+            style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -352,20 +532,30 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
             spacing: 14,
             runSpacing: 14,
             children: [
-              _metricChip('Calls handled', callsTotal > 0 ? callsTotal.toString() : '—'),
-              _metricChip(
-                'AI answer rate',
-                resolutionPct == null ? '—' : '${resolutionPct.toStringAsFixed(1)}%',
+              _KpiCard(
+                title: 'Calls handled',
+                value: callsTotal > 0 ? callsTotal.toString() : '—',
+                deltaPercent: _computeDeltaPercent(callsTotal.toDouble(), callsTotalPrev?.toDouble()),
               ),
-              _metricChip(
-                'Students reached',
-                studentsReached > 0 ? studentsReached.toString() : '—',
+              _KpiCard(
+                title: 'Students reached',
+                value: studentsReached > 0 ? studentsReached.toString() : '—',
+                deltaPercent: null,
               ),
-              _metricChip(
-                'Time saved',
-                timeSavedHours == null
-                    ? '—'
-                    : '≈ ${timeSavedHours.toStringAsFixed(1)} h',
+              _KpiCard(
+                title: 'AI answer rate',
+                value: resolutionPct == null ? '—' : '${resolutionPct.toStringAsFixed(1)}%',
+                deltaPercent: _computeDeltaPercent(resolutionPct, resolutionPrev),
+                isPercentage: true,
+              ),
+              _KpiCard(
+                title: 'Goal completion rate',
+                value: _goalCompletionRateLabel(_successSummary),
+                deltaPercent: _computeDeltaPercent(
+                  _goalCompletionRateValue(_successSummary),
+                  _goalCompletionRateValue(_successSummaryPrevious),
+                ),
+                isPercentage: true,
               ),
             ],
           ),
@@ -487,133 +677,403 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   }
 
   Widget _buildOperationsSection(bool callOk) {
-    return Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 1100;
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.campaign_outlined, color: NeyvoColors.teal),
+                        const SizedBox(width: 10),
+                        Text('Active operations', style: NeyvoTextStyles.heading),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (!callOk) ...[
+                      Text(
+                        'Make a quick test call to finalize setup, then launch campaigns for students.',
+                        style: NeyvoTextStyles.body,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () =>
+                              Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                          child: const Text('Make a test call'),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _recentCallsTable(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: _buildRecentCampaignsPanel(),
+              ),
+              const SizedBox(height: 16),
+              _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: _buildLiveActivity(),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 7,
+              child: _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.campaign_outlined, color: NeyvoColors.teal),
+                        const SizedBox(width: 10),
+                        Text('Active operations', style: NeyvoTextStyles.heading),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (!callOk) ...[
+                      Text(
+                        'Make a quick test call to finalize setup, then launch campaigns for students.',
+                        style: NeyvoTextStyles.body,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () =>
+                              Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                          child: const Text('Make a test call'),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _recentCallsTable(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 5,
+              child: _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: _buildLiveActivity(),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 6,
+              child: _SimpleCard(
+                padding: const EdgeInsets.all(20),
+                child: _buildRecentCampaignsPanel(),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLiveActivity() {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 7,
-          child: _SimpleCard(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.campaign_outlined, color: NeyvoColors.teal),
-                    const SizedBox(width: 10),
-                    Text('Active operations', style: NeyvoTextStyles.heading),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (!callOk) ...[
-                  Text(
-                    'Make a quick test call to finalize setup, then launch campaigns for students.',
-                    style: NeyvoTextStyles.body,
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
-                      style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                      child: const Text('Make a test call'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                _recentCallsTable(),
-              ],
-            ),
-          ),
+        Row(
+          children: [
+            const Icon(Icons.history_toggle_off, color: NeyvoColors.teal),
+            const SizedBox(width: 10),
+            Text('Live activity', style: NeyvoTextStyles.heading),
+          ],
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 5,
-          child: _SimpleCard(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        const SizedBox(height: 12),
+        if (_recentCalls.isEmpty)
+          Text(
+            'No recent activity yet. As students call or receive outbound calls, activity will appear here.',
+            style: NeyvoTextStyles.body,
+          )
+        else
+          Column(
+            children: _recentCalls.take(5).map((c) {
+              final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
+              final status = (c['status'] as String?)?.toLowerCase() ?? '—';
+              final name =
+                  (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '—').toString();
+              final dur = (c['duration_seconds'] as num?)?.toInt() ?? 0;
+              final ok = status == 'completed' || status == 'success';
+              final timeLabel = dur <= 0 ? '' : ' · ${dur}s';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
                   children: [
-                    const Icon(Icons.history_toggle_off, color: NeyvoColors.teal),
-                    const SizedBox(width: 10),
-                    Text('Live activity', style: NeyvoTextStyles.heading),
+                    Icon(
+                      dir == 'inbound' ? Icons.call_received : Icons.call_made,
+                      size: 18,
+                      color: ok ? NeyvoColors.success : NeyvoColors.warning,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$name · ${dir == 'inbound' ? 'Inbound' : 'Outbound'}$timeLabel',
+                        style: NeyvoTextStyles.body,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                if (_recentCalls.isEmpty)
-                  Text(
-                    'No recent activity yet. As students call or receive outbound calls, activity will appear here.',
-                    style: NeyvoTextStyles.body,
-                  )
-                else
-                  Column(
-                    children: _recentCalls.take(5).map((c) {
-                      final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
-                      final status = (c['status'] as String?)?.toLowerCase() ?? '—';
-                      final name =
-                          (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '—').toString();
-                      final dur = (c['duration_seconds'] as num?)?.toInt() ?? 0;
-                      final ok = status == 'completed' || status == 'success';
-                      final timeLabel = dur <= 0 ? '' : ' · ${dur}s';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
+              );
+            }).toList(),
+          ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _actionButton(
+              icon: Icons.phone_in_talk_outlined,
+              label: 'Call My AI',
+              onTap: _showCallMyAi,
+            ),
+            _actionButton(
+              icon: Icons.call_made_outlined,
+              label: 'Start outbound',
+              onTap: () =>
+                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+            ),
+            _actionButton(
+              icon: Icons.smart_toy_outlined,
+              label: 'Edit operator',
+              onTap: () =>
+                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
+            ),
+            _actionButton(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Add credits',
+              onTap: () =>
+                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentCampaignsPanel() {
+    if (_recentCampaigns.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_mode_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Recent campaigns', style: NeyvoTextStyles.heading),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No campaigns yet. When you launch campaigns, progress will appear here.',
+            style: NeyvoTextStyles.body,
+          ),
+        ],
+      );
+    }
+
+    final semesters = _distinctCampaignSemesters().toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.auto_mode_outlined, color: NeyvoColors.teal),
+            const SizedBox(width: 10),
+            Text('Recent campaigns', style: NeyvoTextStyles.heading),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isDense: true,
+                decoration: const InputDecoration(
+                  hintText: 'Semester',
+                ),
+                value: _campaignSemesterFilter,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All semesters')),
+                  ...semesters.map(
+                    (s) => DropdownMenuItem(value: s, child: Text(s)),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _campaignSemesterFilter = value;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isDense: true,
+                decoration: const InputDecoration(
+                  hintText: 'Status',
+                ),
+                value: _campaignStatusFilter,
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('All statuses')),
+                  DropdownMenuItem(value: 'running', child: Text('Running')),
+                  DropdownMenuItem(value: 'complete', child: Text('Complete')),
+                  DropdownMenuItem(value: 'scheduled', child: Text('Scheduled')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _campaignStatusFilter = value;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ..._filteredCampaigns().map((c) {
+          final name = (c['name'] ?? 'Untitled campaign').toString();
+          final department = (c['department'] ?? c['target_department'] ?? '—').toString();
+          final studentCount = (c['student_count'] as num?)?.toInt() ??
+              (c['targets'] as List?)?.length ??
+              0;
+          final answered = (c['answered_count'] as num?)?.toInt() ?? 0;
+          final voicemail = (c['voicemail_count'] as num?)?.toInt() ?? 0;
+          final goalPct = (c['goal_completion_pct'] as num?)?.toDouble();
+          final semester = _semesterLabelForCampaign(c);
+          final statusInfo = _campaignStatusInfo(c);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: NeyvoColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              dir == 'inbound' ? Icons.call_received : Icons.call_made,
-                              size: 18,
-                              color: ok ? NeyvoColors.success : NeyvoColors.warning,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$name · ${dir == 'inbound' ? 'Inbound' : 'Outbound'}$timeLabel',
-                                style: NeyvoTextStyles.body,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            Text(name, style: NeyvoTextStyles.bodyPrimary),
+                            const SizedBox(height: 2),
+                            Text(
+                              department,
+                              style: NeyvoTextStyles.micro,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                      );
-                    }).toList(),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          semester,
+                          style: NeyvoTextStyles.micro,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
                   ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _actionButton(
-                      icon: Icons.phone_in_talk_outlined,
-                      label: 'Call My AI',
-                      onTap: _showCallMyAi,
-                    ),
-                    _actionButton(
-                      icon: Icons.call_made_outlined,
-                      label: 'Start outbound',
-                      onTap: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
-                    ),
-                    _actionButton(
-                      icon: Icons.smart_toy_outlined,
-                      label: 'Edit operator',
-                      onTap: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
-                    ),
-                    _actionButton(
-                      icon: Icons.account_balance_wallet_outlined,
-                      label: 'Add credits',
-                      onTap: () =>
-                          Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
-                    ),
-                  ],
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          '$studentCount students · $answered answered / $voicemail voicemail',
+                          style: NeyvoTextStyles.micro,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: NeyvoColors.bgRaised,
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: FractionallySizedBox(
+                                  widthFactor: (goalPct ?? 0).clamp(0, 100) / 100.0,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      color: NeyvoColors.teal,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              goalPct == null
+                                  ? '—'
+                                  : '${goalPct.toStringAsFixed(0)}%',
+                              style: NeyvoTextStyles.micro,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusInfo.color.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: statusInfo.color.withOpacity(0.6)),
+                        ),
+                        child: Text(
+                          statusInfo.label,
+                          style: NeyvoTextStyles.micro.copyWith(
+                            color: statusInfo.color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        }),
       ],
     );
   }
@@ -702,15 +1162,84 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           ],
         ),
         const SizedBox(height: 12),
-        ..._recentCalls.map((c) {
-          final dir = (c['direction'] as String?)?.toLowerCase() ?? 'inbound';
-          final status = (c['status'] as String?)?.toLowerCase() ?? '—';
+        // Inline filters row
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'Search name or ID',
+                  prefixIcon: Icon(Icons.search, size: 18),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _callsSearchQuery = value.trim();
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                isDense: true,
+                decoration: const InputDecoration(
+                  hintText: 'Result',
+                ),
+                value: _callsResultFilter,
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('All results')),
+                  DropdownMenuItem(value: 'goal_achieved', child: Text('Goal Achieved')),
+                  DropdownMenuItem(value: 'answered', child: Text('Answered')),
+                  DropdownMenuItem(value: 'voicemail', child: Text('Voicemail')),
+                  DropdownMenuItem(value: 'rescheduled', child: Text('Rescheduled')),
+                  DropdownMenuItem(value: 'no_answer', child: Text('No Answer')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _callsResultFilter = value;
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: DropdownButtonFormField<String>(
+                isDense: true,
+                decoration: const InputDecoration(
+                  hintText: 'Department',
+                ),
+                value: _callsDepartmentFilter,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All departments')),
+                  ..._distinctCallDepartments().map(
+                    (d) => DropdownMenuItem(value: d, child: Text(d)),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _callsDepartmentFilter = value;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ..._filteredRecentCalls().map((c) {
           final name = (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '—').toString();
-          final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString();
-          final dur = (c['duration_seconds'] as num?)?.toInt() ?? 0;
-          final durLabel = dur <= 0 ? '—' : '${dur}s';
-          final ok = status == 'completed' || status == 'success';
-          final badgeColor = ok ? NeyvoColors.success : NeyvoColors.warning;
+          final studentId = (c['student_id'] ?? c['school_student_id'] ?? '').toString();
+          final department = (c['department'] ?? c['operator_department'] ?? '—').toString();
+          final durationSeconds = (c['duration_seconds'] as num?)?.toInt() ?? 0;
+          final timestampRaw = c['started_at'] ?? c['ended_at'];
+          final dateTime = timestampRaw is String ? DateTime.tryParse(timestampRaw) : null;
+          final durationLabel = _formatDuration(durationSeconds);
+          final timestampLabel = dateTime == null ? '—' : _formatTimestamp(dateTime);
+          final resultInfo = _mapCallResult(c);
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Container(
@@ -722,28 +1251,71 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: badgeColor),
-                  ),
-                  const SizedBox(width: 10),
                   Expanded(
+                    flex: 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(name, style: NeyvoTextStyles.bodyPrimary),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${dir == 'inbound' ? 'Inbound' : 'Outbound'} · $phone',
-                          style: NeyvoTextStyles.micro,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        if (studentId.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'ID: $studentId',
+                            style: NeyvoTextStyles.micro,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Text(durLabel, style: NeyvoTextStyles.micro),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      department,
+                      style: NeyvoTextStyles.body,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: resultInfo.color.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: resultInfo.color.withOpacity(0.6)),
+                        ),
+                        child: Text(
+                          resultInfo.label,
+                          style: NeyvoTextStyles.micro.copyWith(
+                            color: resultInfo.color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: Text(
+                      durationLabel,
+                      style: NeyvoTextStyles.micro,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      timestampLabel,
+                      style: NeyvoTextStyles.micro,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -832,6 +1404,347 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     }
     return phones.length;
   }
+
+  List<Map<String, dynamic>> _filteredRecentCalls() {
+    final query = _callsSearchQuery.toLowerCase();
+    final resultFilter = _callsResultFilter;
+    final deptFilter = _callsDepartmentFilter;
+
+    return _recentCalls.where((c) {
+      final name = (c['student_name'] ?? c['contact_name'] ?? c['caller'] ?? '')
+          .toString()
+          .toLowerCase();
+      final studentId = (c['student_id'] ?? c['school_student_id'] ?? '')
+          .toString()
+          .toLowerCase();
+      final department = (c['department'] ?? c['operator_department'] ?? '')
+          .toString()
+          .toLowerCase();
+
+      if (query.isNotEmpty &&
+          !name.contains(query) &&
+          !studentId.contains(query)) {
+        return false;
+      }
+
+      if (deptFilter != null &&
+          deptFilter.isNotEmpty &&
+          department != deptFilter.toLowerCase()) {
+        return false;
+      }
+
+      if (resultFilter != null && resultFilter.isNotEmpty) {
+        final mapped = _mapCallResult(c).key;
+        if (mapped != resultFilter) return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
+  Set<String> _distinctCallDepartments() {
+    final set = <String>{};
+    for (final c in _recentCalls) {
+      final department = (c['department'] ?? c['operator_department'] ?? '')
+          .toString()
+          .trim();
+      if (department.isNotEmpty) {
+        set.add(department);
+      }
+    }
+    return set;
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '—';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    if (h > 0) {
+      return '${h}h ${m.toString().padLeft(2, '0')}m';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    // Simple, locale-agnostic formatting.
+    final month = _monthAbbrev(dt.month);
+    final day = dt.day;
+    final year = dt.year;
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$month $day, $year · $hour:$minute $suffix';
+  }
+
+  _CallResultInfo _mapCallResult(Map<String, dynamic> call) {
+    final statusRaw = (call['status'] ?? call['result'] ?? '').toString().toLowerCase();
+    final goalAchieved = call['goal_completed'] == true ||
+        (call['resolution'] ?? '').toString().toLowerCase() == 'goal_achieved';
+
+    if (goalAchieved) {
+      return const _CallResultInfo(
+        key: 'goal_achieved',
+        label: 'Goal Achieved',
+        color: NeyvoColors.success,
+      );
+    }
+
+    if (statusRaw.contains('resched')) {
+      return const _CallResultInfo(
+        key: 'rescheduled',
+        label: 'Rescheduled',
+        color: NeyvoColors.info,
+      );
+    }
+
+    if (statusRaw.contains('voicemail')) {
+      return const _CallResultInfo(
+        key: 'voicemail',
+        label: 'Voicemail',
+        color: NeyvoColors.warning,
+      );
+    }
+
+    if (statusRaw.contains('no_answer') ||
+        statusRaw.contains('no-answer') ||
+        statusRaw.contains('no answer') ||
+        statusRaw.contains('failed')) {
+      return const _CallResultInfo(
+        key: 'no_answer',
+        label: 'No Answer',
+        color: NeyvoColors.error,
+      );
+    }
+
+    if (statusRaw.contains('completed') ||
+        statusRaw.contains('success') ||
+        statusRaw.contains('answered')) {
+      return const _CallResultInfo(
+        key: 'answered',
+        label: 'Answered',
+        color: NeyvoColors.success,
+      );
+    }
+
+    return const _CallResultInfo(
+      key: 'answered',
+      label: 'Answered',
+      color: NeyvoColors.info,
+    );
+  }
+
+  List<Map<String, dynamic>> _filteredCampaigns() {
+    final statusFilter = _campaignStatusFilter;
+    final semesterFilter = _campaignSemesterFilter;
+
+    return _recentCampaigns.where((c) {
+      if (semesterFilter != null &&
+          semesterFilter.isNotEmpty &&
+          _semesterLabelForCampaign(c) != semesterFilter) {
+        return false;
+      }
+      if (statusFilter != null && statusFilter.isNotEmpty) {
+        final statusKey = _campaignStatusInfo(c).key;
+        if (statusKey != statusFilter) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Set<String> _distinctCampaignSemesters() {
+    final set = <String>{};
+    for (final c in _recentCampaigns) {
+      set.add(_semesterLabelForCampaign(c));
+    }
+    return set;
+  }
+
+  String _semesterLabelForCampaign(Map<String, dynamic> c) {
+    final raw = (c['scheduled_at'] ?? c['created_at'] ?? c['started_at'])?.toString();
+    final dt = raw != null ? DateTime.tryParse(raw) : null;
+    if (dt == null) return 'Unknown';
+    final year = dt.year;
+    final month = dt.month;
+    String term;
+    if (month >= 1 && month <= 4) {
+      term = 'Spring';
+    } else if (month >= 5 && month <= 8) {
+      term = 'Summer';
+    } else {
+      term = 'Fall';
+    }
+    return '$term $year';
+  }
+
+  _CampaignStatusInfo _campaignStatusInfo(Map<String, dynamic> c) {
+    final raw = (c['status'] ?? '').toString().toLowerCase();
+    if (raw.contains('running') || raw.contains('in_progress')) {
+      return const _CampaignStatusInfo(
+        key: 'running',
+        label: 'Running',
+        color: NeyvoColors.info,
+      );
+    }
+    if (raw.contains('scheduled') || raw.contains('draft')) {
+      return const _CampaignStatusInfo(
+        key: 'scheduled',
+        label: 'Scheduled',
+        color: NeyvoColors.warning,
+      );
+    }
+    if (raw.contains('completed') || raw.contains('complete') || raw.contains('finished')) {
+      return const _CampaignStatusInfo(
+        key: 'complete',
+        label: 'Complete',
+        color: NeyvoColors.success,
+      );
+    }
+    return const _CampaignStatusInfo(
+      key: 'running',
+      label: 'Running',
+      color: NeyvoColors.info,
+    );
+  }
+}
+
+class _CallResultInfo {
+  const _CallResultInfo({
+    required this.key,
+    required this.label,
+    required this.color,
+  });
+
+  final String key;
+  final String label;
+  final Color color;
+}
+
+class _CampaignStatusInfo {
+  const _CampaignStatusInfo({
+    required this.key,
+    required this.label,
+    required this.color,
+  });
+
+  final String key;
+  final String label;
+  final Color color;
+}
+
+double? _computeDeltaPercent(num? current, num? previous) {
+  if (current == null || previous == null) return null;
+  if (previous == 0) {
+    return current > 0 ? 100 : null;
+  }
+  final delta = (current - previous) / previous * 100;
+  if (delta.isNaN || delta.isInfinite) return null;
+  return delta;
+}
+
+double? _goalCompletionRateValue(Map<String, dynamic>? summary) {
+  if (summary == null) return null;
+  final direct = (summary['success_rate_pct'] as num?)?.toDouble();
+  if (direct != null) return direct;
+  final goals = (summary['goals_completed'] as num?)?.toDouble();
+  final total = (summary['total_calls'] as num?)?.toDouble();
+  if (goals == null || total == null || total <= 0) return null;
+  return (goals / total) * 100.0;
+}
+
+String _goalCompletionRateLabel(Map<String, dynamic>? summary) {
+  final v = _goalCompletionRateValue(summary);
+  if (v == null) return '—';
+  return '${v.toStringAsFixed(1)}%';
+}
+
+enum _KpiDeltaDirection { up, down, flat, none }
+
+_KpiDeltaDirection _directionForDelta(double? deltaPercent) {
+  if (deltaPercent == null) return _KpiDeltaDirection.none;
+  if (deltaPercent > 0.1) return _KpiDeltaDirection.up;
+  if (deltaPercent < -0.1) return _KpiDeltaDirection.down;
+  return _KpiDeltaDirection.flat;
+}
+
+class _KpiCard extends StatelessWidget {
+  const _KpiCard({
+    required this.title,
+    required this.value,
+    this.deltaPercent,
+    this.isPercentage = false,
+  });
+
+  final String title;
+  final String value;
+  final double? deltaPercent;
+  final bool isPercentage;
+
+  @override
+  Widget build(BuildContext context) {
+    final dir = _directionForDelta(deltaPercent);
+    final hasDelta = dir != _KpiDeltaDirection.none;
+    IconData? icon;
+    Color color = NeyvoColors.textMuted;
+
+    if (hasDelta) {
+      if (dir == _KpiDeltaDirection.up) {
+        icon = Icons.arrow_upward_rounded;
+        color = NeyvoColors.success;
+      } else if (dir == _KpiDeltaDirection.down) {
+        icon = Icons.arrow_downward_rounded;
+        color = NeyvoColors.error;
+      } else {
+        icon = Icons.horizontal_rule_rounded;
+      }
+    }
+
+    String deltaLabel() {
+      if (deltaPercent == null) return '— vs prior period';
+      final absVal = deltaPercent!.abs();
+      final formatted = absVal >= 100 ? absVal.toStringAsFixed(0) : absVal.toStringAsFixed(1);
+      final unit = isPercentage ? '%' : '%';
+      final sign = deltaPercent! > 0 ? '+' : deltaPercent! < 0 ? '−' : '';
+      return '$sign$formatted$unit vs prior';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: NeyvoColors.bgRaised.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NeyvoColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: NeyvoTextStyles.heading.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                deltaLabel(),
+                style: NeyvoTextStyles.micro.copyWith(color: color),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _TimeRangeSelector extends StatelessWidget {
@@ -857,6 +1770,67 @@ class _TimeRangeSelector extends StatelessWidget {
       selected: {value},
       onSelectionChanged: (v) {
         if (v.isNotEmpty) onChanged(v.first);
+      },
+    );
+  }
+}
+
+class _GlobalDateFilterBar extends StatelessWidget {
+  const _GlobalDateFilterBar({
+    required this.preset,
+    required this.rangeLabel,
+    required this.onPresetChanged,
+    required this.onCustomTap,
+  });
+
+  final String preset;
+  final String? rangeLabel;
+  final ValueChanged<String> onPresetChanged;
+  final VoidCallback onCustomTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = rangeLabel;
+    return _SimpleCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _presetChip('Today', 'today'),
+                _presetChip('Yesterday', 'yesterday'),
+                _presetChip('This week', 'this_week'),
+                _presetChip('This month', 'this_month'),
+                _presetChip('This year', 'this_year'),
+                _presetChip('Custom', 'custom', onTap: onCustomTap),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (label != null)
+            Text(
+              label,
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _presetChip(String text, String value, {VoidCallback? onTap}) {
+    final bool selected = preset == value;
+    return ChoiceChip(
+      label: Text(text),
+      selected: selected,
+      onSelected: (_) {
+        if (value == 'custom') {
+          onCustomTap();
+        } else {
+          onPresetChanged(value);
+        }
       },
     );
   }
