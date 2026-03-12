@@ -173,7 +173,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             children: [
               Row(
                 children: [
-                  Text('Import a number', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                  Text('Import number to VAPI', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
                   const Spacer(),
                   IconButton(
                     onPressed: _importing ? null : () => Navigator.of(ctx).pop(),
@@ -181,11 +181,27 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              Text(
+                'Import a carrier number (Twilio, Telnyx, or Vonage) into VAPI and link it to this account. The number will appear on the Phone Numbers tab and can be used by your operators.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
               if (err != null) ...[
                 Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
                 const SizedBox(height: 10),
               ],
+              Row(
+                children: [
+                  Text('Account ID', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                  const SizedBox(width: 8),
+                  Text(
+                    _safeStr(_account['account_id'] ?? _account['id'] ?? ''),
+                    style: NeyvoTextStyles.bodyPrimary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: provider,
                 items: const [
@@ -266,11 +282,11 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 icon: _importing
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Icon(Icons.upload, size: 18),
-                label: Text(_importing ? 'Importing…' : 'Import & link'),
+                label: Text(_importing ? 'Importing…' : 'Import & assign to org'),
               ),
               const SizedBox(height: 8),
               Text(
-                'Credentials are used one-time to import this number into VAPI and are not stored.',
+                'Credentials are used one-time to import this number into VAPI and are not stored on Neyvo servers.',
                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
               ),
             ],
@@ -349,7 +365,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Numbers only appear here after they are linked to your account. Use "Refresh" to pull in all numbers from your VAPI dashboard.',
+                    'Numbers only appear here after they are linked to your account. Use "Import from carrier" to bring in an existing Twilio, Telnyx, or Vonage number, or "Refresh" to pull in all numbers from your VAPI dashboard.',
                     style: NeyvoTextStyles.body.copyWith(
                       color: NeyvoColors.textSecondary,
                       fontSize: 13,
@@ -420,7 +436,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               TextButton.icon(
                 onPressed: _importing ? null : _openImportNumber,
                 icon: const Icon(Icons.upload, size: 18),
-                label: const Text('Import number'),
+                label: const Text('Import from carrier'),
               ),
               TextButton.icon(
                 onPressed: _openBuyNumber,
