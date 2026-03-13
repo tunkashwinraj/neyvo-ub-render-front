@@ -474,8 +474,11 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   }
 
   Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
-    final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ?? _recentCalls.length;
-    final callsTotalPrev = (_perfPrevious?['calls_total'] as num?)?.toInt();
+    final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
+        (_perf?['total_calls'] as num?)?.toInt() ??
+        _recentCalls.length;
+    final callsTotalPrev = (_perfPrevious?['calls_total'] as num?)?.toInt() ??
+        (_perfPrevious?['total_calls'] as num?)?.toInt();
     final resolutionPct = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
         (_perf?['resolution_rate'] as num?)?.toDouble();
     final resolutionPrev = (_perfPrevious?['resolution_rate_pct'] as num?)?.toDouble() ??
@@ -1648,8 +1651,14 @@ double? _goalCompletionRateValue(Map<String, dynamic>? summary) {
   if (direct != null) return direct;
   final goals = (summary['goals_completed'] as num?)?.toDouble();
   final total = (summary['total_calls'] as num?)?.toDouble();
-  if (goals == null || total == null || total <= 0) return null;
-  return (goals / total) * 100.0;
+  if (goals != null && total != null && total > 0) return (goals / total) * 100.0;
+  // Fallback: nested success_summary (backend also returns resolution_rate_pct there)
+  final nested = summary['success_summary'] as Map<String, dynamic>?;
+  if (nested != null) {
+    final pct = (nested['resolution_rate_pct'] as num?)?.toDouble();
+    if (pct != null) return pct;
+  }
+  return null;
 }
 
 String _goalCompletionRateLabel(Map<String, dynamic>? summary) {
