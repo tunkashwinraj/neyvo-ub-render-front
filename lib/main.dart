@@ -204,9 +204,14 @@ String get _kFallbackAccountId {
         final ok = res['ok'] == true;
         final accountId = res['account_id'] as String?;
         final onboardingFromApi = res['onboarding_completed'];
+        // Only use the UB demo fallback account for the UB tenant. For
+        // Goodwin (and future tenants) we require a real account mapping
+        // from the backend so each school has its own business data.
+        final tenant = TenantScope.of(context)?.config;
+        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
         if (ok && accountId != null && accountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(accountId);
-        } else if (_kFallbackAccountId.isNotEmpty) {
+        } else if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         // Load user timezone from settings for date display
@@ -228,7 +233,9 @@ String get _kFallbackAccountId {
           });
         }
       } catch (_) {
-        if (_kFallbackAccountId.isNotEmpty) {
+        final tenant = TenantScope.of(context)?.config;
+        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
+        if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
