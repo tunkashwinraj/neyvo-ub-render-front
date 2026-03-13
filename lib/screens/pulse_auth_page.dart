@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../api/spearia_api.dart';
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_scope.dart';
@@ -179,8 +180,34 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
         email: email,
         password: password,
       );
+      // Immediately verify tenant/org membership so that cross-tenant
+      // logins are rejected at the auth screen instead of inside the
+      // Pulse shell.
+      try {
+        await NeyvoPulseApi.getAccountInfo();
+      } on ApiException catch (e) {
+        final payload = e.payload;
+        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
+        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
+        if (isTenantMismatch) {
+          // Wrong school for this portal: sign out and show a login error
+          // without ever transitioning into the Pulse shell.
+          await FirebaseAuth.instance.signOut();
+          NeyvoPulseApi.setDefaultAccountId(null);
+          if (!mounted) return;
+          setState(() {
+            _error = 'These credentials are not valid for this portal.';
+            _loading = false;
+          });
+          return;
+        }
+        // For other API errors, fall through and let the post-auth gate
+        // handle them; just stop the loading spinner here.
+      }
       if (!mounted) return;
-      // Auth state stream in main will rebuild and show PulseShell
+      setState(() {
+        _loading = false;
+      });
     } on FirebaseAuthException catch (e) {
       setState(() {
         _error = e.message ?? e.code;

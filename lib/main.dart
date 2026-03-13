@@ -263,12 +263,9 @@ String get _kFallbackAccountId {
           );
           await FirebaseAuth.instance.signOut();
           NeyvoPulseApi.setDefaultAccountId(null);
-          if (mounted) {
-            setState(() {
-              _loaded = true;
-              _onboardingCompleted = true;
-            });
-          }
+          // Do not mark this gate as "loaded"; authStateChanges will
+          // rebuild the app back to PulseAuthPage after sign-out so
+          // the user never reaches PulseShell on a mismatched tenant.
           return;
         }
         // For all other API errors, fall back to the legacy behavior.
