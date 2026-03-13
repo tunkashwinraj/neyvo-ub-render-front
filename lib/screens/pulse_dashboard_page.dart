@@ -30,6 +30,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   // This avoids showing a full-page loader when the date filter changes.
   bool _kpiLoading = false;
 
+  // When true, only the \"University of Bridgeport Voice OS\" hero metrics
+  // (top-left summary card) are refreshing in response to the duration filter.
+  bool _ubHeroLoading = false;
+
   // Live call progress state for the hero \"Live calls\" card.
   bool _liveLoading = false;
   int _liveTotalCalls = 0;
@@ -174,10 +178,9 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     setState(() {
       _applyPresetWithoutReload('custom', customRange: range);
     });
-    // Refresh analytics KPIs and live-call stats for the new custom range
-    // without reloading the entire dashboard shell.
-    await _loadKpiSection();
-    await _loadLiveCallStats();
+    // Refresh only the UB hero metrics for the new custom range
+    // without reloading the rest of the dashboard.
+    await _loadUbHeroSection();
   }
 
   String? _rangeLabel() {
@@ -500,6 +503,64 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     }
   }
 
+  /// Reload only the \"University of Bridgeport Voice OS\" hero metrics.
+  /// This is used by the duration filter so that changing the time range
+  /// does not refresh the entire dashboard, only the top summary card.
+  Future<void> _loadUbHeroSection() async {
+    final range = _currentIsoRange();
+    final from = range['from'];
+    final to = range['to'];
+    final prevRange = _previousIsoRange();
+    final prevFrom = prevRange['from'];
+    final prevTo = prevRange['to'];
+
+    setState(() {
+      _ubHeroLoading = true;
+      _error = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        NeyvoPulseApi.listCalls(from: from, to: to), // 0
+        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
+        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
+        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
+        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
+      ]);
+
+      final callsRes = results[0] as Map<String, dynamic>;
+      final perf = results[1] as Map<String, dynamic>;
+      final perfPrev = results[2] as Map<String, dynamic>;
+      final successSummary = results[3] as Map<String, dynamic>;
+      final successSummaryPrev = results[4] as Map<String, dynamic>;
+
+      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final firstCallCompleted = calls.any((c) {
+        final status = (c['status'] as String?)?.toLowerCase();
+        if (status == 'completed' || status == 'success') return true;
+        final endedAt = c['ended_at'];
+        return endedAt != null && status != 'failed';
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _firstCallCompleted = firstCallCompleted;
+        _recentCalls = calls.take(8).toList();
+        _perf = perf;
+        _successSummary = successSummary;
+        _perfPrevious = perfPrev;
+        _successSummaryPrevious = successSummaryPrev;
+        _ubHeroLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _ubHeroLoading = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _liveCallsTimer?.cancel();
@@ -636,8 +697,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                             setState(() {
                               _applyPresetWithoutReload(preset);
                             });
-                            _loadKpiSection();
-                            _loadLiveCallStats();
+                            _loadUbHeroSection();
                           },
                           onCustomTap: () async {
                             await _pickCustomRange();
@@ -685,9 +745,26 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'University of Bridgeport Voice OS',
-            style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'University of Bridgeport Voice OS',
+                  style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                ),
+              ),
+              if (_ubHeroLoading) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: NeyvoColors.teal,
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 16),
           Wrap(
