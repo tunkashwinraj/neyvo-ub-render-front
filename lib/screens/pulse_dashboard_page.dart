@@ -2310,19 +2310,19 @@ class _LiveCallProgressCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (!hasCalls)
+          if (!hasCalls) ...[
             Text(
               'No calls in this range yet. As calls start, live progress will appear here.',
               style: NeyvoTextStyles.body,
-            )
-          else ...[
-            _statusBarRow('Running', runningCalls, totalCalls, NeyvoColors.info),
-            _statusBarRow('Completed', completedCalls, totalCalls, NeyvoColors.success),
-            _statusBarRow('Incomplete', incompleteCalls, totalCalls, NeyvoColors.warning),
-            _statusBarRow('Failed', failedCalls, totalCalls, NeyvoColors.error),
-            _statusBarRow('Voicemail', voicemailCalls, totalCalls, NeyvoColors.warning),
-            _statusBarRow('Rescheduled', rescheduledCalls, totalCalls, NeyvoColors.info),
+            ),
+            const SizedBox(height: 12),
           ],
+          _statusBarRow('Running', runningCalls, totalCalls, NeyvoColors.info),
+          _statusBarRow('Completed', completedCalls, totalCalls, NeyvoColors.success),
+          _statusBarRow('Incomplete', incompleteCalls, totalCalls, NeyvoColors.warning),
+          _statusBarRow('Failed', failedCalls, totalCalls, NeyvoColors.error),
+          _statusBarRow('Voicemail', voicemailCalls, totalCalls, NeyvoColors.warning),
+          _statusBarRow('Rescheduled', rescheduledCalls, totalCalls, NeyvoColors.info),
         ],
       ),
     );
