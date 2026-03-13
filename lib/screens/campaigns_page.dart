@@ -1221,21 +1221,24 @@ class _CampaignsPageState extends State<CampaignsPage> {
             ),
             const SizedBox(width: NeyvoSpacing.sm),
             FilledButton.icon(
-              onPressed: !_hasPhoneNumber
-                  ? null
-                  : () => setState(() {
-                        _wizard.reset();
-                        _showCreateWizard = true;
-                        _wizardStep = 0;
-                        _nameController.clear();
-                        _selectedStudentIds.clear();
-                        _manualAudienceSelection = false;
-                        _selectAll = false;
-                      }),
+              onPressed: () => setState(() {
+                _wizard.reset();
+                _showCreateWizard = true;
+                _wizardStep = 0;
+                _nameController.clear();
+                _selectedStudentIds.clear();
+                _manualAudienceSelection = false;
+                _selectAll = false;
+              }),
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Create Campaign'),
               style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
             ),
+            if (!_hasPhoneNumber)
+              Padding(
+                padding: const EdgeInsets.only(left: NeyvoSpacing.sm),
+                child: Text('Add a phone number in Phone Numbers to launch.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
+              ),
             const SizedBox(width: NeyvoSpacing.md),
           ],
         ),
@@ -1269,17 +1272,15 @@ class _CampaignsPageState extends State<CampaignsPage> {
           ),
           const SizedBox(width: NeyvoSpacing.sm),
           FilledButton.icon(
-            onPressed: !_hasPhoneNumber
-                ? null
-                : () => setState(() {
-                      _wizard.reset();
-                      _showCreateWizard = true;
-                      _wizardStep = 0;
-                      _nameController.clear();
-                      _selectedStudentIds.clear();
-                      _manualAudienceSelection = false;
-                      _selectAll = false;
-                    }),
+            onPressed: () => setState(() {
+              _wizard.reset();
+              _showCreateWizard = true;
+              _wizardStep = 0;
+              _nameController.clear();
+              _selectedStudentIds.clear();
+              _manualAudienceSelection = false;
+              _selectAll = false;
+            }),
             icon: const Icon(Icons.add, size: 20),
             label: const Text('Create Campaign'),
             style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
@@ -1292,6 +1293,15 @@ class _CampaignsPageState extends State<CampaignsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Campaigns', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
+            const SizedBox(height: NeyvoSpacing.xs),
+            Text('4-step wizard: Basics → Audience → Prepare → Launch', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+            const SizedBox(height: NeyvoSpacing.sm),
+            Text(
+              'Launch bulk outbound call campaigns by audience and script.',
+              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
             if (_error != null) ...[
               Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
               const SizedBox(height: NeyvoSpacing.md),
@@ -1317,12 +1327,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ),
               const SizedBox(height: NeyvoSpacing.lg),
             ],
-            Text('Campaigns', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
-            const SizedBox(height: NeyvoSpacing.sm),
-            Text(
-              'Launch bulk outbound call campaigns by audience and script.',
-              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-            ),
             const SizedBox(height: NeyvoSpacing.xl),
             if (_campaigns.isEmpty)
               buildNeyvoEmptyState(
@@ -2287,13 +2291,37 @@ class _CampaignsPageState extends State<CampaignsPage> {
             _editCampaignData = null;
           }),
         ),
-        title: Text(_editingCampaignId != null ? 'Edit campaign' : 'Create campaign', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_editingCampaignId != null ? 'Edit campaign' : 'Create campaign', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
+            Text('Step ${_wizardStep + 1} of ${steps.length}: ${steps[_wizardStep]}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+          ],
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(NeyvoSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (!_hasPhoneNumber)
+              Padding(
+                padding: const EdgeInsets.only(bottom: NeyvoSpacing.md),
+                child: Card(
+                  color: NeyvoTheme.warning.withValues(alpha: 0.15),
+                  child: Padding(
+                    padding: const EdgeInsets.all(NeyvoSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(Icons.phone_missed, color: NeyvoTheme.warning, size: 20),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        Expanded(child: Text('Add a phone number in Phone Numbers before you can launch.', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary))),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: NeyvoSpacing.lg),
             Row(
               children: List.generate(steps.length, (i) {
