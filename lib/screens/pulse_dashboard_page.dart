@@ -1,9 +1,9 @@
 // Voice OS Home – Voice Command Center (not a SaaS dashboard).
 
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:async';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
@@ -26,6 +26,21 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   bool _loading = true;
   String? _error;
 
+  // When true, only the Voice OS KPIs / analytics section is refreshing.
+  // This avoids showing a full-page loader when the date filter changes.
+  bool _kpiLoading = false;
+
+  // Live call progress state for the hero \"Live calls\" card.
+  bool _liveLoading = false;
+  int _liveTotalCalls = 0;
+  int _liveRunningCalls = 0;
+  int _liveCompletedCalls = 0;
+  int _liveIncompleteCalls = 0;
+  int _liveFailedCalls = 0;
+  int _liveVoicemailCalls = 0;
+  int _liveRescheduledCalls = 0;
+  Timer? _liveCallsTimer;
+
   bool _businessConfigured = false;
   bool _agentAttached = false;
   bool _numberLive = false;
@@ -41,13 +56,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   Map<String, dynamic>? _successSummary;
   Map<String, dynamic>? _perfPrevious;
   Map<String, dynamic>? _successSummaryPrevious;
-
-  // UB Voice OS–scoped metrics (for the top hero card only).
-  Map<String, dynamic>? _ubPerf;
-  Map<String, dynamic>? _ubPerfPrevious;
-  Map<String, dynamic>? _ubSuccessSummary;
-  Map<String, dynamic>? _ubSuccessSummaryPrevious;
-  bool _ubMetricsLoading = false;
 
   String _callsSearchQuery = '';
   String? _callsResultFilter;
@@ -89,6 +97,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     super.initState();
     _applyPresetWithoutReload('this_week');
     _load();
+    _loadLiveCallStats();
   }
 
   // Compute a concrete date range for a given preset.
@@ -165,7 +174,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     setState(() {
       _applyPresetWithoutReload('custom', customRange: range);
     });
-    await _reloadUbMetricsForRange();
+    // Refresh analytics KPIs and live-call stats for the new custom range
+    // without reloading the entire dashboard shell.
+    await _loadKpiSection();
+    await _loadLiveCallStats();
   }
 
   String? _rangeLabel() {
@@ -231,47 +243,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       'from': toIsoDay(prevStart),
       'to': toIsoDay(prevEnd),
     };
-  }
-
-  Future<void> _reloadUbMetricsForRange() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-
-    setState(() {
-      _ubMetricsLoading = true;
-    });
-
-    try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 0
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 1
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 2
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 3
-      ]);
-
-      final perf = results[0] as Map<String, dynamic>;
-      final perfPrev = results[1] as Map<String, dynamic>;
-      final successSummary = results[2] as Map<String, dynamic>;
-      final successSummaryPrev = results[3] as Map<String, dynamic>;
-
-      if (!mounted) return;
-      setState(() {
-        _ubPerf = perf;
-        _ubPerfPrevious = perfPrev;
-        _ubSuccessSummary = successSummary;
-        _ubSuccessSummaryPrevious = successSummaryPrev;
-        _ubMetricsLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _ubMetricsLoading = false;
-      });
-    }
   }
 
   Future<void> _load() async {
@@ -355,11 +326,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         _successSummary = successSummary;
         _perfPrevious = perfPrev;
         _successSummaryPrevious = successSummaryPrev;
-        // Initialize UB-scoped metrics from the initial load range.
-        _ubPerf = perf;
-        _ubPerfPrevious = perfPrev;
-        _ubSuccessSummary = successSummary;
-        _ubSuccessSummaryPrevious = successSummaryPrev;
         _recentCampaigns = campaigns.take(8).cast<Map<String, dynamic>>().toList();
         _loading = false;
       });
@@ -370,6 +336,174 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         _loading = false;
       });
     }
+  }
+
+  /// Reload only the live call statistics used by the hero "Live calls" card.
+  /// This is lightweight compared to the full dashboard load and is safe to run
+  /// periodically while calls are in progress.
+  Future<void> _loadLiveCallStats() async {
+    final range = _currentIsoRange();
+    final from = range['from'];
+    final to = range['to'];
+
+    setState(() {
+      _liveLoading = true;
+    });
+
+    try {
+      final res = await NeyvoPulseApi.listCalls(from: from, to: to);
+      final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      if (!mounted) return;
+      _updateLiveCallStatsFromCalls(calls);
+    } catch (_) {
+      if (!mounted) return;
+      // Live card errors should not take down the whole dashboard; we simply
+      // stop showing the inline loader until the next refresh.
+      setState(() {
+        _liveLoading = false;
+      });
+    }
+  }
+
+  void _updateLiveCallStatsFromCalls(List<Map<String, dynamic>> calls) {
+    int total = calls.length;
+    int running = 0;
+    int completed = 0;
+    int incomplete = 0;
+    int failed = 0;
+    int voicemail = 0;
+    int rescheduled = 0;
+
+    for (final c in calls) {
+      final statusRaw = (c['status'] ?? c['result'] ?? '').toString().toLowerCase();
+      final endedAt = c['ended_at'];
+      final isEnded = endedAt != null;
+      final isExplicitFailed = statusRaw.contains('failed') || statusRaw.contains('error');
+      final isRunning = !isEnded &&
+          (statusRaw.contains('queued') ||
+              statusRaw.contains('dial') ||
+              statusRaw.contains('ring') ||
+              statusRaw.contains('progress') ||
+              statusRaw.contains('running') ||
+              statusRaw.isEmpty);
+
+      if (isRunning) {
+        running++;
+        continue;
+      }
+
+      final result = _mapCallResult(c);
+      switch (result.key) {
+        case 'goal_achieved':
+        case 'answered':
+          completed++;
+          break;
+        case 'voicemail':
+          voicemail++;
+          break;
+        case 'rescheduled':
+          rescheduled++;
+          break;
+        case 'no_answer':
+          if (isExplicitFailed) {
+            failed++;
+          } else {
+            incomplete++;
+          }
+          break;
+        default:
+          incomplete++;
+      }
+    }
+
+    setState(() {
+      _liveTotalCalls = total;
+      _liveRunningCalls = running;
+      _liveCompletedCalls = completed;
+      _liveIncompleteCalls = incomplete;
+      _liveFailedCalls = failed;
+      _liveVoicemailCalls = voicemail;
+      _liveRescheduledCalls = rescheduled;
+      _liveLoading = false;
+    });
+
+    _ensureLiveTimer(running > 0);
+  }
+
+  void _ensureLiveTimer(bool hasRunningCalls) {
+    if (hasRunningCalls) {
+      if (_liveCallsTimer == null || !_liveCallsTimer!.isActive) {
+        _liveCallsTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          _loadLiveCallStats();
+        });
+      }
+    } else {
+      _liveCallsTimer?.cancel();
+      _liveCallsTimer = null;
+    }
+  }
+
+  /// Reload only the date-scoped Voice OS analytics (KPIs, charts, recent calls, success summary)
+  /// without triggering the full-page loading spinner.
+  Future<void> _loadKpiSection() async {
+    final range = _currentIsoRange();
+    final from = range['from'];
+    final to = range['to'];
+    final prevRange = _previousIsoRange();
+    final prevFrom = prevRange['from'];
+    final prevTo = prevRange['to'];
+
+    setState(() {
+      _kpiLoading = true;
+      _error = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        NeyvoPulseApi.listCalls(from: from, to: to), // 0
+        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
+        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
+        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
+        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
+      ]);
+
+      final callsRes = results[0] as Map<String, dynamic>;
+      final perf = results[1] as Map<String, dynamic>;
+      final perfPrev = results[2] as Map<String, dynamic>;
+      final successSummary = results[3] as Map<String, dynamic>;
+      final successSummaryPrev = results[4] as Map<String, dynamic>;
+
+      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final firstCallCompleted = calls.any((c) {
+        final status = (c['status'] as String?)?.toLowerCase();
+        if (status == 'completed' || status == 'success') return true;
+        final endedAt = c['ended_at'];
+        return endedAt != null && status != 'failed';
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _firstCallCompleted = firstCallCompleted;
+        _recentCalls = calls.take(8).toList();
+        _perf = perf;
+        _successSummary = successSummary;
+        _perfPrevious = perfPrev;
+        _successSummaryPrevious = successSummaryPrev;
+        _kpiLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _kpiLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveCallsTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -502,9 +636,12 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                             setState(() {
                               _applyPresetWithoutReload(preset);
                             });
-                            _reloadUbMetricsForRange();
+                            _loadKpiSection();
+                            _loadLiveCallStats();
                           },
-                          onCustomTap: _pickCustomRange,
+                          onCustomTap: () async {
+                            await _pickCustomRange();
+                          },
                         ),
                         const SizedBox(height: 16),
                         _buildHeroSection(orbState, callOk, contentWidth),
@@ -526,20 +663,15 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   }
 
   Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
-    final perfForUb = _ubPerf ?? _perf;
-    final perfPrevForUb = _ubPerfPrevious ?? _perfPrevious;
-    final successSummaryForUb = _ubSuccessSummary ?? _successSummary;
-    final successSummaryPrevForUb = _ubSuccessSummaryPrevious ?? _successSummaryPrevious;
-
-    final callsTotal = (perfForUb?['calls_total'] as num?)?.toInt() ??
-        (perfForUb?['total_calls'] as num?)?.toInt() ??
+    final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
+        (_perf?['total_calls'] as num?)?.toInt() ??
         _recentCalls.length;
-    final callsTotalPrev = (perfPrevForUb?['calls_total'] as num?)?.toInt() ??
-        (perfPrevForUb?['total_calls'] as num?)?.toInt();
-    final resolutionPct = (perfForUb?['resolution_rate_pct'] as num?)?.toDouble() ??
-        (perfForUb?['resolution_rate'] as num?)?.toDouble();
-    final resolutionPrev = (perfPrevForUb?['resolution_rate_pct'] as num?)?.toDouble() ??
-        (perfPrevForUb?['resolution_rate'] as num?)?.toDouble();
+    final callsTotalPrev = (_perfPrevious?['calls_total'] as num?)?.toInt() ??
+        (_perfPrevious?['total_calls'] as num?)?.toInt();
+    final resolutionPct = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
+        (_perf?['resolution_rate'] as num?)?.toDouble();
+    final resolutionPrev = (_perfPrevious?['resolution_rate_pct'] as num?)?.toDouble() ??
+        (_perfPrevious?['resolution_rate'] as num?)?.toDouble();
     final studentsReached = _computeUniqueStudentsReached();
 
     final totalCoreDepartments = _recommendedOperators.length;
@@ -547,13 +679,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
     final ubModelStatus = _ubStatus;
     final envLabel = 'Prod';
-
-    final range = _currentIsoRange();
-
-    final liveStatusCard = _LiveCallStatusCard(
-      fromDateIso: range['from'],
-      toDateIso: range['to'],
-    );
 
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),
@@ -594,14 +719,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (_ubMetricsLoading) ...[
-            const LinearProgressIndicator(
-              value: null,
-              color: NeyvoColors.teal,
-              backgroundColor: NeyvoColors.bgRaised,
-            ),
-            const SizedBox(height: 12),
-          ],
           Wrap(
             spacing: 14,
             runSpacing: 14,
@@ -624,10 +741,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               ),
               _KpiCard(
                 title: 'Goal completion rate',
-                value: _goalCompletionRateLabel(successSummaryForUb),
+                value: _goalCompletionRateLabel(_successSummary),
                 deltaPercent: _computeDeltaPercent(
-                  _goalCompletionRateValue(successSummaryForUb),
-                  _goalCompletionRateValue(successSummaryPrevForUb),
+                  _goalCompletionRateValue(_successSummary),
+                  _goalCompletionRateValue(_successSummaryPrevious),
                 ),
                 isPercentage: true,
               ),
@@ -642,6 +759,16 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       ),
     );
 
+    final liveProgressCard = _LiveCallProgressCard(
+      loading: _liveLoading,
+      totalCalls: _liveTotalCalls,
+      runningCalls: _liveRunningCalls,
+      completedCalls: _liveCompletedCalls,
+      incompleteCalls: _liveIncompleteCalls,
+      failedCalls: _liveFailedCalls,
+      voicemailCalls: _liveVoicemailCalls,
+      rescheduledCalls: _liveRescheduledCalls,
+    );
     final nextActionsCard = _SimpleCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -691,7 +818,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         children: [
           heroCard,
           const SizedBox(height: 16),
-          liveStatusCard,
+          liveProgressCard,
           const SizedBox(height: 16),
           nextActionsCard,
         ],
@@ -702,7 +829,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       children: [
         Expanded(flex: 7, child: heroCard),
         const SizedBox(width: 16),
-        Expanded(flex: 5, child: liveStatusCard),
+        Expanded(flex: 5, child: liveProgressCard),
         const SizedBox(width: 16),
         Expanded(flex: 5, child: nextActionsCard),
       ],
@@ -1848,301 +1975,6 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _LiveCallStats {
-  const _LiveCallStats({
-    required this.total,
-    required this.running,
-    required this.completed,
-    required this.failed,
-    required this.voicemail,
-    required this.rescheduled,
-    required this.incomplete,
-  });
-
-  final int total;
-  final int running;
-  final int completed;
-  final int failed;
-  final int voicemail;
-  final int rescheduled;
-  final int incomplete;
-}
-
-class _LiveCallStatusCard extends StatefulWidget {
-  const _LiveCallStatusCard({
-    required this.fromDateIso,
-    required this.toDateIso,
-  });
-
-  final String? fromDateIso;
-  final String? toDateIso;
-
-  @override
-  State<_LiveCallStatusCard> createState() => _LiveCallStatusCardState();
-}
-
-class _LiveCallStatusCardState extends State<_LiveCallStatusCard> {
-  _LiveCallStats? _stats;
-  bool _loading = false;
-  String? _error;
-  DateTime? _lastUpdated;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startPolling();
-  }
-
-  @override
-  void didUpdateWidget(covariant _LiveCallStatusCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.fromDateIso != widget.fromDateIso ||
-        oldWidget.toDateIso != widget.toDateIso) {
-      _startPolling();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startPolling() {
-    _timer?.cancel();
-    _loadOnce();
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _loadOnce());
-  }
-
-  Future<void> _loadOnce() async {
-    final from = widget.fromDateIso;
-    final to = widget.toDateIso;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final res = await NeyvoPulseApi.listCalls(from: from, to: to);
-      final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final stats = _computeLiveCallStats(calls);
-
-      if (!mounted) return;
-      setState(() {
-        _stats = stats;
-        _lastUpdated = DateTime.now();
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not load live stats';
-        _loading = false;
-      });
-    }
-  }
-
-  _LiveCallStats _computeLiveCallStats(List<Map<String, dynamic>> calls) {
-    int running = 0;
-    int completed = 0;
-    int failed = 0;
-    int voicemail = 0;
-    int rescheduled = 0;
-    int incomplete = 0;
-
-    for (final c in calls) {
-      final statusRaw =
-          (c['status'] ?? c['result'] ?? '').toString().toLowerCase();
-      final endedAt = c['ended_at'];
-
-      final isRunning =
-          statusRaw.contains('dialing') ||
-              statusRaw.contains('in_progress') ||
-              statusRaw.contains('ringing') ||
-              (endedAt == null &&
-                  !statusRaw.contains('failed') &&
-                  !statusRaw.contains('voicemail') &&
-                  !statusRaw.contains('resched') &&
-                  !statusRaw.contains('completed') &&
-                  !statusRaw.contains('success') &&
-                  !statusRaw.contains('answered'));
-
-      if (isRunning) {
-        running++;
-        continue;
-      }
-
-      if (statusRaw.contains('resched')) {
-        rescheduled++;
-      } else if (statusRaw.contains('voicemail')) {
-        voicemail++;
-      } else if (statusRaw.contains('failed') ||
-          statusRaw.contains('no_answer') ||
-          statusRaw.contains('no-answer') ||
-          statusRaw.contains('no answer')) {
-        failed++;
-      } else if (statusRaw.contains('completed') ||
-          statusRaw.contains('success') ||
-          statusRaw.contains('answered')) {
-        completed++;
-      } else {
-        incomplete++;
-      }
-    }
-
-    final total =
-        running + completed + failed + voicemail + rescheduled + incomplete;
-
-    return _LiveCallStats(
-      total: total,
-      running: running,
-      completed: completed,
-      failed: failed,
-      voicemail: voicemail,
-      rescheduled: rescheduled,
-      incomplete: incomplete,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = _stats;
-    final total = stats?.total ?? 0;
-
-    return _SimpleCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.speed_outlined, color: NeyvoColors.teal),
-              const SizedBox(width: 10),
-              Text('Live call status', style: NeyvoTextStyles.heading),
-              const Spacer(),
-              if (_loading)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else if (_lastUpdated != null)
-                Text(
-                  'Updated just now',
-                  style:
-                      NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_error != null)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: NeyvoTextStyles.micro
-                        .copyWith(color: NeyvoColors.error),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  onPressed: _loadOnce,
-                ),
-              ],
-            )
-          else if (stats == null || total == 0)
-            Text(
-              'No live calls in this period yet.',
-              style: NeyvoTextStyles.body,
-            )
-          else ...[
-            _statusBar(
-              label: 'Running calls',
-              value: stats.running,
-              total: total,
-              color: NeyvoColors.info,
-            ),
-            const SizedBox(height: 8),
-            _statusBar(
-              label: 'Completed calls',
-              value: stats.completed,
-              total: total,
-              color: NeyvoColors.success,
-            ),
-            const SizedBox(height: 8),
-            _statusBar(
-              label: 'Incomplete calls',
-              value: stats.incomplete,
-              total: total,
-              color: NeyvoColors.warning,
-            ),
-            const SizedBox(height: 8),
-            _statusBar(
-              label: 'Failed calls',
-              value: stats.failed,
-              total: total,
-              color: NeyvoColors.error,
-            ),
-            const SizedBox(height: 8),
-            _statusBar(
-              label: 'Voicemail calls',
-              value: stats.voicemail,
-              total: total,
-              color: NeyvoColors.warning,
-            ),
-            const SizedBox(height: 8),
-            _statusBar(
-              label: 'Rescheduled calls',
-              value: stats.rescheduled,
-              total: total,
-              color: NeyvoColors.teal,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _statusBar({
-    required String label,
-    required int value,
-    required int total,
-    required Color color,
-  }) {
-    final fraction = total <= 0 ? 0.0 : value / total;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          height: 10,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: color.withOpacity(0.18),
-          ),
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: fraction.clamp(0.0, 1.0),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                color: color,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$label: $value of $total',
-          style: NeyvoTextStyles.micro,
-        ),
-      ],
-    );
-  }
-}
-
 class _TimeRangeSelector extends StatelessWidget {
   const _TimeRangeSelector({required this.value, required this.onChanged});
 
@@ -2263,6 +2095,116 @@ class _StatusChip extends StatelessWidget {
           Text(
             value,
             style: NeyvoTextStyles.micro.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveCallProgressCard extends StatelessWidget {
+  const _LiveCallProgressCard({
+    required this.loading,
+    required this.totalCalls,
+    required this.runningCalls,
+    required this.completedCalls,
+    required this.incompleteCalls,
+    required this.failedCalls,
+    required this.voicemailCalls,
+    required this.rescheduledCalls,
+  });
+
+  final bool loading;
+  final int totalCalls;
+  final int runningCalls;
+  final int completedCalls;
+  final int incompleteCalls;
+  final int failedCalls;
+  final int voicemailCalls;
+  final int rescheduledCalls;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCalls = totalCalls > 0;
+    return _SimpleCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.speed_outlined, color: NeyvoColors.teal),
+              const SizedBox(width: 10),
+              Text('Live calls', style: NeyvoTextStyles.heading),
+              const Spacer(),
+              if (loading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: NeyvoColors.teal,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!hasCalls)
+            Text(
+              'No calls in this range yet. As calls start, live progress will appear here.',
+              style: NeyvoTextStyles.body,
+            )
+          else ...[
+            _statusBarRow('Running', runningCalls, totalCalls, NeyvoColors.info),
+            _statusBarRow('Completed', completedCalls, totalCalls, NeyvoColors.success),
+            _statusBarRow('Incomplete', incompleteCalls, totalCalls, NeyvoColors.warning),
+            _statusBarRow('Failed', failedCalls, totalCalls, NeyvoColors.error),
+            _statusBarRow('Voicemail', voicemailCalls, totalCalls, NeyvoColors.warning),
+            _statusBarRow('Rescheduled', rescheduledCalls, totalCalls, NeyvoColors.info),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBarRow(String label, int count, int total, Color color) {
+    final fraction = total <= 0 ? 0.0 : (count / total).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                ),
+              ),
+              Text(
+                '$count',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: NeyvoColors.bgRaised.withOpacity(0.55),
+            ),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: fraction,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: color,
+                ),
+              ),
+            ),
           ),
         ],
       ),
