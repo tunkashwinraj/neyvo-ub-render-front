@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
@@ -166,7 +167,7 @@ class _LaunchPageState extends State<LaunchPage> {
                         SizedBox(
                           width: 220,
                           child: FilledButton(
-                            onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dashboard),
+                            onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
                             style: FilledButton.styleFrom(
                               backgroundColor: NeyvoColors.teal,
                               foregroundColor: Colors.white,
@@ -182,7 +183,7 @@ class _LaunchPageState extends State<LaunchPage> {
                   Row(
                     children: [
                       TextButton.icon(
-                        onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.calls),
+                        onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls),
                         icon: const Icon(Icons.history, size: 18),
                         label: const Text('View calls'),
                       ),
@@ -386,19 +387,19 @@ class _LaunchPageState extends State<LaunchPage> {
   }
 
   void _openBilling(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing);
+    PulseShellController.navigatePulse(context, PulseRouteNames.billing);
   }
 
   void _openSettings(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.settings);
+    PulseShellController.navigatePulse(context, PulseRouteNames.settings);
   }
 
   void _openAgents(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents);
+    PulseShellController.navigatePulse(context, PulseRouteNames.agents);
   }
 
   void _openNumbers(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers);
+    PulseShellController.navigatePulse(context, PulseRouteNames.phoneNumbers);
   }
 
   void _showCallNow(BuildContext context) {

@@ -43,6 +43,23 @@ import 'training_page.dart';
 import 'audit_log_page.dart';
 import 'health_check_page.dart';
 
+/// Allows navigating to a pulse tab without pushing a new PulseShell (avoids full re-init and slow load).
+/// When [navigatePulse] is used, the app pops to the root shell and switches its tab instead of pushing a second shell.
+class PulseShellController {
+  PulseShellController._();
+
+  static _PulseShellState? _root;
+
+  /// Navigate to a pulse tab by switching the root shell's tab. Pops to root first so only one shell stays on the stack.
+  static void navigatePulse(BuildContext context, String routeName) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.popUntil((route) => route.isFirst);
+    String tabRoute = routeName;
+    if (tabRoute == PulseRouteNames.dialer || tabRoute == PulseRouteNames.outbound) tabRoute = PulseRouteNames.calls;
+    _root?.navigateToTab(tabRoute);
+  }
+}
+
 class PulseShell extends StatefulWidget {
   const PulseShell({
     super.key,
@@ -162,6 +179,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    if (PulseShellController._root == null) PulseShellController._root = this;
     // #region agent log
     debugSessionLog('pulse_shell.dart:initState', 'PulseShell initState', {'initialRouteName': widget.initialRouteName}, 'A');
     // #endregion
@@ -279,10 +297,16 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    if (PulseShellController._root == this) PulseShellController._root = null;
     _walletSubscription?.cancel();
     _walletCreditsSubscription?.cancel();
     _livePulseCtrl.dispose();
     super.dispose();
+  }
+
+  /// Switch this shell's selected tab to [routeName]. Used by [PulseShellController.navigatePulse] to avoid pushing a new shell.
+  void navigateToTab(String routeName) {
+    _navigateToRoute(routeName);
   }
 
   Future<void> _loadWalletCredits() async {

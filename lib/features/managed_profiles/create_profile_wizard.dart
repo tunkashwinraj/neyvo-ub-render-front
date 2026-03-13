@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
+import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
 import 'managed_profile_api_service.dart';
 
@@ -1496,7 +1497,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   }
 
   void _openConnectionSettings() {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.settings);
+    PulseShellController.navigatePulse(context, PulseRouteNames.settings);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Integration setup will open in Settings. Return here when you’re done.'),
@@ -1507,7 +1508,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   }
 
   void _openNumbers() {
-    Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers);
+    PulseShellController.navigatePulse(context, PulseRouteNames.phoneNumbers);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Numbers will open in a new screen. Come back here to finish setup.'),

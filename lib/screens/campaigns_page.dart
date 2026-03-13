@@ -7,6 +7,7 @@ import '../api/spearia_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/export_csv.dart';
@@ -1214,7 +1215,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
           foregroundColor: NeyvoTheme.textPrimary,
           actions: [
             TextButton.icon(
-              onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
+              onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.students),
               icon: const Icon(Icons.people_outlined, size: 18),
               label: const Text('Contacts'),
             ),
@@ -1262,7 +1263,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         foregroundColor: NeyvoTheme.textPrimary,
         actions: [
           TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
+            onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.students),
             icon: const Icon(Icons.people_outlined, size: 18),
             label: const Text('Contacts'),
           ),

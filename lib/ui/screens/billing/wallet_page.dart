@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../screens/pulse_shell.dart';
 import '../../../services/user_timezone_service.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/export_csv.dart';
@@ -447,8 +448,8 @@ class _WalletPageState extends State<WalletPage> {
     return after - credits;
   }
 
-  void _openBilling() async {
-    await Navigator.of(context).pushNamed(PulseRouteNames.billing);
+  void _openBilling() {
+    PulseShellController.navigatePulse(context, PulseRouteNames.billing);
     if (mounted) _load();
   }
 

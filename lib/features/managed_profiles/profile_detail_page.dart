@@ -5,6 +5,7 @@ import '../../utils/voice_preview_player.dart';
 
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
+import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
@@ -240,7 +241,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         ),
       );
       if (goPurchase == true && mounted) {
-        Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers);
+        PulseShellController.navigatePulse(context, PulseRouteNames.phoneNumbers);
       }
       return;
     }
@@ -1709,7 +1710,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                  onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
                   style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
@@ -1885,7 +1886,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                  onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
                   style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),

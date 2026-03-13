@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/callback_date_format.dart';
 import 'student_detail_page.dart';
@@ -253,7 +254,7 @@ class _CallbacksPageState extends State<CallbacksPage> {
                                         FilledButton.tonal(
                                           onPressed: studentId.isEmpty
                                               ? null
-                                              : () => Navigator.of(context).pushNamed(PulseRouteNames.dialer),
+                                              : () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
                                           child: const Text('Call now'),
                                         ),
                                         OutlinedButton(

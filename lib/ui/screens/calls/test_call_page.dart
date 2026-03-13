@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../activation/activation_service.dart';
@@ -232,7 +233,7 @@ class _TestCallPageState extends State<TestCallPage> {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: () => Navigator.of(context, rootNavigator: true).pushReplacementNamed(PulseRouteNames.dashboard),
+                              onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
                               style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                               child: const Text('Go to Home'),
                             ),

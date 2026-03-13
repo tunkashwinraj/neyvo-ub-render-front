@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
@@ -387,12 +388,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                         builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
                                       );
                                       if (created == true && mounted) {
-                                        Navigator.of(context, rootNavigator: true)
-                                            .pushNamed(PulseRouteNames.managedProfiles);
+                                        PulseShellController.navigatePulse(context, PulseRouteNames.agents);
                                       }
                                     } else {
-                                      Navigator.of(context, rootNavigator: true)
-                                          .pushNamed(PulseRouteNames.managedProfiles);
+                                      PulseShellController.navigatePulse(context, PulseRouteNames.agents);
                                     }
                                   },
                                   style: FilledButton.styleFrom(
@@ -407,8 +406,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                               ],
                               const SizedBox(height: 16),
                               TextButton(
-                                onPressed: () => Navigator.of(context, rootNavigator: true)
-                                    .pushNamed(PulseRouteNames.managedProfiles),
+                                onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
                                 child: const Text('Choose another department'),
                               ),
                             ],
@@ -585,26 +583,26 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.managedProfiles)),
+                      _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents)),
                       const SizedBox(width: 8),
-                      _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns)),
+                      _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.campaigns)),
                       const SizedBox(width: 8),
                       _NextActionCompact(icon: Icons.school_outlined, label: 'UB model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
                       const SizedBox(width: 8),
-                      _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics)),
+                      _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.analytics)),
                     ],
                   ),
                 );
               }
               return Row(
                 children: [
-                  Expanded(child: _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.managedProfiles))),
+                  Expanded(child: _NextActionCompact(icon: Icons.person_add_alt_1_outlined, label: 'Add operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents))),
                   const SizedBox(width: 8),
-                  Expanded(child: _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.campaigns))),
+                  Expanded(child: _NextActionCompact(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.campaigns))),
                   const SizedBox(width: 8),
                   Expanded(child: _NextActionCompact(icon: Icons.school_outlined, label: 'UB model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview))),
                   const SizedBox(width: 8),
-                  Expanded(child: _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.analytics))),
+                  Expanded(child: _NextActionCompact(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.analytics))),
                 ],
               );
             },
@@ -709,7 +707,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: () =>
-                              Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                              PulseShellController.navigatePulse(context, PulseRouteNames.testCall),
                           style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                           child: const Text('Make a test call'),
                         ),
@@ -762,7 +760,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: () =>
-                              Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.testCall),
+                              PulseShellController.navigatePulse(context, PulseRouteNames.testCall),
                           style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                           child: const Text('Make a test call'),
                         ),
@@ -859,19 +857,19 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               icon: Icons.call_made_outlined,
               label: 'Start outbound',
               onTap: () =>
-                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.dialer),
+                  PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
             ),
             _actionButton(
               icon: Icons.smart_toy_outlined,
               label: 'Edit operator',
               onTap: () =>
-                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.agents),
+                  PulseShellController.navigatePulse(context, PulseRouteNames.agents),
             ),
             _actionButton(
               icon: Icons.account_balance_wallet_outlined,
               label: 'Add credits',
               onTap: () =>
-                  Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing),
+                  PulseShellController.navigatePulse(context, PulseRouteNames.billing),
             ),
           ],
         ),
@@ -1158,7 +1156,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
             Text('Recent calls', style: NeyvoTextStyles.heading),
             const Spacer(),
             TextButton(
-              onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.calls),
+              onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls),
               child: const Text('View all'),
             ),
           ],
@@ -2085,8 +2083,7 @@ class _VoiceCoverageCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     FilledButton.icon(
-                      onPressed: () => Navigator.of(context, rootNavigator: true)
-                          .pushNamed(PulseRouteNames.agents),
+                      onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
                       icon: const Icon(Icons.add),
                       label: const Text('Create operator'),
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),

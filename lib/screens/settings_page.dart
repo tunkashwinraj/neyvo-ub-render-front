@@ -9,6 +9,7 @@ import '../neyvo_pulse_api.dart';
 import '../services/user_timezone_service.dart';
 import '../utils/payment_result_dialog.dart';
 import '../pulse_route_names.dart';
+import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 
 class PulseSettingsPage extends StatefulWidget {
@@ -65,7 +66,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         if (!mounted) return;
         await showPaymentResultDialogIfNeeded(context, payment);
         if (!mounted) return;
-        Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.billing);
+        PulseShellController.navigatePulse(context, PulseRouteNames.billing);
       });
     } catch (_) {}
   }

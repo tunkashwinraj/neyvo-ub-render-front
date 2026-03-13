@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/payment_result_dialog.dart';
 import '../../../utils/payment_pending_storage.dart';
@@ -381,7 +382,7 @@ class _BillingPageState extends State<BillingPage> {
                       SizedBox(
                         width: 220,
                         child: FilledButton(
-                          onPressed: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.phoneNumbers),
+                          onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.phoneNumbers),
                           style: FilledButton.styleFrom(
                             backgroundColor: NeyvoColors.teal,
                             foregroundColor: Colors.white,
