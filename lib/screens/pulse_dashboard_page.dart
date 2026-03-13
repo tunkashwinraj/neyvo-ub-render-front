@@ -102,7 +102,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   @override
   void initState() {
     super.initState();
-    _applyPresetWithoutReload('this_week');
+    _applyPresetWithoutReload('today');
     _load();
     _loadLiveCallStats();
   }
@@ -2152,21 +2152,66 @@ class _HeroDateFilterControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = rangeLabel;
+    const options = <String>['today', 'yesterday', 'this_week', 'this_month', 'this_year', 'custom'];
+
+    String _labelForPreset(String value) {
+      switch (value) {
+        case 'today':
+          return 'Today';
+        case 'yesterday':
+          return 'Yesterday';
+        case 'this_week':
+          return 'This week';
+        case 'this_month':
+          return 'This month';
+        case 'this_year':
+          return 'This year';
+        case 'custom':
+          return 'Custom';
+        default:
+          return 'Today';
+      }
+    }
+
+    void _handleSelection(String value) {
+      if (value == 'custom') {
+        onCustomTap();
+      } else {
+        onPresetChanged(value);
+      }
+    }
+
+    final currentValue = options.contains(preset) ? preset : 'today';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          alignment: WrapAlignment.end,
-          children: [
-            _presetChip('Today', 'today'),
-            _presetChip('Yesterday', 'yesterday'),
-            _presetChip('This week', 'this_week'),
-            _presetChip('This month', 'this_month'),
-            _presetChip('This year', 'this_year'),
-            _presetChip('Custom', 'custom', onTap: onCustomTap),
-          ],
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            height: 36,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: currentValue,
+                isDense: true,
+                onChanged: (value) {
+                  if (value == null) return;
+                  _handleSelection(value);
+                },
+                items: options
+                    .map(
+                      (v) => DropdownMenuItem<String>(
+                        value: v,
+                        child: Text(
+                          _labelForPreset(v),
+                          style: NeyvoTextStyles.body.copyWith(fontSize: 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
         ),
         if (label != null) ...[
           const SizedBox(height: 4),
@@ -2176,23 +2221,6 @@ class _HeroDateFilterControls extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _presetChip(String text, String value, {VoidCallback? onTap}) {
-    final bool selected = preset == value;
-    return ChoiceChip(
-      label: Text(text),
-      selected: selected,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) {
-        if (value == 'custom') {
-          onCustomTap();
-        } else {
-          onPresetChanged(value);
-        }
-      },
     );
   }
 }
