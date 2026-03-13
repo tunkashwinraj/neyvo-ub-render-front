@@ -872,7 +872,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   Future<void> _startOrRerunCampaign(Map<String, dynamic> c) async {
     if (!_ensureHasPhoneNumber()) return;
     final id = c['id']?.toString();
-    if (id == null) return;
+    if (id == null || id.isEmpty) return;
     if (!_hasCreditsToRun && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing to run campaigns.'),
@@ -881,6 +881,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
+    // Ensure immutable audience snapshot exists and validation has passed before starting.
+    final ready = await _ensureCampaignSnapshotReady(id);
+    if (!ready || !mounted) return;
     final isRerun = c['status'] == 'completed' || c['status'] == 'running';
     try {
       final res = await NeyvoPulseApi.startCampaign(id, phoneNumberId: _selectedStartPhoneNumberId);
@@ -891,7 +894,88 @@ class _CampaignsPageState extends State<CampaignsPage> {
     } on ApiException catch (e) {
       if (mounted) _showInsufficientCreditsSnackBar(e);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
+
+  /// Ensure the campaign has a completed, valid audience snapshot before starting.
+  /// Returns true when ready to launch; otherwise shows a user-facing message and returns false.
+  Future<bool> _ensureCampaignSnapshotReady(String campaignId) async {
+    try {
+      Map<String, dynamic> validation = {};
+      try {
+        final v = await NeyvoPulseApi.getCampaignValidation(campaignId);
+        validation = Map<String, dynamic>.from(v as Map);
+      } catch (_) {
+        validation = {};
+      }
+
+      String status = (validation['snapshot_status'] ?? 'none').toString().toLowerCase().trim();
+      Map<String, dynamic>? report =
+          (validation['validation_report'] as Map?)?.cast<String, dynamic>();
+      bool ok = report != null && report['ok'] == true;
+
+      // If there's no complete snapshot yet, run prepare once.
+      if (status != 'complete') {
+        final res = await NeyvoPulseApi.prepareCampaign(campaignId);
+        final preparedValidation =
+            (res['validation'] as Map?)?.cast<String, dynamic>();
+        if (preparedValidation != null) {
+          report = preparedValidation;
+          ok = report?['ok'] == true;
+        }
+        // Refresh authoritative status from /validation.
+        try {
+          final v2 = await NeyvoPulseApi.getCampaignValidation(campaignId);
+          final vv = Map<String, dynamic>.from(v2 as Map);
+          status = (vv['snapshot_status'] ?? status).toString().toLowerCase().trim();
+          report =
+              (vv['validation_report'] as Map?)?.cast<String, dynamic>() ?? report;
+          ok = ok || (report != null && report['ok'] == true);
+        } catch (_) {
+          // If validation fetch fails, fall through to status checks below.
+        }
+      }
+
+      if (status != 'complete') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Audience snapshot is not ready. Go to Preview & Prepare and run "Lock Audience & Run Validation".'),
+              backgroundColor: NeyvoTheme.error,
+            ),
+          );
+        }
+        return false;
+      }
+      if (!ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Validation failed. Fix the issues shown in Preview & Prepare and run validation again.'),
+              backgroundColor: NeyvoTheme.error,
+            ),
+          );
+        }
+        return false;
+      }
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not prepare campaign: $e'),
+            backgroundColor: NeyvoTheme.error,
+          ),
+        );
+      }
+      return false;
     }
   }
 
@@ -905,6 +989,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
+    // Subset runs must still respect the immutable prepared audience snapshot.
+    final ready = await _ensureCampaignSnapshotReady(campaignId);
+    if (!ready || !mounted) return;
     final byId = <String, Map<String, dynamic>>{};
     for (final s in _students) {
       final id = (s['id'] ?? '').toString();
@@ -1577,28 +1664,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 TextButton.icon(
                   icon: const Icon(Icons.play_arrow, size: 20),
                   label: const Text('Start campaign'),
-                  onPressed: () async {
-                    if (!_ensureHasPhoneNumber()) return;
-                    if (!_hasCreditsToRun && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing to run campaigns.'),
-                        backgroundColor: NeyvoTheme.warning,
-                        duration: const Duration(seconds: 5),
-                      ));
-                      return;
-                    }
-                    try {
-                      final res = await NeyvoPulseApi.startCampaign(campaignId, phoneNumberId: _selectedStartPhoneNumberId);
-                      if (mounted) {
-                        _showCampaignStartResult(res, isRerun: false);
-                        setState(() => _campaignDetailRefreshKey++);
-                      }
-                    } on ApiException catch (e) {
-                      if (mounted) _showInsufficientCreditsSnackBar(e);
-                    } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                    }
-                  },
+                  onPressed: () => _startOrRerunCampaign(c),
                 ),
               if (canStart && audienceIds.isNotEmpty)
                 TextButton.icon(
@@ -1610,28 +1676,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 TextButton.icon(
                   icon: const Icon(Icons.replay, size: 20),
                   label: const Text('Rerun campaign'),
-                  onPressed: () async {
-                    if (!_ensureHasPhoneNumber()) return;
-                    if (!_hasCreditsToRun && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing.'),
-                        backgroundColor: NeyvoTheme.warning,
-                        duration: const Duration(seconds: 5),
-                      ));
-                      return;
-                    }
-                    try {
-                      final res = await NeyvoPulseApi.startCampaign(campaignId, phoneNumberId: _selectedStartPhoneNumberId);
-                      if (mounted) {
-                        _showCampaignStartResult(res, isRerun: true);
-                        setState(() => _campaignDetailRefreshKey++);
-                      }
-                    } on ApiException catch (e) {
-                      if (mounted) _showInsufficientCreditsSnackBar(e);
-                    } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                    }
-                  },
+                  onPressed: () => _startOrRerunCampaign(c),
                 ),
             ],
           ),
@@ -1693,6 +1738,30 @@ class _CampaignsPageState extends State<CampaignsPage> {
                             if (totalCreditsUsed > 0 && calls.isNotEmpty) _detailChip('Avg / call', '${avgCreditsPerCall.toStringAsFixed(1)} cr'),
                             if (throughputPerMinute != null && throughputPerMinute > 0)
                               _detailChip('Throughput', '${throughputPerMinute.toStringAsFixed(1)} calls/min'),
+                            // Snapshot / audience readiness badge
+                            Builder(
+                              builder: (context) {
+                                final snapshotStatusRaw = (c['snapshot_status'] ?? 'none').toString();
+                                final snapshotStatus = snapshotStatusRaw.toString().toLowerCase();
+                                final snapshotSize = (c['snapshot_audience_size'] as int?) ?? 0;
+                                String label;
+                                String value;
+                                if (snapshotStatus == 'complete') {
+                                  label = 'Snapshot';
+                                  value = 'Ready • $snapshotSize contacts';
+                                } else if (snapshotStatus == 'invalid') {
+                                  label = 'Snapshot';
+                                  value = 'Needs fix • $snapshotSize contacts';
+                                } else if (snapshotStatus == 'in_progress') {
+                                  label = 'Snapshot';
+                                  value = 'Preparing…';
+                                } else {
+                                  label = 'Snapshot';
+                                  value = 'Not prepared';
+                                }
+                                return _detailChip(label, value);
+                              },
+                            ),
                           ],
                         ),
                         const SizedBox(height: NeyvoSpacing.md),
@@ -2618,12 +2687,14 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   Widget _stepReview() {
-    final count = (_isEducationOrg && _audienceMode == 'filters')
+    final useFilters = _isEducationOrg && _audienceMode == 'filters';
+    final isManual = !useFilters && _manualAudienceSelection;
+    final count = useFilters
         ? (_previewAudienceCount ?? 0)
-        : (_selectedStudentIds.isEmpty ? _filteredStudents.length : _selectedStudentIds.length);
+        : (isManual ? _selectedStudentIds.length : _filteredStudents.length);
     // Build list of {name, phone} for audience display
     List<Map<String, String>> reviewContacts = [];
-    if (_isEducationOrg && _audienceMode == 'filters') {
+    if (useFilters) {
       for (final s in _previewAudienceSample) {
         reviewContacts.add({
           'name': (s['name'] ?? '—').toString(),
@@ -2634,7 +2705,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         reviewContacts.add({'name': '… and ${(_previewAudienceCount! - _previewAudienceSample.length)} more', 'phone': ''});
       }
     } else {
-      final students = _manualAudienceSelection
+      final students = isManual
           ? _filteredStudents.where((s) => _selectedStudentIds.contains((s['id'] ?? '').toString())).toList()
           : _filteredStudents;
       for (final s in students) {
