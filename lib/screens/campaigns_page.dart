@@ -1514,28 +1514,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 TextButton.icon(
                   icon: const Icon(Icons.play_arrow, size: 20),
                   label: const Text('Start campaign'),
-                  onPressed: () async {
-                    if (!_ensureHasPhoneNumber()) return;
-                    if (!_hasCreditsToRun && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing to run campaigns.'),
-                        backgroundColor: NeyvoTheme.warning,
-                        duration: const Duration(seconds: 5),
-                      ));
-                      return;
-                    }
-                    try {
-                      final res = await NeyvoPulseApi.startCampaign(campaignId, phoneNumberId: _selectedStartPhoneNumberId);
-                      if (mounted) {
-                        _showCampaignStartResult(res, isRerun: false);
-                        setState(() => _campaignDetailRefreshKey++);
-                      }
-                    } on ApiException catch (e) {
-                      if (mounted) _showInsufficientCreditsSnackBar(e);
-                    } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                    }
-                  },
+                  onPressed: () => _startOrRerunCampaign(c),
                 ),
               if (canStart && audienceIds.isNotEmpty)
                 TextButton.icon(
@@ -1547,28 +1526,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 TextButton.icon(
                   icon: const Icon(Icons.replay, size: 20),
                   label: const Text('Rerun campaign'),
-                  onPressed: () async {
-                    if (!_ensureHasPhoneNumber()) return;
-                    if (!_hasCreditsToRun && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('No credits. Available: ${_walletCredits ?? 0}. Required per call: ~${_creditsPerMinute ?? 25} credits. Add credits in Billing.'),
-                        backgroundColor: NeyvoTheme.warning,
-                        duration: const Duration(seconds: 5),
-                      ));
-                      return;
-                    }
-                    try {
-                      final res = await NeyvoPulseApi.startCampaign(campaignId, phoneNumberId: _selectedStartPhoneNumberId);
-                      if (mounted) {
-                        _showCampaignStartResult(res, isRerun: true);
-                        setState(() => _campaignDetailRefreshKey++);
-                      }
-                    } on ApiException catch (e) {
-                      if (mounted) _showInsufficientCreditsSnackBar(e);
-                    } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                    }
-                  },
+                  onPressed: () => _startOrRerunCampaign(c),
                 ),
             ],
           ),
