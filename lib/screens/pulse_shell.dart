@@ -25,6 +25,7 @@ import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_scope.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
@@ -438,8 +439,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Row(
-        children: [
-          // Sidebar — 220px, NeyvoColors per spec
+              children: [
+              // Sidebar — 220px, NeyvoColors per spec
           Container(
             width: 220,
             decoration: const BoxDecoration(
@@ -448,7 +449,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — UB horizontal logo (KO on purple)
+                // Logo area — tenant horizontal logo (KO on purple, UB fallback)
                 Container(
                   height: 64,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -457,14 +458,28 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: SvgPicture.asset(
-                      'assets/ub_logo/ub_logo_horizontal_white.svg',
-                      fit: BoxFit.contain,
-                      height: 46,
-                      colorFilter: const ColorFilter.mode(
-                        NeyvoColors.white,
-                        BlendMode.srcIn,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final scope = TenantScope.of(context);
+                        final tenant = scope?.config;
+                        final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
+                        if (logoUrl != null) {
+                          return SvgPicture.network(
+                            logoUrl,
+                            fit: BoxFit.contain,
+                            height: 46,
+                          );
+                        }
+                        return SvgPicture.asset(
+                          'assets/ub_logo/ub_logo_horizontal_white.svg',
+                          fit: BoxFit.contain,
+                          height: 46,
+                          colorFilter: const ColorFilter.mode(
+                            NeyvoColors.white,
+                            BlendMode.srcIn,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),

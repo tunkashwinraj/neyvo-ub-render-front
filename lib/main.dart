@@ -7,24 +7,50 @@
   import 'package:shared_preferences/shared_preferences.dart';
   import 'package:timezone/data/latest.dart' as tz;
 
-  import 'api/spearia_api.dart';
-  import 'services/user_timezone_service.dart';
-  import 'firebase_options.dart';
-  import 'neyvo_pulse_api.dart';
-  import 'pulse_route_names.dart';
-  import 'pulse_routes.dart';
-  import 'screens/pulse_auth_page.dart';
-  import 'ui/screens/ub/ub_onboarding_page.dart';
-  import 'screens/pulse_shell.dart';
-  import 'theme/neyvo_theme.dart';
-  import 'widgets/inactivity_detector.dart';
-  import 'widgets/neyvo_loading_screen.dart';
+import 'api/spearia_api.dart';
+import 'services/user_timezone_service.dart';
+import 'firebase_options.dart';
+import 'neyvo_pulse_api.dart';
+import 'pulse_route_names.dart';
+import 'pulse_routes.dart';
+import 'screens/pulse_auth_page.dart';
+import 'ui/screens/ub/ub_onboarding_page.dart';
+import 'screens/pulse_shell.dart';
+import 'tenant/tenant_api.dart';
+import 'tenant/tenant_config.dart';
+import 'tenant/tenant_scope.dart';
+import 'theme/neyvo_theme.dart';
+import 'widgets/inactivity_detector.dart';
+import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
   const String _kDefaultBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL',
     defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
   );
+
+String _resolveTenantId() {
+  if (!kIsWeb) {
+    // For mobile/desktop builds we can keep using the default tenant for now.
+    return '';
+  }
+  final host = Uri.base.host.toLowerCase();
+  if (host.startsWith('goodwin.')) return 'goodwin';
+  if (host.startsWith('ub.')) return 'ub';
+  return '';
+}
+
+String _resolveBaseUrlForTenant(String tenantId) {
+  // When using custom API subdomains, point to them; otherwise use the
+  // configured default Render URL.
+  if (tenantId == 'ub') {
+    return 'https://api.ub.neyvo.ai';
+  }
+  if (tenantId == 'goodwin') {
+    return 'https://api.goodwin.neyvo.ai';
+  }
+  return _kDefaultBaseUrl;
+}
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
 /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
 /// 2) Runtime: when backend is ub-neyvo-back-znhe.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
@@ -53,49 +79,78 @@ String get _kFallbackAccountId {
   SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
   if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
+  // Resolve tenant + backend base URL.
+  final tenantId = _resolveTenantId();
+  final baseUrl = _resolveBaseUrlForTenant(tenantId.isNotEmpty ? tenantId : '');
+
   // Configure backend base URL once. In dev you can override via:
   // flutter run -d chrome --web-port 9095 --dart-define=SPEARIA_BASE_URL=http://127.0.0.1:8000
-  SpeariaApi.setBaseUrl(_kDefaultBaseUrl);
+  SpeariaApi.setBaseUrl(baseUrl);
+  if (tenantId.isNotEmpty) {
+    SpeariaApi.setTenantId(tenantId);
+  }
     SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
 
     tz.initializeTimeZones();
 
-    runApp(const NeyvoPulseApp());
+    final tenantConfig = await TenantApi.fetchConfig();
+
+    runApp(NeyvoPulseRoot(tenantConfig: tenantConfig));
   }
 
-  class NeyvoPulseApp extends StatelessWidget {
-    const NeyvoPulseApp({super.key});
+  class NeyvoPulseRoot extends StatelessWidget {
+    final TenantConfig tenantConfig;
+
+    const NeyvoPulseRoot({super.key, required this.tenantConfig});
 
     @override
     Widget build(BuildContext context) {
-      return MaterialApp(
-        title: 'Neyvo',
-        debugShowCheckedModeBanner: false,
-        theme: NeyvoThemeData.light(),
-        home: StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const NeyvoLoadingScreen();
-            }
-            if (snapshot.hasData && snapshot.data != null) {
-              return const InactivityDetector(
-                timeout: Duration(minutes: 15),
-                child: _PostAuthGate(),
-              );
-            }
-            return const PulseAuthPage();
-          },
-        ),
-      onGenerateRoute: (settings) {
-        if (settings.name == PulseRouteNames.settings && settings.arguments is Map) {
-          // Forward tab hint down to Settings page via PulseShell initialRouteName; SettingsPage reads arguments.
-        }
-        return PulseRouter.generateRoute(settings);
-      },
+      return TenantScope(
+        config: tenantConfig,
+        child: const NeyvoPulseApp(),
       );
     }
   }
+
+  class NeyvoPulseApp extends StatelessWidget {
+  const NeyvoPulseApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = TenantScope.of(context);
+    final tenant = scope?.config;
+    return MaterialApp(
+      title: 'Neyvo',
+      debugShowCheckedModeBanner: false,
+      theme: NeyvoThemeData.light(
+        primaryColor: tenant?.primaryColor,
+        secondaryColor: tenant?.secondaryColor ?? tenant?.accentColor,
+        accentColor: tenant?.accentColor,
+      ),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const NeyvoLoadingScreen();
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            return const InactivityDetector(
+              timeout: Duration(minutes: 15),
+              child: _PostAuthGate(),
+            );
+          }
+          return const PulseAuthPage();
+        },
+      ),
+    onGenerateRoute: (settings) {
+      if (settings.name == PulseRouteNames.settings && settings.arguments is Map) {
+        // Forward tab hint down to Settings page via PulseShell initialRouteName; SettingsPage reads arguments.
+      }
+      return PulseRouter.generateRoute(settings);
+    },
+    );
+  }
+}
 
   /// After login: load account; if UB intro not completed show UbOnboardingPage else PulseShell.
   class _PostAuthGate extends StatefulWidget {
@@ -189,7 +244,8 @@ String get _kFallbackAccountId {
       if (!_loaded) {
         return const NeyvoLoadingScreen();
       }
-      if (!_onboardingCompleted) {
+      final tenant = TenantScope.of(context)?.config;
+      if (!_onboardingCompleted && (tenant?.tenantId == 'ub' || tenant == null)) {
         return const UbOnboardingPage();
       }
       // On web refresh: use URL path so /pulse/operators (etc.) opens the correct tab instead of a blank/wrong view.

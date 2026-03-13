@@ -280,10 +280,17 @@ class NeyvoType {
 
 class NeyvoThemeData {
   /// Light theme — University of Bridgeport (purple primary, light blue secondary).
-  static ThemeData light() {
+  static ThemeData light({
+    Color? primaryColor,
+    Color? secondaryColor,
+    Color? accentColor,
+  }) {
+    final primary = primaryColor ?? NeyvoColors.ubPurple;
+    final secondary = secondaryColor ?? NeyvoColors.ubLightBlue;
+    final accent = accentColor ?? NeyvoColors.ubLightBlue;
     final colorScheme = ColorScheme.light(
-      primary: NeyvoColors.ubPurple,
-      secondary: NeyvoColors.ubLightBlue,
+      primary: primary,
+      secondary: secondary,
       surface: NeyvoColors.surfaceLight,
       background: NeyvoColors.bgLight,
       error: NeyvoColors.error,
@@ -333,7 +340,7 @@ class NeyvoThemeData {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: NeyvoColors.ubPurple,
+          backgroundColor: primary,
           foregroundColor: NeyvoColors.white,
           minimumSize: const Size(0, 40),
           padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.xl, vertical: NeyvoSpacing.md),
@@ -342,7 +349,7 @@ class NeyvoThemeData {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: NeyvoColors.ubPurple,
+          foregroundColor: primary,
           side: const BorderSide(color: NeyvoColors.borderLight),
           minimumSize: const Size(0, 40),
           padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: NeyvoSpacing.md),
@@ -351,7 +358,7 @@ class NeyvoThemeData {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: NeyvoColors.ubPurple,
+          foregroundColor: primary,
           minimumSize: const Size(0, NeyvoSpacing.touchTarget),
         ),
       ),

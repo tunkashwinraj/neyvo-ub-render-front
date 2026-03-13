@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
+import '../tenant/tenant_scope.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
 class PulseAuthPage extends StatefulWidget {
@@ -194,6 +195,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tenant = TenantScope.of(context)?.config;
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
@@ -218,16 +220,23 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    SvgPicture.asset(
-                      'assets/ub_logo/ub_logo_horizontal_purple.svg',
-                      fit: BoxFit.contain,
-                      height: 58,
-                      // Force UB purple so the logo is not black
-                      colorFilter: const ColorFilter.mode(
-                        NeyvoColors.ubPurple,
-                        BlendMode.srcIn,
+                    if (tenant?.logoHorizontalColorUrl != null)
+                      SvgPicture.network(
+                        tenant!.logoHorizontalColorUrl!,
+                        fit: BoxFit.contain,
+                        height: 58,
+                      )
+                    else
+                      SvgPicture.asset(
+                        'assets/ub_logo/ub_logo_horizontal_purple.svg',
+                        fit: BoxFit.contain,
+                        height: 58,
+                        // Force UB purple so the logo is not black
+                        colorFilter: const ColorFilter.mode(
+                          NeyvoColors.ubPurple,
+                          BlendMode.srcIn,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: NeyvoSpacing.xl),
                     Text(
                       'Neyvo',
