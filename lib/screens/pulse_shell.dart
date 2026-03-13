@@ -481,12 +481,25 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                       builder: (context) {
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
-                        final isGoodwin = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
+                        final tenantId = (tenant?.tenantId ?? '').toLowerCase();
+                        final isGoodwin = tenantId == 'goodwin';
+                        final isUb = tenantId == 'ub' || tenant == null;
                         if (isGoodwin) {
                           return Image.asset(
                             'assets/goodwin_logo/goodwin_horiz_white.png',
                             fit: BoxFit.contain,
                             height: 46,
+                          );
+                        }
+                        if (isUb) {
+                          return SvgPicture.asset(
+                            'assets/ub_logo/ub_logo_horizontal_white.svg',
+                            fit: BoxFit.contain,
+                            height: 46,
+                            colorFilter: const ColorFilter.mode(
+                              NeyvoColors.white,
+                              BlendMode.srcIn,
+                            ),
                           );
                         }
                         final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;

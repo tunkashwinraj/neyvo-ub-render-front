@@ -198,7 +198,9 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   Widget build(BuildContext context) {
     final tenant = TenantScope.of(context)?.config;
     final primary = TenantBrand.primary(context);
-    final isGoodwin = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
+    final tenantId = (tenant?.tenantId ?? '').toLowerCase();
+    final isGoodwin = tenantId == 'goodwin';
+    final isUb = tenantId == 'ub' || tenant == null;
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
@@ -228,6 +230,16 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                         'assets/goodwin_logo/goodwin_horiz_rgb.png',
                         fit: BoxFit.contain,
                         height: 58,
+                      )
+                    else if (isUb)
+                      SvgPicture.asset(
+                        'assets/ub_logo/ub_logo_horizontal_purple.svg',
+                        fit: BoxFit.contain,
+                        height: 58,
+                        colorFilter: const ColorFilter.mode(
+                          NeyvoColors.ubPurple,
+                          BlendMode.srcIn,
+                        ),
                       )
                     else if (tenant?.logoHorizontalColorUrl != null &&
                         tenant!.logoHorizontalColorUrl!.isNotEmpty)
