@@ -1234,23 +1234,47 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: DropdownButtonFormField<String>(
-                isDense: true,
-                decoration: const InputDecoration(
-                  hintText: 'Status',
-                ),
-                value: _campaignStatusFilter,
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('All statuses')),
-                  DropdownMenuItem(value: 'running', child: Text('Running')),
-                  DropdownMenuItem(value: 'complete', child: Text('Complete')),
-                  DropdownMenuItem(value: 'scheduled', child: Text('Scheduled')),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: _campaignStatusFilter == null || _campaignStatusFilter!.isEmpty,
+                    onSelected: (_) {
+                      setState(() {
+                        _campaignStatusFilter = null;
+                      });
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Running'),
+                    selected: _campaignStatusFilter == 'running',
+                    onSelected: (_) {
+                      setState(() {
+                        _campaignStatusFilter = 'running';
+                      });
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Complete'),
+                    selected: _campaignStatusFilter == 'complete',
+                    onSelected: (_) {
+                      setState(() {
+                        _campaignStatusFilter = 'complete';
+                      });
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Scheduled'),
+                    selected: _campaignStatusFilter == 'scheduled',
+                    onSelected: (_) {
+                      setState(() {
+                        _campaignStatusFilter = 'scheduled';
+                      });
+                    },
+                  ),
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    _campaignStatusFilter = value;
-                  });
-                },
               ),
             ),
           ],
@@ -1299,10 +1323,23 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       ),
                       Expanded(
                         flex: 2,
-                        child: Text(
-                          semester,
-                          style: NeyvoTextStyles.micro,
-                          textAlign: TextAlign.right,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _semesterColor(semester).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: _semesterColor(semester).withOpacity(0.6)),
+                            ),
+                            child: Text(
+                              semester,
+                              style: NeyvoTextStyles.micro.copyWith(
+                                color: _semesterColor(semester),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -1485,38 +1522,17 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
               child: DropdownButtonFormField<String>(
                 isDense: true,
                 decoration: const InputDecoration(
-                  hintText: 'Result',
-                ),
-                value: _callsResultFilter,
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('All results')),
-                  DropdownMenuItem(value: 'goal_achieved', child: Text('Goal Achieved')),
-                  DropdownMenuItem(value: 'answered', child: Text('Answered')),
-                  DropdownMenuItem(value: 'voicemail', child: Text('Voicemail')),
-                  DropdownMenuItem(value: 'rescheduled', child: Text('Rescheduled')),
-                  DropdownMenuItem(value: 'no_answer', child: Text('No Answer')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _callsResultFilter = value;
-                  });
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: DropdownButtonFormField<String>(
-                isDense: true,
-                decoration: const InputDecoration(
                   hintText: 'Department',
                 ),
                 value: _callsDepartmentFilter,
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('All departments')),
-                  ..._distinctCallDepartments().map(
-                    (d) => DropdownMenuItem(value: d, child: Text(d)),
-                  ),
+                  const DropdownMenuItem(value: null, child: Text('All Depts')),
+                  const DropdownMenuItem(value: 'admissions', child: Text('Admissions')),
+                  const DropdownMenuItem(value: 'fin_services', child: Text('Fin. Services')),
+                  const DropdownMenuItem(value: 'registrar', child: Text('Registrar')),
+                  const DropdownMenuItem(value: 'housing', child: Text('Housing')),
+                  const DropdownMenuItem(value: 'it_help_desk', child: Text('IT Help Desk')),
+                  const DropdownMenuItem(value: 'front_desk', child: Text('Front Desk')),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -1524,6 +1540,58 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   });
                 },
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('All'),
+              selected: _callsResultFilter == null || _callsResultFilter!.isEmpty,
+              onSelected: (_) {
+                setState(() {
+                  _callsResultFilter = null;
+                });
+              },
+            ),
+            ChoiceChip(
+              label: const Text('Answered'),
+              selected: _callsResultFilter == 'answered',
+              onSelected: (_) {
+                setState(() {
+                  _callsResultFilter = 'answered';
+                });
+              },
+            ),
+            ChoiceChip(
+              label: const Text('Voicemail'),
+              selected: _callsResultFilter == 'voicemail',
+              onSelected: (_) {
+                setState(() {
+                  _callsResultFilter = 'voicemail';
+                });
+              },
+            ),
+            ChoiceChip(
+              label: const Text('No Answer'),
+              selected: _callsResultFilter == 'no_answer',
+              onSelected: (_) {
+                setState(() {
+                  _callsResultFilter = 'no_answer';
+                });
+              },
+            ),
+            ChoiceChip(
+              label: const Text('Goal Achieved'),
+              selected: _callsResultFilter == 'goal_achieved',
+              onSelected: (_) {
+                setState(() {
+                  _callsResultFilter = 'goal_achieved';
+                });
+              },
             ),
           ],
         ),
@@ -1726,10 +1794,30 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         return false;
       }
 
-      if (deptFilter != null &&
-          deptFilter.isNotEmpty &&
-          department != deptFilter.toLowerCase()) {
-        return false;
+      if (deptFilter != null && deptFilter.isNotEmpty) {
+        final d = department;
+        bool matchesDept = true;
+        switch (deptFilter) {
+          case 'admissions':
+            matchesDept = d.contains('admissions');
+            break;
+          case 'fin_services':
+            matchesDept = d.contains('financial') || d.contains('fin.');
+            break;
+          case 'registrar':
+            matchesDept = d.contains('registrar');
+            break;
+          case 'housing':
+            matchesDept = d.contains('housing') || d.contains('residential');
+            break;
+          case 'it_help_desk':
+            matchesDept = d.contains('it help') || d.contains('help desk');
+            break;
+          case 'front_desk':
+            matchesDept = d.contains('front desk') || d.contains('frontdesk');
+            break;
+        }
+        if (!matchesDept) return false;
       }
 
       if (resultFilter != null && resultFilter.isNotEmpty) {
@@ -1874,6 +1962,20 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       term = 'Fall';
     }
     return '$term $year';
+  }
+
+  Color _semesterColor(String semester) {
+    final lower = semester.toLowerCase();
+    if (lower.startsWith('spring')) {
+      return NeyvoColors.success;
+    }
+    if (lower.startsWith('summer')) {
+      return NeyvoColors.info;
+    }
+    if (lower.startsWith('fall')) {
+      return NeyvoColors.warning;
+    }
+    return NeyvoColors.borderSubtle;
   }
 
   _CampaignStatusInfo _campaignStatusInfo(Map<String, dynamic> c) {
