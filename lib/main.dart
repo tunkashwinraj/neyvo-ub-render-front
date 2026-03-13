@@ -232,6 +232,52 @@ String get _kFallbackAccountId {
             _onboardingCompleted = completed;
           });
         }
+      } on ApiException catch (e) {
+        // Handle tenant mismatch (user logging into the wrong school domain).
+        final payload = e.payload;
+        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
+        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
+        if (isTenantMismatch) {
+          if (!mounted) return;
+          final tenant = TenantScope.of(context)?.config;
+          final tenantId = tenant?.tenantId ?? 'ub';
+          final otherDomain = tenantId == 'goodwin' ? 'ub.neyvo.ai' : 'goodwin.neyvo.ai';
+          final schoolName = tenantId == 'goodwin'
+              ? 'University of Bridgeport'
+              : 'Goodwin University';
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Use the correct portal'),
+              content: Text(
+                'This account belongs to $schoolName.\n\n'
+                'Please sign in at $otherDomain instead.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          await FirebaseAuth.instance.signOut();
+          NeyvoPulseApi.setDefaultAccountId(null);
+          if (mounted) {
+            setState(() {
+              _loaded = true;
+              _onboardingCompleted = true;
+            });
+          }
+          return;
+        }
+        // For all other API errors, fall back to the legacy behavior.
+        final tenant = TenantScope.of(context)?.config;
+        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
+        if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
+        }
+        if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
       } catch (_) {
         final tenant = TenantScope.of(context)?.config;
         final isUbTenant = tenant == null || tenant.tenantId == 'ub';
