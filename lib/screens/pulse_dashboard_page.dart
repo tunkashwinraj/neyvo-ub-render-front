@@ -102,7 +102,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   @override
   void initState() {
     super.initState();
-    _applyPresetWithoutReload('this_week');
+    _applyPresetWithoutReload('today');
     _load();
     _loadLiveCallStats();
   }
@@ -625,10 +625,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildHeroSection(context, orbState, callOk, contentWidth),
-                        if (showCreateFirstOperator) ...[
-                          const SizedBox(height: 24),
-                          _buildCreateFirstOperatorSection(context),
-                        ],
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
                         const SizedBox(height: 24),
@@ -639,78 +635,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   ),
                 );
               },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCreateFirstOperatorSection(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
-            const SizedBox(height: 20),
-            Text(
-              'Create your first Operator',
-              style: NeyvoTextStyles.title.copyWith(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: NeyvoColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose a department to create a voice operator. You can add more later.',
-              style: NeyvoTextStyles.body,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            NeyvoGlassPanel(
-              glowing: true,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < _recommendedOperators.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 10),
-                    FilledButton(
-                      onPressed: () async {
-                        final deptId = _departmentIdForLabel(_recommendedOperators[i]);
-                        if (deptId != null) {
-                          final created = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
-                          );
-                          if (created == true && mounted) {
-                            PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                          }
-                        } else {
-                          PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                        }
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
-                        foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(
-                        i == 0 ? 'Create ${_recommendedOperators[i]}' : _recommendedOperators[i],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
-                    child: const Text('Choose another department'),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -742,50 +666,56 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     final ubModelStatus = _ubStatus;
     final envLabel = 'Prod';
 
-    final filterBar = Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: _GlobalDateFilterBar(
-        preset: _datePreset,
-        rangeLabel: _rangeLabel(),
-        onPresetChanged: (preset) {
-          setState(() {
-            _applyPresetWithoutReload(preset);
-          });
-          _loadUbHeroSection();
-        },
-        onCustomTap: () async {
-          await _pickCustomRange();
-        },
-      ),
-    );
-
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  titleText,
-                  style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        titleText,
+                        style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                      ),
+                    ),
+                    if (_ubHeroLoading) ...[
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: NeyvoColors.teal,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (_ubHeroLoading) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: NeyvoColors.teal,
-                  ),
+              const SizedBox(width: 16),
+              Flexible(
+                child: _HeroDateFilterControls(
+                  preset: _datePreset,
+                  rangeLabel: _rangeLabel(),
+                  onPresetChanged: (preset) {
+                    setState(() {
+                      _applyPresetWithoutReload(preset);
+                    });
+                    _loadUbHeroSection();
+                  },
+                  onCustomTap: () async {
+                    await _pickCustomRange();
+                  },
                 ),
-              ],
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -912,7 +842,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          filterBar,
           heroCard,
           const SizedBox(height: 16),
           liveProgressCard,
@@ -924,7 +853,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        filterBar,
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2208,8 +2136,8 @@ class _TimeRangeSelector extends StatelessWidget {
   }
 }
 
-class _GlobalDateFilterBar extends StatelessWidget {
-  const _GlobalDateFilterBar({
+class _HeroDateFilterControls extends StatelessWidget {
+  const _HeroDateFilterControls({
     required this.preset,
     required this.rangeLabel,
     required this.onPresetChanged,
@@ -2224,47 +2152,75 @@ class _GlobalDateFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = rangeLabel;
-    return _SimpleCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _presetChip('Today', 'today'),
-                _presetChip('Yesterday', 'yesterday'),
-                _presetChip('This week', 'this_week'),
-                _presetChip('This month', 'this_month'),
-                _presetChip('This year', 'this_year'),
-                _presetChip('Custom', 'custom', onTap: onCustomTap),
-              ],
+    const options = <String>['today', 'yesterday', 'this_week', 'this_month', 'this_year', 'custom'];
+
+    String _labelForPreset(String value) {
+      switch (value) {
+        case 'today':
+          return 'Today';
+        case 'yesterday':
+          return 'Yesterday';
+        case 'this_week':
+          return 'This week';
+        case 'this_month':
+          return 'This month';
+        case 'this_year':
+          return 'This year';
+        case 'custom':
+          return 'Custom';
+        default:
+          return 'Today';
+      }
+    }
+
+    void _handleSelection(String value) {
+      if (value == 'custom') {
+        onCustomTap();
+      } else {
+        onPresetChanged(value);
+      }
+    }
+
+    final currentValue = options.contains(preset) ? preset : 'today';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            height: 36,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: currentValue,
+                isDense: true,
+                onChanged: (value) {
+                  if (value == null) return;
+                  _handleSelection(value);
+                },
+                items: options
+                    .map(
+                      (v) => DropdownMenuItem<String>(
+                        value: v,
+                        child: Text(
+                          _labelForPreset(v),
+                          style: NeyvoTextStyles.body.copyWith(fontSize: 13),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          if (label != null)
-            Text(
-              label,
-              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-            ),
+        ),
+        if (label != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _presetChip(String text, String value, {VoidCallback? onTap}) {
-    final bool selected = preset == value;
-    return ChoiceChip(
-      label: Text(text),
-      selected: selected,
-      onSelected: (_) {
-        if (value == 'custom') {
-          onCustomTap();
-        } else {
-          onPresetChanged(value);
-        }
-      },
+      ],
     );
   }
 }
@@ -2354,19 +2310,19 @@ class _LiveCallProgressCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (!hasCalls)
+          if (!hasCalls) ...[
             Text(
               'No calls in this range yet. As calls start, live progress will appear here.',
               style: NeyvoTextStyles.body,
-            )
-          else ...[
-            _statusBarRow('Running', runningCalls, totalCalls, NeyvoColors.info),
-            _statusBarRow('Completed', completedCalls, totalCalls, NeyvoColors.success),
-            _statusBarRow('Incomplete', incompleteCalls, totalCalls, NeyvoColors.warning),
-            _statusBarRow('Failed', failedCalls, totalCalls, NeyvoColors.error),
-            _statusBarRow('Voicemail', voicemailCalls, totalCalls, NeyvoColors.warning),
-            _statusBarRow('Rescheduled', rescheduledCalls, totalCalls, NeyvoColors.info),
+            ),
+            const SizedBox(height: 12),
           ],
+          _statusBarRow('Running', runningCalls, totalCalls, NeyvoColors.info),
+          _statusBarRow('Completed', completedCalls, totalCalls, NeyvoColors.success),
+          _statusBarRow('Incomplete', incompleteCalls, totalCalls, NeyvoColors.warning),
+          _statusBarRow('Failed', failedCalls, totalCalls, NeyvoColors.error),
+          _statusBarRow('Voicemail', voicemailCalls, totalCalls, NeyvoColors.warning),
+          _statusBarRow('Rescheduled', rescheduledCalls, totalCalls, NeyvoColors.info),
         ],
       ),
     );
