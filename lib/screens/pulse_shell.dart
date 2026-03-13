@@ -438,7 +438,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
     final tenant = TenantScope.of(context)?.config;
-    final isGoodwin = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
+    final isGoodwin = tenant?.tenantId == 'goodwin';
     final Color sidebarBgColor = isGoodwin && tenant?.primaryColor != null
         ? tenant!.primaryColor!
         : NeyvoColors.sidebarBg;
@@ -446,10 +446,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         ? tenant!.secondaryColor!
         : NeyvoColors.ubLightBlue;
     final Color sidebarSelectedColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.9)
+        ? sidebarBgColor.withOpacity(0.85)
         : NeyvoColors.sidebarSelected;
     final Color sidebarHoverColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.6)
+        ? sidebarBgColor.withOpacity(0.5)
         : NeyvoColors.sidebarHover;
 
     final brandPrimary = TenantBrand.primary(context);
