@@ -2636,7 +2636,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           final code = NeyvoPulseApi.campaignErrorCodeFrom(e);
                           campaignPrepareFailed(_wizard.campaignId ?? '', errorCode: code);
                           final info = campaignErrorInfo(code);
-                          final info = campaignErrorInfo(code);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text([info.message, info.suggestedAction].whereType<String>().where((e) => e.isNotEmpty).join(' ')),
@@ -2694,7 +2693,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Summary', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      Text('Summary', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                       const SizedBox(height: 4),
                       ...computed.entries.map((e) => Padding(
                         padding: const EdgeInsets.only(bottom: 2),
@@ -2736,7 +2735,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Configuration', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      Text('Configuration', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                       const SizedBox(height: 4),
                       _metaRow('Name', _wizard.name),
                       _metaRow('Audience mode', _wizard.audienceMode ?? '—'),
@@ -2753,7 +2752,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Audience snapshot', style: NeyvoType.labelMedium.copyWith(color: NeyvoTheme.textSecondary)),
+                      Text('Audience snapshot', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textSecondary)),
                       const SizedBox(height: 4),
                       Text('${_wizard.snapshotAudienceSize} contacts', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
                       Text('Status: ${_wizard.snapshotStatus}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
