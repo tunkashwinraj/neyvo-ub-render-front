@@ -41,14 +41,10 @@ String _resolveTenantId() {
 }
 
 String _resolveBaseUrlForTenant(String tenantId) {
-  // When using custom API subdomains, point to them; otherwise use the
-  // configured default Render URL.
-  if (tenantId == 'ub') {
-    return 'https://api.ub.neyvo.ai';
-  }
-  if (tenantId == 'goodwin') {
-    return 'https://api.goodwin.neyvo.ai';
-  }
+  // For now, always use the existing Render backend URL. When custom
+  // API subdomains (api.ub.neyvo.ai, api.goodwin.neyvo.ai) are fully
+  // configured and have DNS + TLS, this helper can be updated to
+  // route per-tenant to those hosts instead.
   return _kDefaultBaseUrl;
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
