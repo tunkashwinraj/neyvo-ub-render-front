@@ -534,7 +534,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
         ? <String>[]
         : (_manualAudienceSelection
             ? _selectedStudentIds.toList()
-            : _filteredStudents.map((s) => s['id'] as String? ?? '').where((e) => e.isNotEmpty).toList());
+            : _filteredStudents
+                .map((s) => s['id'] as String? ?? '')
+                .where((e) => e.isNotEmpty)
+                .toList());
     if (!useFilters && _manualAudienceSelection && ids.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No contacts selected')));
       return;
@@ -557,21 +560,45 @@ class _CampaignsPageState extends State<CampaignsPage> {
       }
     }
     try {
-      await NeyvoPulseApi.createCampaign(
+      final created = await NeyvoPulseApi.createCampaign(
         name: name,
         agentId: agentId,
         profileId: profileId,
-        studentIds: useFilters ? null : ids,
         templateId: null,
-        audienceType: useFilters ? 'filters' : 'contact_list',
-        filters: useFilters ? {
-          'has_balance': _smartHasBalance,
-          'is_overdue': _smartOverdueOnly,
-          if (_smartBalanceMinController.text.trim().isNotEmpty) 'balance_min': double.tryParse(_smartBalanceMinController.text.replaceAll(RegExp(r'[^0-9.]'), '')),
-          if (_smartDueBefore != null && _smartDueBefore!.isNotEmpty) 'due_before': _smartDueBefore,
-        } : null,
+        // Audience is now configured via updateCampaignAudience after basics are created.
+        studentIds: null,
+        audienceType: null,
+        filters: null,
         scheduledAt: _scheduleNow ? null : _scheduledAt,
       );
+      // Configure campaign audience (manual selection or filters) using the new audience API.
+      final campaign =
+          (created['campaign'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      final campaignId = (campaign['id'] ?? '').toString().trim();
+      if (campaignId.isNotEmpty) {
+        if (useFilters) {
+          await NeyvoPulseApi.updateCampaignAudience(
+            campaignId,
+            audienceMode: 'FILTERS',
+            audienceFilters: {
+              'has_balance': _smartHasBalance,
+              'is_overdue': _smartOverdueOnly,
+              if (_smartBalanceMinController.text.trim().isNotEmpty)
+                'balance_min': double.tryParse(
+                  _smartBalanceMinController.text.replaceAll(RegExp(r'[^0-9.]'), ''),
+                ),
+              if (_smartDueBefore != null && _smartDueBefore!.isNotEmpty)
+                'due_before': _smartDueBefore,
+            },
+          );
+        } else {
+          await NeyvoPulseApi.updateCampaignAudience(
+            campaignId,
+            audienceMode: 'MANUAL',
+            studentIds: ids,
+          );
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Campaign "$name" created for ${ids.length} contacts'), backgroundColor: NeyvoTheme.success),
