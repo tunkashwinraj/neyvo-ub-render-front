@@ -436,6 +436,21 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     // #endregion
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
+    final tenant = TenantScope.of(context)?.config;
+    final isGoodwin = tenant?.tenantId == 'goodwin';
+    final Color sidebarBgColor = isGoodwin && tenant?.primaryColor != null
+        ? tenant!.primaryColor!
+        : NeyvoColors.sidebarBg;
+    final Color sidebarAccentColor = isGoodwin && tenant?.secondaryColor != null
+        ? tenant!.secondaryColor!
+        : NeyvoColors.ubLightBlue;
+    final Color sidebarSelectedColor = isGoodwin
+        ? sidebarBgColor.withOpacity(0.85)
+        : NeyvoColors.sidebarSelected;
+    final Color sidebarHoverColor = isGoodwin
+        ? sidebarBgColor.withOpacity(0.5)
+        : NeyvoColors.sidebarHover;
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Row(
@@ -443,18 +458,18 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
               // Sidebar — 220px, NeyvoColors per spec
           Container(
             width: 220,
-            decoration: const BoxDecoration(
-              color: NeyvoColors.sidebarBg,
-              border: Border(right: BorderSide(color: NeyvoColors.borderSubtle, width: 1)),
+            decoration: BoxDecoration(
+              color: sidebarBgColor,
+              border: const Border(right: BorderSide(color: NeyvoColors.borderSubtle, width: 1)),
             ),
             child: Column(
               children: [
-                // Logo area — tenant horizontal logo (KO on purple, UB fallback)
+                // Logo area — tenant horizontal logo (white preferred), UB fallback
                 Container(
                   height: 64,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: const BoxDecoration(
-                    color: NeyvoColors.sidebarBg,
+                  decoration: BoxDecoration(
+                    color: sidebarBgColor,
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
@@ -463,12 +478,21 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
                         final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
-                        if (logoUrl != null) {
-                          return SvgPicture.network(
-                            logoUrl,
-                            fit: BoxFit.contain,
-                            height: 46,
-                          );
+                        if (logoUrl != null && logoUrl.isNotEmpty) {
+                          final lower = logoUrl.toLowerCase();
+                          if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+                            return Image.network(
+                              logoUrl,
+                              fit: BoxFit.contain,
+                              height: 46,
+                            );
+                          } else {
+                            return SvgPicture.network(
+                              logoUrl,
+                              fit: BoxFit.contain,
+                              height: 46,
+                            );
+                          }
                         }
                         return SvgPicture.asset(
                           'assets/ub_logo/ub_logo_horizontal_white.svg',
@@ -495,6 +519,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         icon: item.icon,
                         label: item.label,
                         isActive: selected,
+                        selectedBgColor: sidebarSelectedColor,
+                        hoverBgColor: sidebarHoverColor,
+                        accentColor: sidebarAccentColor,
                         onTap: () {
                           setState(() {
                             _selectedIndex = i;
@@ -952,12 +979,18 @@ class _SidebarNavItem extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool isActive;
+  final Color selectedBgColor;
+  final Color hoverBgColor;
+  final Color accentColor;
   final VoidCallback onTap;
 
   const _SidebarNavItem({
     required this.icon,
     required this.label,
     required this.isActive,
+    required this.selectedBgColor,
+    required this.hoverBgColor,
+    required this.accentColor,
     required this.onTap,
   });
 
@@ -974,7 +1007,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     final baseColor = NeyvoColors.white.withOpacity(0.7);
     final hoverColor = NeyvoColors.white.withOpacity(0.9);
     final activeTextColor = NeyvoColors.white;
-    final activeIconColor = NeyvoColors.ubLightBlue;
+    final activeIconColor = widget.accentColor;
 
     final Color iconColor;
     final Color textColor;
@@ -1006,7 +1039,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               margin: const EdgeInsets.only(bottom: 2),
               decoration: BoxDecoration(
-                color: isActive ? NeyvoColors.sidebarSelected : (_hover ? NeyvoColors.sidebarHover : Colors.transparent),
+                color: isActive ? widget.selectedBgColor : (_hover ? widget.hoverBgColor : Colors.transparent),
                 borderRadius: BorderRadius.circular(7),
               ),
               child: Row(
@@ -1038,9 +1071,9 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
                 bottom: 2,
                 child: Container(
                   width: 3,
-                  decoration: const BoxDecoration(
-                    color: NeyvoColors.ubLightBlue,
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    color: widget.accentColor,
+                    borderRadius: const BorderRadius.only(
                       topRight: Radius.circular(2),
                       bottomRight: Radius.circular(2),
                     ),

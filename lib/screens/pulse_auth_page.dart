@@ -220,11 +220,28 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    if (tenant?.logoHorizontalColorUrl != null)
-                      SvgPicture.network(
-                        tenant!.logoHorizontalColorUrl!,
-                        fit: BoxFit.contain,
-                        height: 58,
+                    if (tenant?.logoHorizontalColorUrl != null &&
+                        tenant!.logoHorizontalColorUrl!.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          final url = tenant.logoHorizontalColorUrl!;
+                          final lower = url.toLowerCase();
+                          if (lower.endsWith('.png') ||
+                              lower.endsWith('.jpg') ||
+                              lower.endsWith('.jpeg')) {
+                            return Image.network(
+                              url,
+                              fit: BoxFit.contain,
+                              height: 58,
+                            );
+                          } else {
+                            return SvgPicture.network(
+                              url,
+                              fit: BoxFit.contain,
+                              height: 58,
+                            );
+                          }
+                        },
                       )
                     else
                       SvgPicture.asset(
