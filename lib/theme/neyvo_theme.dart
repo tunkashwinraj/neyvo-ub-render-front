@@ -100,8 +100,17 @@ class NeyvoCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
   final bool glowing;
+  final Color? borderColor;
+  final Color? glowColor;
 
-  const NeyvoCard({required this.child, this.padding, this.glowing = false, super.key});
+  const NeyvoCard({
+    required this.child,
+    this.padding,
+    this.glowing = false,
+    this.borderColor,
+    this.glowColor,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -112,22 +121,25 @@ class NeyvoCard extends StatelessWidget {
         color: NeyvoTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: glowing ? NeyvoColors.ubPurple.withOpacity(0.35) : NeyvoTheme.border,
+          color: borderColor ??
+              (glowing ? NeyvoColors.ubPurple.withOpacity(0.35) : NeyvoTheme.border),
           width: 1,
         ),
-        boxShadow: glowing ? [
-          BoxShadow(
-            color: NeyvoColors.tealGlow,
-            blurRadius: 16,
-            spreadRadius: 0,
-          ),
-        ] : [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: glowing
+            ? [
+                BoxShadow(
+                  color: glowColor ?? NeyvoColors.tealGlow,
+                  blurRadius: 16,
+                  spreadRadius: 0,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: child,
     );
@@ -372,14 +384,14 @@ class NeyvoThemeData {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: NeyvoColors.ubPurple, width: 1.5),
+          borderSide: BorderSide(color: primary, width: 1.5),
         ),
         labelStyle: NeyvoType.bodyMediumLight.copyWith(color: NeyvoColors.textLightSecondary),
         hintStyle: NeyvoType.bodyMediumLight.copyWith(color: NeyvoColors.textLightMuted),
       ),
       listTileTheme: ListTileThemeData(
         tileColor: Colors.transparent,
-        selectedTileColor: NeyvoColors.sidebarSelectedLight,
+        selectedTileColor: primary,
         textColor: NeyvoColors.textLightPrimary,
         iconColor: NeyvoColors.textLightSecondary,
       ),

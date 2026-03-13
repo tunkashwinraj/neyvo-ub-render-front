@@ -231,15 +231,21 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              NeyvoColors.white,
-              Color(0xFFFAF8FC),
-              Color(0xFFF5F0FA),
-            ],
+            colors: isGoodwin
+                ? const [
+                    NeyvoColors.white,
+                    Color(0xFFF5FAFF), // very light Goodwin blue tint
+                    Color(0xFFE8F3FF), // soft blue anchored toward #005CB9
+                  ]
+                : const [
+                    NeyvoColors.white,
+                    Color(0xFFFAF8FC),
+                    Color(0xFFF5F0FA),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -338,7 +344,13 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                     const SizedBox(height: NeyvoSpacing.section),
                     NeyvoCard(
                       padding: const EdgeInsets.all(NeyvoSpacing.xl),
-                      glowing: false,
+                      glowing: isGoodwin,
+                      borderColor: isGoodwin
+                          ? primary.withOpacity(0.35)
+                          : null,
+                      glowColor: isGoodwin
+                          ? primary.withOpacity(0.25)
+                          : null,
                       child: Form(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
