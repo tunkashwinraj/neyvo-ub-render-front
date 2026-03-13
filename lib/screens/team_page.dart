@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_brand.dart';
 import 'member_detail_page.dart';
 
 /// Fixed width for Add/Edit team member dialogs (same for admin and staff).
@@ -149,6 +150,7 @@ class _TeamPageState extends State<TeamPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Team'),
@@ -156,8 +158,8 @@ class _TeamPageState extends State<TeamPage> {
         foregroundColor: NeyvoColors.textPrimary,
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: NeyvoColors.teal),
+          ? Center(
+              child: CircularProgressIndicator(color: primary),
             )
           : _error != null
               ? Center(
@@ -302,7 +304,7 @@ class _TeamPageState extends State<TeamPage> {
                                       child: Row(
                                         children: [
                                           CircleAvatar(
-                                            backgroundColor: NeyvoColors.teal
+                                            backgroundColor: TenantBrand.primary(context)
                                                 .withOpacity(0.1),
                                             child: Text(
                                               display.isNotEmpty
@@ -310,7 +312,7 @@ class _TeamPageState extends State<TeamPage> {
                                                       .toUpperCase()
                                                   : '?',
                                               style: TextStyle(
-                                                color: NeyvoColors.teal,
+                                                color: TenantBrand.primary(context),
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -360,7 +362,7 @@ class _TeamPageState extends State<TeamPage> {
       floatingActionButton: _canAddMember
           ? FloatingActionButton(
               onPressed: _openAddMember,
-              backgroundColor: NeyvoColors.teal,
+              backgroundColor: TenantBrand.primary(context),
               child: const Icon(Icons.add),
             )
           : null,
@@ -620,7 +622,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: NeyvoColors.teal.withOpacity(0.2),
+                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -646,7 +648,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
           child: const Text('Add'),
         ),
       ],
@@ -918,7 +920,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: NeyvoColors.teal.withOpacity(0.2),
+                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -944,7 +946,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
           child: const Text('Save'),
         ),
       ],

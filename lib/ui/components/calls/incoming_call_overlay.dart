@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../ai_orb/neyvo_ai_orb.dart';
 import '../glass/neyvo_glass_panel.dart';
@@ -85,7 +86,10 @@ class IncomingCallOverlay extends StatelessWidget {
                         const SizedBox(width: 8),
                         FilledButton(
                           onPressed: onViewLive,
-                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: TenantBrand.primary(context),
+                            foregroundColor: Colors.white,
+                          ),
                           child: const Text('View live'),
                         ),
                       ],

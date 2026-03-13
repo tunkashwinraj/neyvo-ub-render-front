@@ -8,6 +8,7 @@ import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
+import '../../tenant/tenant_brand.dart';
 import 'managed_profile_api_service.dart';
 
 class CreateProfileWizard extends StatefulWidget {
@@ -464,6 +465,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   @override
   Widget build(BuildContext context) {
     final isNarrow = MediaQuery.of(context).size.width < 600;
+    final primary = TenantBrand.primary(context);
     return Dialog(
       backgroundColor: NeyvoColors.bgBase,
       insetPadding: const EdgeInsets.all(24),
@@ -486,7 +488,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                       height: 10,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: done || current ? NeyvoColors.teal : NeyvoColors.textMuted,
+                        color: done || current ? primary : NeyvoColors.textMuted,
                       ),
                     );
                   }),
@@ -545,13 +547,13 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
                                 _error = null;
                               })
                           : null,
-                      style: ElevatedButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white),
                       child: const Text('Next'),
                     )
                   else
                     ElevatedButton(
                       onPressed: _saving ? null : _createProfile,
-                      style: ElevatedButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white),
                       child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create My Voice Profile'),
                     ),
                 ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/neyvo_theme.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_history_page.dart';
 import '../../../screens/callbacks_page.dart';
@@ -52,22 +53,23 @@ class _CallsPageState extends State<CallsPage> {
 
   Widget _pill(String label, CallsSection section) {
     final selected = _section == section;
+    final primary = TenantBrand.primary(context);
     return InkWell(
       onTap: () => setState(() => _section = section),
       borderRadius: BorderRadius.circular(999),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? NeyvoColors.teal.withOpacity(0.18) : Colors.transparent,
+          color: selected ? primary.withOpacity(0.18) : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? NeyvoColors.teal.withOpacity(0.5) : NeyvoColors.borderSubtle,
+            color: selected ? primary.withOpacity(0.5) : NeyvoColors.borderSubtle,
           ),
         ),
         child: Text(
           label,
           style: NeyvoTextStyles.label.copyWith(
-            color: selected ? NeyvoColors.teal : NeyvoColors.textSecondary,
+            color: selected ? primary : NeyvoColors.textSecondary,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),

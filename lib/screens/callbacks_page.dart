@@ -3,6 +3,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_brand.dart';
 import '../utils/callback_date_format.dart';
 import 'student_detail_page.dart';
 
@@ -57,9 +58,10 @@ class _CallbacksPageState extends State<CallbacksPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: primary)),
       );
     }
     if (_error != null) {

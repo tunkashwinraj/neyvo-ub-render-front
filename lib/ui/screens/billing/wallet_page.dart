@@ -8,6 +8,7 @@ import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../services/user_timezone_service.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../../utils/export_csv.dart';
 import '../../../utils/payment_result_dialog.dart';
 import '../../../utils/payment_pending_storage.dart';
@@ -189,8 +190,9 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     if (_loading && _wallet == null) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: primary));
     }
     if (_error != null && _wallet == null) {
       return Center(
@@ -251,9 +253,9 @@ class _WalletPageState extends State<WalletPage> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.record_voice_over_outlined, size: 18, color: NeyvoColors.teal),
+                            Icon(Icons.record_voice_over_outlined, size: 18, color: primary),
                             const SizedBox(width: 6),
-                            Text('View voice tiers', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+                            Text('View voice tiers', style: NeyvoTextStyles.label.copyWith(color: primary)),
                           ],
                         ),
                       ),
@@ -282,9 +284,9 @@ class _WalletPageState extends State<WalletPage> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.card_membership_outlined, size: 18, color: NeyvoColors.teal),
+                            Icon(Icons.card_membership_outlined, size: 18, color: primary),
                             const SizedBox(width: 6),
-                            Text('View plans', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal)),
+                            Text('View plans', style: NeyvoTextStyles.label.copyWith(color: primary)),
                           ],
                         ),
                       ),
@@ -332,7 +334,7 @@ class _WalletPageState extends State<WalletPage> {
                           icon: const Icon(Icons.add, size: 20),
                           label: const Text('Add credits'),
                           style: FilledButton.styleFrom(
-                            backgroundColor: NeyvoColors.teal,
+                            backgroundColor: primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                           ),
@@ -356,9 +358,9 @@ class _WalletPageState extends State<WalletPage> {
                 const SizedBox(height: 12),
                 NeyvoGlassPanel(
                   child: _loading && _transactions.isEmpty
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.all(24),
-                          child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+                          child: Center(child: CircularProgressIndicator(color: primary)),
                         )
                       : _transactions.isEmpty
                           ? Padding(
@@ -371,9 +373,9 @@ class _WalletPageState extends State<WalletPage> {
                                 _tableHeader(),
                                 ..._transactions.asMap().entries.map((e) => _transactionRow(e.value, e.key as int)),
                                 if (_loadingMore)
-                                  const Padding(
+                                  Padding(
                                     padding: EdgeInsets.all(12),
-                                    child: Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal))),
+                                    child: Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: primary))),
                                   ),
                                 if (!_loadingMore && _transactions.length >= _pageSize)
                                   Padding(
@@ -396,12 +398,13 @@ class _WalletPageState extends State<WalletPage> {
 
   Widget _filterChip(String label, String value) {
     final selected = _typeFilter == value;
+    final primary = TenantBrand.primary(context);
     return FilterChip(
       label: Text(label),
       selected: selected,
       onSelected: (_) => _onTypeFilterChanged(value),
-      selectedColor: NeyvoColors.teal.withOpacity(0.3),
-      checkmarkColor: NeyvoColors.teal,
+      selectedColor: primary.withOpacity(0.3),
+      checkmarkColor: primary,
     );
   }
 

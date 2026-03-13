@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_scope.dart';
+import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
 class PulseAuthPage extends StatefulWidget {
@@ -196,6 +197,8 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   @override
   Widget build(BuildContext context) {
     final tenant = TenantScope.of(context)?.config;
+    final primary = TenantBrand.primary(context);
+    final isGoodwin = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
@@ -220,7 +223,13 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    if (tenant?.logoHorizontalColorUrl != null &&
+                    if (isGoodwin)
+                      Image.asset(
+                        'assets/goodwin_logo/goodwin_horiz_rgb.png',
+                        fit: BoxFit.contain,
+                        height: 58,
+                      )
+                    else if (tenant?.logoHorizontalColorUrl != null &&
                         tenant!.logoHorizontalColorUrl!.isNotEmpty)
                       Builder(
                         builder: (context) {
@@ -233,12 +242,33 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                               url,
                               fit: BoxFit.contain,
                               height: 58,
+                              errorBuilder: (context, _, __) {
+                                final t = TenantScope.of(context)?.config;
+                                final isUb = t == null || t.tenantId == 'ub';
+                                if (isUb) {
+                                  return SvgPicture.asset(
+                                    'assets/ub_logo/ub_logo_horizontal_purple.svg',
+                                    fit: BoxFit.contain,
+                                    height: 58,
+                                    colorFilter: const ColorFilter.mode(
+                                      NeyvoColors.ubPurple,
+                                      BlendMode.srcIn,
+                                    ),
+                                  );
+                                }
+                                return Text(
+                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
+                                  style: NeyvoType.headlineMediumLight.copyWith(color: primary),
+                                  textAlign: TextAlign.center,
+                                );
+                              },
                             );
                           } else {
                             return SvgPicture.network(
                               url,
                               fit: BoxFit.contain,
                               height: 58,
+                              placeholderBuilder: (_) => const SizedBox(height: 58),
                             );
                           }
                         },
@@ -318,6 +348,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             const SizedBox(height: NeyvoSpacing.xl),
                             FilledButton(
                               onPressed: _loading ? null : _submit,
+                      style: FilledButton.styleFrom(backgroundColor: primary),
                               child: _loading
                                   ? const SizedBox(
                                       height: 24,

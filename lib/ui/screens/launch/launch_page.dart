@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
@@ -116,8 +117,8 @@ class _LaunchPageState extends State<LaunchPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: NeyvoColors.teal),
+      return Center(
+        child: CircularProgressIndicator(color: TenantBrand.primary(context)),
       );
     }
     if (_error != null) {
@@ -134,6 +135,7 @@ class _LaunchPageState extends State<LaunchPage> {
     }
 
     if (_hasFirstCompletedCall) {
+      final primary = TenantBrand.primary(context);
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -169,7 +171,7 @@ class _LaunchPageState extends State<LaunchPage> {
                           child: FilledButton(
                             onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
                             style: FilledButton.styleFrom(
-                              backgroundColor: NeyvoColors.teal,
+                              backgroundColor: primary,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),

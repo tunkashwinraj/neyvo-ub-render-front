@@ -7,6 +7,7 @@ import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
+import '../../tenant/tenant_brand.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
@@ -234,7 +235,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
               child: const Text('Purchase number'),
             ),
           ],
@@ -280,7 +281,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+            style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
             child: const Text('Attach'),
           ),
         ],
@@ -314,7 +315,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
                 child: const Text('Move here'),
               ),
             ],
@@ -501,9 +502,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   Widget build(BuildContext context) {
     final title = _nameCtrl.text.trim().isEmpty ? 'Operator' : _nameCtrl.text.trim();
+    final primary = TenantBrand.primary(context);
 
     final inner = _loading
-        ? const Center(child: CircularProgressIndicator(color: NeyvoColors.teal))
+        ? Center(child: CircularProgressIndicator(color: primary))
         : _error != null
             ? Center(
                 child: Column(
@@ -538,7 +540,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                               ),
                               const SizedBox(width: 10),
                               if (_attaching)
-                                const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal)),
+                                SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: primary)),
                               if (_isLive)
                                 OutlinedButton(
                                   onPressed: _attaching ? null : _detach,
@@ -547,13 +549,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                               else
                                 FilledButton(
                                   onPressed: _attaching ? null : _attachToNumber,
-                                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                                  style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
                                   child: const Text('Attach to number'),
                                 ),
                               const SizedBox(width: 8),
                               FilledButton(
                                 onPressed: _saving ? null : _save,
-                                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                                style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
                                 child: _saving
                                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                                     : const Text('Save'),
@@ -581,9 +583,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                     child: TabBar(
                       controller: _tabs,
                       isScrollable: true,
-                      labelColor: NeyvoColors.teal,
+                      labelColor: primary,
                       unselectedLabelColor: NeyvoColors.textSecondary,
-                      indicatorColor: NeyvoColors.teal,
+                      indicatorColor: primary,
                       tabs: const [
                         Tab(text: 'Personality'),
                         Tab(text: 'AI Studio'),
@@ -794,8 +796,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       itemBuilder: (context, index) {
         final msg = _chatMessages[index];
         final alignEnd = msg.isUser;
-        final bgColor = msg.isUser ? NeyvoColors.teal.withOpacity(0.18) : NeyvoColors.bgOverlay;
-        final borderColor = msg.isUser ? NeyvoColors.tealLight : NeyvoColors.borderDefault;
+        final primary = TenantBrand.primary(context);
+        final bgColor = msg.isUser ? primary.withOpacity(0.18) : NeyvoColors.bgOverlay;
+        final borderColor = msg.isUser ? primary.withOpacity(0.28) : NeyvoColors.borderDefault;
         return Align(
           alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
@@ -881,7 +884,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 tooltip: 'View full system prompt and voicemail',
                 onPressed: () => _showAiStudioFullContentDialog(msg),
                 style: IconButton.styleFrom(
-                  foregroundColor: NeyvoColors.teal,
+                  foregroundColor: TenantBrand.primary(context),
                 ),
               ),
             ],
@@ -932,7 +935,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                                 const SizedBox(height: 6),
                                 Text('After:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
                                 const SizedBox(height: 2),
-                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: NeyvoColors.teal)),
+                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: TenantBrand.primary(context))),
                               ],
                             ],
                           ),
@@ -980,7 +983,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 FilledButton(
                   onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
                   style: FilledButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
+                    backgroundColor: TenantBrand.primary(context),
                     foregroundColor: NeyvoColors.white,
                   ),
                   child: const Text('Apply to operator'),
@@ -1030,9 +1033,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   child: Column(
                     children: [
                       TabBar(
-                        labelColor: NeyvoColors.teal,
+                        labelColor: TenantBrand.primary(context),
                         unselectedLabelColor: NeyvoColors.textSecondary,
-                        indicatorColor: NeyvoColors.teal,
+                        indicatorColor: TenantBrand.primary(context),
                         tabs: const [
                           Tab(text: 'System prompt'),
                           Tab(text: 'Voicemail'),
@@ -1086,7 +1089,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(width: 8),
         FilledButton(
           onPressed: _aiSuggestLoading ? null : _sendAiStudioMessage,
-          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
           child: _aiSuggestLoading
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
               : const Text('Send'),
@@ -1442,10 +1445,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: NeyvoColors.teal.withOpacity(0.2),
+                              color: TenantBrand.primary(context).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.teal)),
+                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: TenantBrand.primary(context))),
                           ),
                         ],
                       ],
@@ -1562,9 +1565,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               ),
               const SizedBox(height: 12),
               if (_voiceCatalogLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context))),
                 )
               else if (_voiceCatalogError != null)
                 Padding(
@@ -1606,13 +1609,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         color: isSelected ? NeyvoColors.bgRaised.withOpacity(0.75) : NeyvoColors.bgRaised,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: isSelected ? NeyvoColors.teal : NeyvoColors.borderSubtle,
+                          color: isSelected ? TenantBrand.primary(context) : NeyvoColors.borderSubtle,
                         ),
                       ),
                       child: ListTile(
                         leading: Icon(
                           isSelected ? Icons.check_circle : Icons.record_voice_over_outlined,
-                          color: isSelected ? NeyvoColors.teal : NeyvoColors.textSecondary,
+                          color: isSelected ? TenantBrand.primary(context) : NeyvoColors.textSecondary,
                         ),
                         title: Text(
                           name,
@@ -1711,7 +1714,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),
@@ -1887,7 +1890,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal, foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),

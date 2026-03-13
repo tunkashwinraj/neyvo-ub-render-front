@@ -10,6 +10,7 @@ import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../activation/activation_service.dart';
 
@@ -107,7 +108,7 @@ class _TestCallPageState extends State<TestCallPage> {
     final live = activationService.isLive || (status?.firstCallCompleted == true);
 
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
     }
     if (_error != null) {
       return Center(
@@ -157,7 +158,7 @@ class _TestCallPageState extends State<TestCallPage> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.phone_in_talk_outlined, color: NeyvoColors.teal),
+                            Icon(Icons.phone_in_talk_outlined, color: TenantBrand.primary(context)),
                             const SizedBox(width: 10),
                             Text('Training number', style: NeyvoTextStyles.heading),
                           ],
@@ -205,10 +206,10 @@ class _TestCallPageState extends State<TestCallPage> {
                             alignment: Alignment.centerLeft,
                             child: Row(
                               children: [
-                                const SizedBox(
+                                SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.teal),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context)),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -234,7 +235,7 @@ class _TestCallPageState extends State<TestCallPage> {
                             width: double.infinity,
                             child: FilledButton(
                               onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
-                              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
                               child: const Text('Go to Home'),
                             ),
                           ),

@@ -11,6 +11,7 @@ import 'package:flutter_dropzone/flutter_dropzone.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
@@ -1653,6 +1654,7 @@ class _SyncTabState extends State<_SyncTab> {
 
   Widget _modeChip(String key, String label) {
     final selected = _modes.contains(key);
+    final primary = TenantBrand.primary(context);
     return FilterChip(
       selected: selected,
       label: Text(label),
@@ -1665,11 +1667,11 @@ class _SyncTabState extends State<_SyncTab> {
           }
         });
       },
-      selectedColor: NeyvoColors.teal.withOpacity(0.18),
-      checkmarkColor: NeyvoColors.teal,
+      selectedColor: primary.withOpacity(0.18),
+      checkmarkColor: primary,
       side: BorderSide(
           color: selected
-              ? NeyvoColors.teal.withOpacity(0.5)
+              ? primary.withOpacity(0.5)
               : NeyvoColors.borderSubtle),
     );
   }

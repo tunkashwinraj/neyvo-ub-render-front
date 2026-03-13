@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
+import '../../tenant/tenant_brand.dart';
 import '../agents/create_agent_wizard.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
@@ -80,6 +81,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Column(
@@ -101,7 +103,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Create Operator'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
+                    backgroundColor: primary,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -116,7 +118,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
 
   Widget _body() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
     }
     if (_error != null) {
       return Center(
@@ -149,7 +151,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Create Operator'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: NeyvoColors.teal,
+                backgroundColor: TenantBrand.primary(context),
                 foregroundColor: Colors.white,
               ),
             ),
@@ -225,7 +227,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     Icon(
                       industryId == 'school_financial_aid' ? Icons.school : Icons.smart_toy_outlined,
                       size: 28,
-                      color: NeyvoColors.teal,
+                      color: TenantBrand.primary(context),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -234,10 +236,10 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: status == 'active' ? NeyvoColors.teal.withValues(alpha: 0.2) : NeyvoColors.warning.withValues(alpha: 0.2),
+                        color: status == 'active' ? TenantBrand.primary(context).withValues(alpha: 0.2) : NeyvoColors.warning.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(status, style: NeyvoTextStyles.micro.copyWith(color: status == 'active' ? NeyvoColors.teal : NeyvoColors.warning)),
+                      child: Text(status, style: NeyvoTextStyles.micro.copyWith(color: status == 'active' ? TenantBrand.primary(context) : NeyvoColors.warning)),
                     ),
                   ],
                 ),

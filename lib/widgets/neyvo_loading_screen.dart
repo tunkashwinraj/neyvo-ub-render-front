@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_brand.dart';
 
 class NeyvoLoadingScreen extends StatelessWidget {
   const NeyvoLoadingScreen({super.key});
@@ -51,6 +52,7 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -70,9 +72,9 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
                   child: Container(
                     width: widget.circleSize,
                     height: widget.circleSize,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: NeyvoColors.ubPurple,
+                      color: primary,
                     ),
                   ),
                 ),

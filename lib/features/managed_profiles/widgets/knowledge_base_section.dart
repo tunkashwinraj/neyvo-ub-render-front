@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/neyvo_theme.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../../ui/components/glass/neyvo_glass_panel.dart';
 import '../../../widgets/neyvo_empty_state.dart';
 import '../managed_profile_api_service.dart';
@@ -158,7 +159,7 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
                         )
                       : const Icon(Icons.auto_awesome),
                   style: FilledButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
+                    backgroundColor: TenantBrand.primary(context),
                     foregroundColor: NeyvoColors.white,
                   ),
                   label: Text(_saving ? 'Saving...' : 'Save'),
@@ -285,7 +286,7 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
                         )
                       : const Icon(Icons.save_outlined),
                   style: FilledButton.styleFrom(
-                    backgroundColor: NeyvoColors.teal,
+                    backgroundColor: TenantBrand.primary(context),
                     foregroundColor: NeyvoColors.white,
                   ),
                   label: Text(_saving ? 'Saving...' : 'Save'),
@@ -394,7 +395,7 @@ class _KnowledgeBaseSectionState extends State<KnowledgeBaseSection> {
               FilledButton.icon(
                 onPressed: _saving ? null : _openAddDialog,
                 style: FilledButton.styleFrom(
-                  backgroundColor: NeyvoColors.teal,
+                  backgroundColor: TenantBrand.primary(context),
                   foregroundColor: NeyvoColors.white,
                 ),
                 icon: const Icon(Icons.auto_awesome),

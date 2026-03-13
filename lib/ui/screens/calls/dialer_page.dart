@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../features/managed_profiles/managed_profile_api_service.dart';
 import '../../../neyvo_pulse_api.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/phone_util.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
@@ -238,8 +239,9 @@ class _DialerPageState extends State<DialerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: primary));
     }
     if (_error != null) {
       return Center(
@@ -285,7 +287,7 @@ class _DialerPageState extends State<DialerPage> {
             NeyvoGlassPanel(
               child: Row(
                 children: [
-                  const Icon(Icons.speed, color: NeyvoColors.teal),
+                  Icon(Icons.speed, color: primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -305,7 +307,7 @@ class _DialerPageState extends State<DialerPage> {
                   children: [
                     Icon(
                       perNumberWarning ? Icons.warning_amber_rounded : Icons.phone_outlined,
-                      color: perNumberWarning ? NeyvoColors.warning : NeyvoColors.teal,
+                      color: perNumberWarning ? NeyvoColors.warning : primary,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -438,7 +440,7 @@ class _DialerPageState extends State<DialerPage> {
                           child: FilledButton(
                             onPressed: _starting ? null : _startCall,
                             style: FilledButton.styleFrom(
-                              backgroundColor: NeyvoColors.teal,
+                              backgroundColor: primary,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: _starting

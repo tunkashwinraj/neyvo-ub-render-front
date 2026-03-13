@@ -4,6 +4,7 @@ import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../tenant/tenant_brand.dart';
 import '../../../utils/payment_result_dialog.dart';
 import '../../../utils/payment_pending_storage.dart';
 import '../../components/billing/credits_info_icon.dart';
@@ -100,8 +101,9 @@ class _BillingPageState extends State<BillingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = TenantBrand.primary(context);
     if (_loading && _wallet == null) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: primary));
     }
     if (_error != null) {
       return Center(
@@ -213,7 +215,7 @@ class _BillingPageState extends State<BillingPage> {
                                 icon: const Icon(Icons.add, size: 20),
                                 label: const Text('Add credits'),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: NeyvoColors.teal,
+                                  backgroundColor: primary,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                                 ),
@@ -242,8 +244,8 @@ class _BillingPageState extends State<BillingPage> {
                                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                                 label: const Text('View transactions'),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: NeyvoColors.teal,
-                                  side: const BorderSide(color: NeyvoColors.teal),
+                                  foregroundColor: primary,
+                                  side: BorderSide(color: primary),
                                   padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                                 ),
                               ),
@@ -310,8 +312,8 @@ class _BillingPageState extends State<BillingPage> {
                               ),
                             ),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: NeyvoColors.teal,
-                                side: const BorderSide(color: NeyvoColors.teal),
+                                foregroundColor: primary,
+                                side: BorderSide(color: primary),
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
                               child: const Text('View plans'),
@@ -384,7 +386,7 @@ class _BillingPageState extends State<BillingPage> {
                         child: FilledButton(
                           onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.phoneNumbers),
                           style: FilledButton.styleFrom(
-                            backgroundColor: NeyvoColors.teal,
+                            backgroundColor: primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),

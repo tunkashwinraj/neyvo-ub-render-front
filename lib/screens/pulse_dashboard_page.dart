@@ -9,6 +9,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
+import '../tenant/tenant_brand.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
@@ -570,7 +571,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
+      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
     }
     if (_error != null) {
       return Center(
@@ -644,7 +645,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                                     }
                                   },
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: i == 0 ? NeyvoColors.teal : NeyvoColors.bgRaised,
+                                    backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
                                     foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
                                     padding: const EdgeInsets.symmetric(vertical: 14),
                                   ),

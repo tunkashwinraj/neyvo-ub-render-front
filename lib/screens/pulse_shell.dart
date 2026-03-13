@@ -26,6 +26,7 @@ import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
 import '../tenant/tenant_scope.dart';
+import '../tenant/tenant_brand.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
@@ -451,6 +452,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         ? sidebarBgColor.withOpacity(0.5)
         : NeyvoColors.sidebarHover;
 
+    final brandPrimary = TenantBrand.primary(context);
+    final brandSecondary = TenantBrand.secondary(context);
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Row(
@@ -477,6 +481,14 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                       builder: (context) {
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
+                        final isGoodwin = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
+                        if (isGoodwin) {
+                          return Image.asset(
+                            'assets/goodwin_logo/goodwin_horiz_white.png',
+                            fit: BoxFit.contain,
+                            height: 46,
+                          );
+                        }
                         final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
                         if (logoUrl != null && logoUrl.isNotEmpty) {
                           final lower = logoUrl.toLowerCase();
@@ -485,12 +497,34 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               logoUrl,
                               fit: BoxFit.contain,
                               height: 46,
+                              errorBuilder: (context, _, __) {
+                                final t = TenantScope.of(context)?.config;
+                                final isUb = t == null || t.tenantId == 'ub';
+                                if (isUb) {
+                                  return SvgPicture.asset(
+                                    'assets/ub_logo/ub_logo_horizontal_white.svg',
+                                    fit: BoxFit.contain,
+                                    height: 46,
+                                    colorFilter: const ColorFilter.mode(
+                                      NeyvoColors.white,
+                                      BlendMode.srcIn,
+                                    ),
+                                  );
+                                }
+                                return Text(
+                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
+                                  style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              },
                             );
                           } else {
                             return SvgPicture.network(
                               logoUrl,
                               fit: BoxFit.contain,
                               height: 46,
+                              placeholderBuilder: (_) => const SizedBox(height: 46),
                             );
                           }
                         }
@@ -695,18 +729,18 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               decoration: BoxDecoration(
                                 color: _walletCredits! < 500
                                     ? NeyvoColors.error.withOpacity(0.1)
-                                    : NeyvoColors.teal.withOpacity(0.1),
+                                    : brandPrimary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(100),
                                 border: Border.all(
                                   color: _walletCredits! < 500
                                       ? NeyvoColors.error.withOpacity(0.2)
-                                      : NeyvoColors.teal.withOpacity(0.2),
+                                      : brandPrimary.withOpacity(0.2),
                                 ),
                               ),
                               child: Text(
-                                '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} credits',
+                                '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\\d{1,3})(?=(\\d{3})+(?!\\d))'), (m) => '${m[1]},')} credits',
                                 style: NeyvoTextStyles.label.copyWith(
-                                  color: _walletCredits! < 500 ? NeyvoColors.error : NeyvoColors.teal,
+                                  color: _walletCredits! < 500 ? NeyvoColors.error : brandPrimary,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                 ),
@@ -726,15 +760,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               height: 36,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: NeyvoColors.teal.withOpacity(0.15),
-                                border: Border.all(color: NeyvoColors.teal.withOpacity(0.2)),
+                                color: brandPrimary.withOpacity(0.15),
+                                border: Border.all(color: brandPrimary.withOpacity(0.2)),
                               ),
                               alignment: Alignment.center,
                               child: Text(
                                 ((FirebaseAuth.instance.currentUser?.email ?? '').isNotEmpty
                                     ? (FirebaseAuth.instance.currentUser!.email!.substring(0, 1))
                                     : '?').toUpperCase(),
-                                style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.teal, fontWeight: FontWeight.w600, fontSize: 13),
+                                style: NeyvoTextStyles.label.copyWith(color: brandPrimary, fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -886,7 +920,7 @@ extension on _PulseShellState {
                           });
                         }
                       },
-                style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                style: FilledButton.styleFrom(backgroundColor: TenantBrand.secondary(ctx)),
                 child: working
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Text('Switch'),
