@@ -625,10 +625,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildHeroSection(context, orbState, callOk, contentWidth),
-                        if (showCreateFirstOperator) ...[
-                          const SizedBox(height: 24),
-                          _buildCreateFirstOperatorSection(context),
-                        ],
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
                         const SizedBox(height: 24),
@@ -639,78 +635,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   ),
                 );
               },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCreateFirstOperatorSection(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
-            const SizedBox(height: 20),
-            Text(
-              'Create your first Operator',
-              style: NeyvoTextStyles.title.copyWith(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: NeyvoColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose a department to create a voice operator. You can add more later.',
-              style: NeyvoTextStyles.body,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            NeyvoGlassPanel(
-              glowing: true,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < _recommendedOperators.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 10),
-                    FilledButton(
-                      onPressed: () async {
-                        final deptId = _departmentIdForLabel(_recommendedOperators[i]);
-                        if (deptId != null) {
-                          final created = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
-                          );
-                          if (created == true && mounted) {
-                            PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                          }
-                        } else {
-                          PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                        }
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
-                        foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(
-                        i == 0 ? 'Create ${_recommendedOperators[i]}' : _recommendedOperators[i],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
-                    child: const Text('Choose another department'),
-                  ),
-                ],
-              ),
             ),
           ],
         ),

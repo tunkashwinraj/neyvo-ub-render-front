@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
 import '../../tenant/tenant_brand.dart';
 import '../agents/create_agent_wizard.dart';
+import '../agents/create_first_operator_panel.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
 
@@ -133,31 +134,7 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
       );
     }
     if (_profiles.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.record_voice_over_outlined, size: 48, color: NeyvoColors.textMuted),
-            const SizedBox(height: 16),
-            Text('No operators yet', style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
-            const SizedBox(height: 8),
-            Text(
-              'Create your first operator in under 2 minutes.',
-              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _openCreateAgent,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Create Operator'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: TenantBrand.primary(context),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      );
+      return const CreateFirstOperatorPanel();
     }
     return RefreshIndicator(
       onRefresh: _load,
