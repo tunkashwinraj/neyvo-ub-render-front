@@ -638,7 +638,17 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         if (isNarrow) {
           return Column(
             children: [
-              _VoiceCoverageCard(operatorCount: _operatorCount, totalCoreDepartments: _recommendedOperators.length),
+              _VoiceCoverageCard(
+                operatorCount: _operatorCount,
+                totalCoreDepartments: _recommendedOperators.length,
+                onCreateOperator: () async {
+                  final created = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => const CreateAgentWizard(),
+                  );
+                  if (created == true && mounted) _load();
+                },
+              ),
               const SizedBox(height: 16),
               _CallsPerformanceCard(perf: _perf),
               const SizedBox(height: 16),
@@ -656,6 +666,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   child: _VoiceCoverageCard(
                     operatorCount: _operatorCount,
                     totalCoreDepartments: _recommendedOperators.length,
+                    onCreateOperator: () async {
+                      final created = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => const CreateAgentWizard(),
+                      );
+                      if (created == true && mounted) _load();
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -2017,10 +2034,13 @@ class _VoiceCoverageCard extends StatelessWidget {
   const _VoiceCoverageCard({
     required this.operatorCount,
     required this.totalCoreDepartments,
+    this.onCreateOperator,
   });
 
   final int operatorCount;
   final int totalCoreDepartments;
+  /// When set, "Create operator" opens the same wizard as on the Operators page (showDialog CreateAgentWizard).
+  final Future<void> Function()? onCreateOperator;
 
   @override
   Widget build(BuildContext context) {
@@ -2083,7 +2103,12 @@ class _VoiceCoverageCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     FilledButton.icon(
-                      onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
+                      onPressed: onCreateOperator != null
+                          ? () async {
+                              await onCreateOperator!();
+                            }
+                          : () => Navigator.of(context, rootNavigator: true)
+                              .pushNamed(PulseRouteNames.agents),
                       icon: const Icon(Icons.add),
                       label: const Text('Create operator'),
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
