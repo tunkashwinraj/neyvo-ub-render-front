@@ -666,50 +666,56 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     final ubModelStatus = _ubStatus;
     final envLabel = 'Prod';
 
-    final filterBar = Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: _GlobalDateFilterBar(
-        preset: _datePreset,
-        rangeLabel: _rangeLabel(),
-        onPresetChanged: (preset) {
-          setState(() {
-            _applyPresetWithoutReload(preset);
-          });
-          _loadUbHeroSection();
-        },
-        onCustomTap: () async {
-          await _pickCustomRange();
-        },
-      ),
-    );
-
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  titleText,
-                  style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        titleText,
+                        style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
+                      ),
+                    ),
+                    if (_ubHeroLoading) ...[
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: NeyvoColors.teal,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (_ubHeroLoading) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: NeyvoColors.teal,
-                  ),
+              const SizedBox(width: 16),
+              Flexible(
+                child: _HeroDateFilterControls(
+                  preset: _datePreset,
+                  rangeLabel: _rangeLabel(),
+                  onPresetChanged: (preset) {
+                    setState(() {
+                      _applyPresetWithoutReload(preset);
+                    });
+                    _loadUbHeroSection();
+                  },
+                  onCustomTap: () async {
+                    await _pickCustomRange();
+                  },
                 ),
-              ],
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -836,7 +842,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          filterBar,
           heroCard,
           const SizedBox(height: 16),
           liveProgressCard,
@@ -848,7 +853,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        filterBar,
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2132,8 +2136,8 @@ class _TimeRangeSelector extends StatelessWidget {
   }
 }
 
-class _GlobalDateFilterBar extends StatelessWidget {
-  const _GlobalDateFilterBar({
+class _HeroDateFilterControls extends StatelessWidget {
+  const _HeroDateFilterControls({
     required this.preset,
     required this.rangeLabel,
     required this.onPresetChanged,
@@ -2148,32 +2152,30 @@ class _GlobalDateFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = rangeLabel;
-    return _SimpleCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _presetChip('Today', 'today'),
-                _presetChip('Yesterday', 'yesterday'),
-                _presetChip('This week', 'this_week'),
-                _presetChip('This month', 'this_month'),
-                _presetChip('This year', 'this_year'),
-                _presetChip('Custom', 'custom', onTap: onCustomTap),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          alignment: WrapAlignment.end,
+          children: [
+            _presetChip('Today', 'today'),
+            _presetChip('Yesterday', 'yesterday'),
+            _presetChip('This week', 'this_week'),
+            _presetChip('This month', 'this_month'),
+            _presetChip('This year', 'this_year'),
+            _presetChip('Custom', 'custom', onTap: onCustomTap),
+          ],
+        ),
+        if (label != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
           ),
-          const SizedBox(width: 12),
-          if (label != null)
-            Text(
-              label,
-              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-            ),
         ],
-      ),
+      ],
     );
   }
 
@@ -2182,6 +2184,8 @@ class _GlobalDateFilterBar extends StatelessWidget {
     return ChoiceChip(
       label: Text(text),
       selected: selected,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
       onSelected: (_) {
         if (value == 'custom') {
           onCustomTap();
