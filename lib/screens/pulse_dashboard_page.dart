@@ -690,20 +690,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _GlobalDateFilterBar(
-                          preset: _datePreset,
-                          rangeLabel: _rangeLabel(),
-                          onPresetChanged: (preset) {
-                            setState(() {
-                              _applyPresetWithoutReload(preset);
-                            });
-                            _loadUbHeroSection();
-                          },
-                          onCustomTap: () async {
-                            await _pickCustomRange();
-                          },
-                        ),
-                        const SizedBox(height: 16),
                         _buildHeroSection(orbState, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
@@ -739,6 +725,23 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
     final ubModelStatus = _ubStatus;
     final envLabel = 'Prod';
+
+    final filterBar = Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: _GlobalDateFilterBar(
+        preset: _datePreset,
+        rangeLabel: _rangeLabel(),
+        onPresetChanged: (preset) {
+          setState(() {
+            _applyPresetWithoutReload(preset);
+          });
+          _loadUbHeroSection();
+        },
+        onCustomTap: () async {
+          await _pickCustomRange();
+        },
+      ),
+    );
 
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),
@@ -893,6 +896,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          filterBar,
           heroCard,
           const SizedBox(height: 16),
           liveProgressCard,
@@ -901,14 +905,20 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         ],
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 7, child: heroCard),
-        const SizedBox(width: 16),
-        Expanded(flex: 5, child: liveProgressCard),
-        const SizedBox(width: 16),
-        Expanded(flex: 5, child: nextActionsCard),
+        filterBar,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 7, child: heroCard),
+            const SizedBox(width: 16),
+            Expanded(flex: 5, child: liveProgressCard),
+            const SizedBox(width: 16),
+            Expanded(flex: 5, child: nextActionsCard),
+          ],
+        ),
       ],
     );
   }
