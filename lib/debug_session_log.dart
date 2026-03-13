@@ -8,8 +8,8 @@ import 'package:http/http.dart' as http;
 
 import 'debug_session_log_stub.dart' if (dart.library.html) 'debug_session_log_web.dart' as _origin;
 
-const _sessionId = 'd2cfd5';
-const _endpoint = 'http://127.0.0.1:7272/ingest/7a600e15-272a-4fa7-b08b-296a92dc7e88';
+const _sessionId = '7f92f3';
+const _endpoint = 'http://127.0.0.1:7693/ingest/4dbef325-696e-4a3f-ac76-bda8c8d2b735';
 
 bool _isLocalOrigin(String? origin) {
   if (origin == null || origin.isEmpty) return false;

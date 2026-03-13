@@ -16,6 +16,7 @@ import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
+import '../debug_session_log.dart';
 
 class PulseDashboardPage extends StatefulWidget {
   const PulseDashboardPage({super.key});
@@ -589,6 +590,20 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
     final ubReady = _ubStatus == 'ready';
     final showCreateFirstOperator = ubReady && _operatorCount == 0;
+
+    final tenant = TenantScope.of(context)?.config;
+    debugSessionLog(
+      'pulse_dashboard_page.dart:build',
+      'dashboard_build_state',
+      {
+        'tenantId': tenant?.tenantId,
+        'schoolName': tenant?.schoolName,
+        'ubStatus': _ubStatus,
+        'operatorCount': _operatorCount,
+        'showCreateFirstOperator': showCreateFirstOperator,
+      },
+      'H1',
+    );
 
     final callOk = _firstCallCompleted;
     final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
