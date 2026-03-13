@@ -1,6 +1,7 @@
 // lib/pulse_routes.dart
 import 'package:flutter/material.dart';
 
+import 'debug_session_log.dart';
 import 'pulse_route_names.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
@@ -32,6 +33,12 @@ String? _legacyPulsePathToCanonical(String path) {
 
 class PulseRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
+    // #region agent log
+    final name = settings.name ?? '';
+    if (name.isNotEmpty && (name.startsWith('/pulse/') || name == PulseRouteNames.auth || name == PulseRouteNames.onboarding)) {
+      debugSessionLog('pulse_routes.dart:generateRoute', 'generateRoute called', {'routeName': name}, 'A');
+    }
+    // #endregion
     switch (settings.name) {
       case PulseRouteNames.auth:
         return MaterialPageRoute(builder: (_) => const PulseAuthPage());

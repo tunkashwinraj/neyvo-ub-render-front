@@ -23,6 +23,7 @@ import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
+import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
@@ -161,6 +162,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    // #region agent log
+    debugSessionLog('pulse_shell.dart:initState', 'PulseShell initState', {'initialRouteName': widget.initialRouteName}, 'A');
+    // #endregion
     if (kIsWeb) debugPrint('PulseShell initialized');
     _livePulseCtrl = AnimationController(
       vsync: this,
@@ -195,6 +199,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   /// Resolve logged-in account from API first, then load all data so every request uses the resolved account id.
   /// Use org_doc_id for Firestore listener (actual doc id); display only short account_id everywhere in UI.
   Future<void> _resolveAccountThenLoad() async {
+    // #region agent log
+    final resolveStart = DateTime.now().millisecondsSinceEpoch;
+    debugSessionLog('pulse_shell.dart:_resolveAccountThenLoad', 'resolveAccountThenLoad start', {'initialRoute': widget.initialRouteName}, 'B');
+    // #endregion
     await _loadAccountInfo();
     if (!mounted) return;
     await _loadMyRoleAndPermissions();
@@ -263,6 +271,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         },
       );
     }
+    // #region agent log
+    final resolveEnd = DateTime.now().millisecondsSinceEpoch;
+    debugSessionLog('pulse_shell.dart:_resolveAccountThenLoad', 'resolveAccountThenLoad end', {'durationMs': resolveEnd - resolveStart, 'initialRoute': widget.initialRouteName}, 'B');
+    // #endregion
   }
 
   @override
@@ -394,6 +406,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    // #region agent log
+    debugSessionLog('pulse_shell.dart:build', 'PulseShell build', {'selectedIndex': _selectedIndex, 'initialRouteName': widget.initialRouteName}, 'A');
+    // #endregion
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
     return Scaffold(
