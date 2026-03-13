@@ -131,7 +131,7 @@ String get _kFallbackAccountId {
           }
           if (snapshot.hasData && snapshot.data != null) {
             return const InactivityDetector(
-              timeout: Duration(minutes: 15),
+              timeout: Duration(minutes: 3),
               child: _PostAuthGate(),
             );
           }

@@ -14,7 +14,7 @@ class InactivityDetector extends StatefulWidget {
   const InactivityDetector({
     super.key,
     required this.child,
-    this.timeout = const Duration(minutes: 15),
+    this.timeout = const Duration(minutes: 3),
   });
 
   final Widget child;
