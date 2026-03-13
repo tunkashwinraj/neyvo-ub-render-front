@@ -484,7 +484,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     final resolutionPrev = (_perfPrevious?['resolution_rate_pct'] as num?)?.toDouble() ??
         (_perfPrevious?['resolution_rate'] as num?)?.toDouble();
     final studentsReached = _computeUniqueStudentsReached();
-    final timeSavedHours = (_perf?['time_saved_hours'] as num?)?.toDouble();
 
     final totalCoreDepartments = _recommendedOperators.length;
     final coveredDepartments = _operatorCount.clamp(0, totalCoreDepartments);
@@ -2087,7 +2086,7 @@ class _VoiceCoverageCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: () => Navigator.of(context, rootNavigator: true)
-                          .pushNamed(PulseRouteNames.managedProfiles),
+                          .pushNamed(PulseRouteNames.agents),
                       icon: const Icon(Icons.add),
                       label: const Text('Create operator'),
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
