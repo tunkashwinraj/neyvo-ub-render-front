@@ -225,7 +225,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   Future<void> _loadPreviewAudience() async {
-    if (!_isEducationOrg || _audienceMode != 'filters') return;
+    if (_audienceMode != 'filters') return;
     setState(() => _previewLoading = true);
     try {
       final res = await NeyvoPulseApi.getCampaignsPreviewAudience(
@@ -2262,109 +2262,108 @@ class _CampaignsPageState extends State<CampaignsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Audience', style: NeyvoType.titleMedium),
-            if (_isEducationOrg) ...[
-              const SizedBox(height: NeyvoSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        _audienceMode = 'contact_list';
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.all(NeyvoSpacing.md),
-                        decoration: BoxDecoration(
-                          border: Border.all(
+            const SizedBox(height: NeyvoSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'contact_list';
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'contact_list'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'contact_list'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'From Contact List',
+                          style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'contact_list'
                                 ? NeyvoTheme.teal
-                                : NeyvoTheme.border,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          color: _audienceMode == 'contact_list'
-                              ? NeyvoTheme.teal.withValues(alpha: 0.1)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'From Contact List',
-                            style: NeyvoType.bodyMedium.copyWith(
-                              color: _audienceMode == 'contact_list'
-                                  ? NeyvoTheme.teal
-                                  : NeyvoTheme.textSecondary,
-                            ),
+                                : NeyvoTheme.textSecondary,
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: NeyvoSpacing.md),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        _audienceMode = 'filters';
-                        _loadPreviewAudience();
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.all(NeyvoSpacing.md),
-                        decoration: BoxDecoration(
-                          border: Border.all(
+                ),
+                const SizedBox(width: NeyvoSpacing.md),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'filters';
+                      _loadPreviewAudience();
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'filters'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'filters'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Smart Filter',
+                          style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'filters'
                                 ? NeyvoTheme.teal
-                                : NeyvoTheme.border,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          color: _audienceMode == 'filters'
-                              ? NeyvoTheme.teal.withValues(alpha: 0.1)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Smart Filter',
-                            style: NeyvoType.bodyMedium.copyWith(
-                              color: _audienceMode == 'filters'
-                                  ? NeyvoTheme.teal
-                                  : NeyvoTheme.textSecondary,
-                            ),
+                                : NeyvoTheme.textSecondary,
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: NeyvoSpacing.md),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        _audienceMode = 'excel';
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.all(NeyvoSpacing.md),
-                        decoration: BoxDecoration(
-                          border: Border.all(
+                ),
+                const SizedBox(width: NeyvoSpacing.md),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'excel';
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'excel'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'excel'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Search by Excel & selection',
+                          textAlign: TextAlign.center,
+                          style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'excel'
                                 ? NeyvoTheme.teal
-                                : NeyvoTheme.border,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          color: _audienceMode == 'excel'
-                              ? NeyvoTheme.teal.withValues(alpha: 0.1)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Search by Excel & selection',
-                            textAlign: TextAlign.center,
-                            style: NeyvoType.bodyMedium.copyWith(
-                              color: _audienceMode == 'excel'
-                                  ? NeyvoTheme.teal
-                                  : NeyvoTheme.textSecondary,
-                            ),
+                                : NeyvoTheme.textSecondary,
                           ),
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
               if (_audienceMode == 'filters') ...[
                 const SizedBox(height: NeyvoSpacing.lg),
                 CheckboxListTile(
@@ -2423,7 +2422,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               if (_audienceMode == 'contact_list' || _audienceMode == 'excel')
                 const Divider(),
             ],
-            if (_isEducationOrg && _audienceMode == 'excel') ...[
+            if (_audienceMode == 'excel') ...[
               const SizedBox(height: NeyvoSpacing.md),
               Text('Search by excel and selection',
                   style: NeyvoType.titleMedium),
@@ -2475,9 +2474,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ],
               const SizedBox(height: NeyvoSpacing.lg),
             ],
-            if (!_isEducationOrg ||
-                _audienceMode == 'contact_list' ||
-                _audienceMode == 'excel') ...[
+            if (_audienceMode == 'contact_list' || _audienceMode == 'excel') ...[
               if (_isEducationOrg) const SizedBox(height: NeyvoSpacing.md),
               Text('Selection mode', style: NeyvoType.titleMedium),
               const SizedBox(height: NeyvoSpacing.sm),
