@@ -263,6 +263,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
       final systemPrompt = res['system_prompt']?.toString();
       final voicemailMessage = res['voicemail_message']?.toString();
       final operatorSummary = res['operator_summary']?.toString();
+      final firstMessage = res['first_message']?.toString();
       if (systemPrompt != null) {
         setState(() {
           _state = UniversalWizardState(
@@ -274,6 +275,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
               generatedSystemPrompt: systemPrompt,
               generatedVoicemailMessage: voicemailMessage,
               generatedSummary: operatorSummary,
+              generatedFirstMessage: firstMessage,
               lastRegeneratedAt: DateTime.now().toIso8601String(),
             ),
           );
@@ -318,6 +320,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
         'custom_system_prompt': _state.step5.generatedSystemPrompt ?? customPrompt,
         'voicemail_message': _state.step5.generatedVoicemailMessage ?? voicemail,
         'operator_summary': _state.step5.generatedSummary ?? summary,
+        'first_message': _state.step5.generatedFirstMessage ?? '',
         'enabled_tool_keys': _state.step4.enabledToolKeys,
       };
       final res = await ManagedProfileApiService.createProfile(payload);
@@ -794,6 +797,21 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
             ),
             child: SelectableText(s5.generatedVoicemailMessage ?? '', style: NeyvoTextStyles.body.copyWith(fontSize: 12)),
           ),
+          if ((s5.generatedFirstMessage ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Opening line (assistant speaks first)', style: NeyvoTextStyles.label),
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NeyvoColors.bgRaised,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: NeyvoColors.borderDefault),
+              ),
+              child: SelectableText(s5.generatedFirstMessage!, style: NeyvoTextStyles.body.copyWith(fontSize: 12)),
+            ),
+          ],
         ] else
           Text(
             'Click "Generate prompt" to create the system prompt and voicemail from your Steps 1–4, then review and save.',
@@ -829,6 +847,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
       'custom_system_prompt': _state.step5.generatedSystemPrompt ?? '(will generate on save)',
       'voicemail_message': _state.step5.generatedVoicemailMessage ?? '',
       'operator_summary': _state.step5.generatedSummary ?? '',
+      'first_message': _state.step5.generatedFirstMessage ?? '',
       'enabled_tool_keys': _state.step4.enabledToolKeys,
     };
     final encoder = JsonEncoder.withIndent('  ');

@@ -374,6 +374,7 @@ class WizardStep5Review {
   final String? generatedSystemPrompt;
   final String? generatedVoicemailMessage;
   final String? generatedSummary;
+  final String? generatedFirstMessage;
   final String? fullAssistantConfigJson;
   final String? lastRegeneratedAt;
 
@@ -381,6 +382,7 @@ class WizardStep5Review {
     this.generatedSystemPrompt,
     this.generatedVoicemailMessage,
     this.generatedSummary,
+    this.generatedFirstMessage,
     this.fullAssistantConfigJson,
     this.lastRegeneratedAt,
   });
@@ -389,6 +391,7 @@ class WizardStep5Review {
         if (generatedSystemPrompt != null) 'generatedSystemPrompt': generatedSystemPrompt,
         if (generatedVoicemailMessage != null) 'generatedVoicemailMessage': generatedVoicemailMessage,
         if (generatedSummary != null) 'generatedSummary': generatedSummary,
+        if (generatedFirstMessage != null) 'generatedFirstMessage': generatedFirstMessage,
         if (fullAssistantConfigJson != null) 'fullAssistantConfigJson': fullAssistantConfigJson,
         if (lastRegeneratedAt != null) 'lastRegeneratedAt': lastRegeneratedAt,
       };
@@ -399,6 +402,7 @@ class WizardStep5Review {
       generatedSystemPrompt: json['generatedSystemPrompt']?.toString(),
       generatedVoicemailMessage: json['generatedVoicemailMessage']?.toString(),
       generatedSummary: json['generatedSummary']?.toString(),
+      generatedFirstMessage: json['generatedFirstMessage']?.toString(),
       fullAssistantConfigJson: json['fullAssistantConfigJson']?.toString(),
       lastRegeneratedAt: json['lastRegeneratedAt']?.toString(),
     );
