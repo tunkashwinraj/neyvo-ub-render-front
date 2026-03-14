@@ -2,13 +2,18 @@
 // Campaigns: bulk outbound calls with filters, templates, and scheduling (like ad campaigns).
 
 import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+
 import '../api/spearia_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
+import '../utils/csv_import.dart';
 import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
 
@@ -80,6 +85,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
   int? _walletCredits;
   int? _creditsPerMinute;
   bool _useTemplate = false;
+  // Audience selection via CSV upload (Search by excel and selection).
+  String _audienceCsvText = '';
+  Set<String> _audienceCsvMatchedStudentIds = {};
+  List<String> _audienceCsvErrors = [];
 
   @override
   void initState() {
@@ -216,7 +225,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   Future<void> _loadPreviewAudience() async {
-    if (!_isEducationOrg || _audienceMode != 'filters') return;
+    if (_audienceMode != 'filters') return;
     setState(() => _previewLoading = true);
     try {
       final res = await NeyvoPulseApi.getCampaignsPreviewAudience(
@@ -239,6 +248,139 @@ class _CampaignsPageState extends State<CampaignsPage> {
         _previewLoading = false;
       });
     }
+  }
+
+  // --- Audience selection via CSV (Search by excel and selection) ---
+
+  Future<void> _pickAudienceCsv() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty || result.files.single.bytes == null) return;
+    final text = String.fromCharCodes(result.files.single.bytes!);
+    _matchStudentsFromCsv(text);
+  }
+
+  Future<void> _downloadAudienceTemplate() async {
+    // Reuse the existing students import template.
+    if (kIsWeb) {
+      final url = '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await SpeariaApi.launchExternal(url);
+      if (ok) return;
+    }
+    try {
+      final template = await NeyvoPulseApi.getStudentsImportTemplate();
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Student CSV template'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                template,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            ],
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Template: name,phone,email,student_id,balance,due_date,late_fee,notes (first_name/last_name also supported)',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _matchStudentsFromCsv(String csvText) {
+    List<Map<String, String>> rows;
+    try {
+      rows = parseCsvToMaps(csvText);
+    } catch (e) {
+      setState(() {
+        _audienceCsvText = csvText;
+        _audienceCsvMatchedStudentIds = {};
+        _audienceCsvErrors = ['Invalid CSV format: $e'];
+      });
+      return;
+    }
+    if (rows.isEmpty) {
+      setState(() {
+        _audienceCsvText = csvText;
+        _audienceCsvMatchedStudentIds = {};
+        _audienceCsvErrors = ['CSV has no data rows'];
+      });
+      return;
+    }
+
+    // Build lookup maps from existing students.
+    String _normalizePhone(String p) => p.replaceAll(RegExp(r'[^0-9]'), '');
+    final byStudentId = <String, String>{}; // student_id -> id
+    final byPhone = <String, String>{}; // normalized phone -> id
+    for (final s in _students) {
+      final id = (s['id'] ?? '').toString();
+      if (id.isEmpty) continue;
+      final sid = (s['student_id'] ?? '').toString();
+      if (sid.isNotEmpty) byStudentId[sid.toLowerCase()] = id;
+      final phone = (s['phone'] ?? s['phone_e164'] ?? '').toString();
+      final norm = _normalizePhone(phone);
+      if (norm.isNotEmpty && !byPhone.containsKey(norm)) {
+        byPhone[norm] = id;
+      }
+    }
+
+    String getVal(Map<String, String> r, List<String> keys) {
+      for (final k in keys) {
+        for (final key in r.keys) {
+          if (key.toLowerCase().replaceAll(RegExp(r'[\s_\-]'), '') ==
+              k.toLowerCase().replaceAll(RegExp(r'[\s_\-]'), '')) {
+            final v = r[key]?.trim() ?? '';
+            if (v.isNotEmpty) return v;
+          }
+        }
+      }
+      return '';
+    }
+
+    final matched = <String>{};
+    final errs = <String>[];
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final rowNum = i + 2; // header is row 1
+      final sid = getVal(r, ['student_id', 'id', 'studentid']);
+      final phone = getVal(r, ['phone', 'mobile', 'cell']);
+      String? id;
+      if (sid.isNotEmpty) {
+        id = byStudentId[sid.toLowerCase()];
+      }
+      if (id == null && phone.isNotEmpty) {
+        id = byPhone[_normalizePhone(phone)];
+      }
+      if (id != null && id.isNotEmpty) {
+        matched.add(id);
+      } else {
+        errs.add('Row $rowNum: no matching student for id="$sid" phone="$phone"');
+      }
+    }
+
+    setState(() {
+      _audienceCsvText = csvText;
+      _audienceCsvMatchedStudentIds = matched;
+      _audienceCsvErrors = errs;
+      // Seed manual selection with all matched students.
+      _manualAudienceSelection = true;
+      _selectedStudentIds = matched;
+      _selectAll = matched.isNotEmpty;
+    });
   }
 
   Future<List<Map<String, dynamic>>> _loadTemplates() async {
@@ -471,6 +613,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   List<Map<String, dynamic>> get _filteredStudents {
     var list = List<Map<String, dynamic>>.from(_students);
+    // When using the "Search by excel and selection" audience mode, restrict the
+    // list to students matched from the uploaded CSV (if any).
+    if (_audienceMode == 'excel' && _audienceCsvMatchedStudentIds.isNotEmpty) {
+      list = list
+          .where((s) => _audienceCsvMatchedStudentIds.contains((s['id'] ?? '').toString()))
+          .toList();
+    }
     if (_filterType == 'balance_above') {
       final min = double.tryParse(_balanceMinController.text.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
       list = list.where((s) {
@@ -517,7 +666,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
       if (_selectAll) {
         _selectedStudentIds.clear();
       } else {
-        _selectedStudentIds = _filteredStudents.map((s) => s['id'] as String? ?? '').where((e) => e.isNotEmpty).toSet();
+        _selectedStudentIds =
+            _filteredStudents.map((s) => s['id'] as String? ?? '').where((e) => e.isNotEmpty).toSet();
       }
       _selectAll = !_selectAll;
     });
@@ -2112,46 +2262,108 @@ class _CampaignsPageState extends State<CampaignsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Audience', style: NeyvoType.titleMedium),
-            if (_isEducationOrg) ...[
-              const SizedBox(height: NeyvoSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        _audienceMode = 'contact_list';
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.all(NeyvoSpacing.md),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: _audienceMode == 'contact_list' ? NeyvoTheme.teal : NeyvoTheme.border),
-                          borderRadius: BorderRadius.circular(8),
-                          color: _audienceMode == 'contact_list' ? NeyvoTheme.teal.withValues(alpha: 0.1) : null,
+            const SizedBox(height: NeyvoSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'contact_list';
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'contact_list'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
                         ),
-                        child: Center(child: Text('From Contact List', style: NeyvoType.bodyMedium.copyWith(color: _audienceMode == 'contact_list' ? NeyvoTheme.teal : NeyvoTheme.textSecondary))),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'contact_list'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'From Contact List',
+                          style: NeyvoType.bodyMedium.copyWith(
+                            color: _audienceMode == 'contact_list'
+                                ? NeyvoTheme.teal
+                                : NeyvoTheme.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: NeyvoSpacing.md),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        _audienceMode = 'filters';
-                        _loadPreviewAudience();
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.all(NeyvoSpacing.md),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: _audienceMode == 'filters' ? NeyvoTheme.teal : NeyvoTheme.border),
-                          borderRadius: BorderRadius.circular(8),
-                          color: _audienceMode == 'filters' ? NeyvoTheme.teal.withValues(alpha: 0.1) : null,
+                ),
+                const SizedBox(width: NeyvoSpacing.md),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'filters';
+                      _loadPreviewAudience();
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'filters'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
                         ),
-                        child: Center(child: Text('Smart Filter', style: NeyvoType.bodyMedium.copyWith(color: _audienceMode == 'filters' ? NeyvoTheme.teal : NeyvoTheme.textSecondary))),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'filters'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Smart Filter',
+                          style: NeyvoType.bodyMedium.copyWith(
+                            color: _audienceMode == 'filters'
+                                ? NeyvoTheme.teal
+                                : NeyvoTheme.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: NeyvoSpacing.md),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _audienceMode = 'excel';
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _audienceMode == 'excel'
+                              ? NeyvoTheme.teal
+                              : NeyvoTheme.border,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: _audienceMode == 'excel'
+                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Search by Excel & selection',
+                          textAlign: TextAlign.center,
+                          style: NeyvoType.bodyMedium.copyWith(
+                            color: _audienceMode == 'excel'
+                                ? NeyvoTheme.teal
+                                : NeyvoTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
               if (_audienceMode == 'filters') ...[
                 const SizedBox(height: NeyvoSpacing.lg),
                 CheckboxListTile(
@@ -2207,9 +2419,62 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     ),
                   ),
               ],
-              if (_audienceMode == 'contact_list') const Divider(),
+              if (_audienceMode == 'contact_list' || _audienceMode == 'excel')
+                const Divider(),
             ],
-            if (!_isEducationOrg || _audienceMode == 'contact_list') ...[
+            if (_audienceMode == 'excel') ...[
+              const SizedBox(height: NeyvoSpacing.md),
+              Text('Search by excel and selection',
+                  style: NeyvoType.titleMedium),
+              const SizedBox(height: NeyvoSpacing.sm),
+              Text(
+                'Upload the same CSV template used for student import. We will match rows to existing students by student ID or phone so you can select them for this campaign.',
+                style:
+                    NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: _pickAudienceCsv,
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Upload CSV'),
+                  ),
+                  const SizedBox(width: NeyvoSpacing.sm),
+                  TextButton(
+                    onPressed: _downloadAudienceTemplate,
+                    child: const Text('Download template'),
+                  ),
+                ],
+              ),
+              if (_audienceCsvText.isNotEmpty) ...[
+                const SizedBox(height: NeyvoSpacing.sm),
+                Text(
+                  '${_audienceCsvMatchedStudentIds.length} students matched from CSV.'
+                  '${_audienceCsvErrors.isEmpty ? '' : ' Some rows could not be matched.'}',
+                  style: NeyvoType.bodySmall,
+                ),
+                if (_audienceCsvErrors.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: NeyvoSpacing.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _audienceCsvErrors
+                          .take(3)
+                          .map(
+                            (e) => Text(
+                              '• $e',
+                              style: NeyvoType.bodySmall
+                                  .copyWith(color: NeyvoTheme.error),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: NeyvoSpacing.lg),
+            ],
+            if (_audienceMode == 'contact_list' || _audienceMode == 'excel') ...[
               if (_isEducationOrg) const SizedBox(height: NeyvoSpacing.md),
               Text('Selection mode', style: NeyvoType.titleMedium),
               const SizedBox(height: NeyvoSpacing.sm),
