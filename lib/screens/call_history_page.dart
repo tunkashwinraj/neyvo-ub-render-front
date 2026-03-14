@@ -371,7 +371,16 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     
     return Scaffold(
-      appBar: AppBar(title: const Text('Call History')),
+      appBar: AppBar(
+        title: const Text('Call History'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading ? null : _load,
+            tooltip: 'Refresh (load latest 20 calls)',
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: SingleChildScrollView(
