@@ -260,11 +260,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
                     if (isGoodwin)
-                      Image.asset(
-                        'assets/goodwin_logo/goodwin_horiz_rgb.png',
-                        fit: BoxFit.contain,
-                        height: 58,
-                      )
+                      _GoodwinLogoWidget(height: 58)
                     else if (isUb)
                       SvgPicture.asset(
                         'assets/ub_logo/ub_logo_horizontal_purple.svg',
@@ -446,6 +442,39 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Goodwin logo: tenant URL or text fallback (avoids missing asset crash).
+class _GoodwinLogoWidget extends StatelessWidget {
+  const _GoodwinLogoWidget({required this.height});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final tenant = TenantScope.of(context)?.config;
+    final primary = TenantBrand.primary(context);
+    final url = tenant?.logoHorizontalColorUrl ?? tenant?.logoHorizontalWhiteUrl;
+    if (url != null && url.isNotEmpty) {
+      final lower = url.toLowerCase();
+      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+        return Image.network(
+          url,
+          fit: BoxFit.contain,
+          height: height,
+          errorBuilder: (_, __, ___) => Text(
+            (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
+            style: NeyvoType.headlineMediumLight.copyWith(color: primary),
+            textAlign: TextAlign.center,
+          ),
+        );
+      }
+    }
+    return Text(
+      (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
+      style: NeyvoType.headlineMediumLight.copyWith(color: primary),
+      textAlign: TextAlign.center,
     );
   }
 }
