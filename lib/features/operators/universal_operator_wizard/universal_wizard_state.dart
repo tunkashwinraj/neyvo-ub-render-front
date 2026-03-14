@@ -20,7 +20,7 @@ class WizardStep1BusinessIdentity {
     this.businessName = '',
     this.industryVertical = 'Education',
     this.industryOther,
-    this.department = 'Education',
+    this.department = 'admissions',
     this.departmentOther,
     this.operatorDisplayName = '',
     this.language = 'en-US',
@@ -85,11 +85,17 @@ class WizardStep1BusinessIdentity {
       );
 }
 
-/// Step 2 — Operator Persona & Voice
+/// Voice tone options (UI only; backend gets tone from personalityAdjectives).
+const List<String> kVoiceToneIds = ['warm_friendly', 'professional_clear', 'calm_reassuring'];
+const Map<String, String> kVoiceToneLabels = {
+  'warm_friendly': 'Warm & friendly',
+  'professional_clear': 'Professional & clear',
+  'calm_reassuring': 'Calm & reassuring',
+};
+
+/// Step 2 — Voice only (tone + voice picker). No agent name, role, or technical sliders; tier handles config.
 class WizardStep2PersonaVoice {
-  final String agentFirstName;
-  final String roleTitle;
-  final List<String> personalityAdjectives;
+  final String voiceTone;
   final String voiceProvider;
   final String voiceId;
   final double stability;
@@ -97,9 +103,7 @@ class WizardStep2PersonaVoice {
   final double style;
 
   const WizardStep2PersonaVoice({
-    this.agentFirstName = '',
-    this.roleTitle = '',
-    this.personalityAdjectives = const ['warm', 'professional'],
+    this.voiceTone = 'warm_friendly',
     this.voiceProvider = '11labs',
     this.voiceId = '',
     this.stability = 0.5,
@@ -107,9 +111,19 @@ class WizardStep2PersonaVoice {
     this.style = 0.3,
   });
 
+  List<String> get personalityAdjectives {
+    switch (voiceTone) {
+      case 'professional_clear':
+        return ['professional', 'clear'];
+      case 'calm_reassuring':
+        return ['calm', 'reassuring'];
+      default:
+        return ['warm', 'friendly'];
+    }
+  }
+
   Map<String, dynamic> toJson() => {
-        'agentFirstName': agentFirstName,
-        'roleTitle': roleTitle,
+        'voiceTone': voiceTone,
         'personalityAdjectives': personalityAdjectives,
         'voiceProvider': voiceProvider,
         'voiceId': voiceId,
@@ -120,11 +134,9 @@ class WizardStep2PersonaVoice {
 
   static WizardStep2PersonaVoice fromJson(Map<String, dynamic>? json) {
     if (json == null) return const WizardStep2PersonaVoice();
-    final adj = json['personalityAdjectives'];
+    final tone = (json['voiceTone'] ?? 'warm_friendly').toString();
     return WizardStep2PersonaVoice(
-      agentFirstName: (json['agentFirstName'] ?? '').toString(),
-      roleTitle: (json['roleTitle'] ?? '').toString(),
-      personalityAdjectives: adj is List ? adj.map((e) => e.toString()).toList() : const ['warm', 'professional'],
+      voiceTone: kVoiceToneIds.contains(tone) ? tone : 'warm_friendly',
       voiceProvider: (json['voiceProvider'] ?? '11labs').toString(),
       voiceId: (json['voiceId'] ?? '').toString(),
       stability: (json['stability'] is num) ? (json['stability'] as num).toDouble() : 0.5,
@@ -134,9 +146,7 @@ class WizardStep2PersonaVoice {
   }
 
   WizardStep2PersonaVoice copyWith({
-    String? agentFirstName,
-    String? roleTitle,
-    List<String>? personalityAdjectives,
+    String? voiceTone,
     String? voiceProvider,
     String? voiceId,
     double? stability,
@@ -144,9 +154,7 @@ class WizardStep2PersonaVoice {
     double? style,
   }) =>
       WizardStep2PersonaVoice(
-        agentFirstName: agentFirstName ?? this.agentFirstName,
-        roleTitle: roleTitle ?? this.roleTitle,
-        personalityAdjectives: personalityAdjectives ?? this.personalityAdjectives,
+        voiceTone: voiceTone ?? this.voiceTone,
         voiceProvider: voiceProvider ?? this.voiceProvider,
         voiceId: voiceId ?? this.voiceId,
         stability: stability ?? this.stability,
@@ -203,7 +211,28 @@ class ConversationStepModel {
   }
 }
 
-/// Step 3 — Conversation Goals & Flow
+/// Refining question for goal-based follow-up (step after primary objective).
+class RefiningQuestion {
+  final String id;
+  final String text;
+  final String type; // 'checkbox', 'mcq', 'text'
+  final List<String> options;
+
+  const RefiningQuestion({required this.id, this.text = '', this.type = 'text', this.options = const []});
+
+  Map<String, dynamic> toJson() => {'id': id, 'text': text, 'type': type, 'options': options};
+  static RefiningQuestion fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const RefiningQuestion(id: '');
+    return RefiningQuestion(
+      id: (json['id'] ?? '').toString(),
+      text: (json['text'] ?? '').toString(),
+      type: (json['type'] ?? 'text').toString(),
+      options: json['options'] is List ? (json['options'] as List).map((e) => e.toString()).toList() : const [],
+    );
+  }
+}
+
+/// Step 3 — Conversation Goals + Refining Q&A (no call closing / fallback in UI; backend uses defaults).
 class WizardStep3ConversationFlow {
   final String primaryObjective;
   final List<ConversationStepModel> steps;
@@ -212,6 +241,8 @@ class WizardStep3ConversationFlow {
   final int? fallbackMaxRetriesBeforeEscalation;
   final String callClosingBehavior;
   final String? closingTransferNumber;
+  final List<RefiningQuestion> refiningQuestions;
+  final Map<String, dynamic> refiningAnswers;
 
   const WizardStep3ConversationFlow({
     this.primaryObjective = '',
@@ -221,6 +252,8 @@ class WizardStep3ConversationFlow {
     this.fallbackMaxRetriesBeforeEscalation,
     this.callClosingBehavior = 'endCall',
     this.closingTransferNumber,
+    this.refiningQuestions = const [],
+    this.refiningAnswers = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -231,11 +264,15 @@ class WizardStep3ConversationFlow {
         if (fallbackMaxRetriesBeforeEscalation != null) 'fallbackMaxRetriesBeforeEscalation': fallbackMaxRetriesBeforeEscalation,
         'callClosingBehavior': callClosingBehavior,
         if (closingTransferNumber != null) 'closingTransferNumber': closingTransferNumber,
+        'refiningQuestions': refiningQuestions.map((q) => q.toJson()).toList(),
+        'refiningAnswers': refiningAnswers,
       };
 
   static WizardStep3ConversationFlow fromJson(Map<String, dynamic>? json) {
     if (json == null) return const WizardStep3ConversationFlow();
     final stepsList = json['steps'];
+    final rq = json['refiningQuestions'];
+    final ra = json['refiningAnswers'];
     return WizardStep3ConversationFlow(
       primaryObjective: (json['primaryObjective'] ?? '').toString(),
       steps: stepsList is List
@@ -248,6 +285,8 @@ class WizardStep3ConversationFlow {
       fallbackMaxRetriesBeforeEscalation: json['fallbackMaxRetriesBeforeEscalation'] is int ? json['fallbackMaxRetriesBeforeEscalation'] as int : null,
       callClosingBehavior: (json['callClosingBehavior'] ?? 'endCall').toString(),
       closingTransferNumber: json['closingTransferNumber']?.toString(),
+      refiningQuestions: rq is List ? rq.map((e) => RefiningQuestion.fromJson(e is Map ? Map<String, dynamic>.from(e) : null)).toList() : const [],
+      refiningAnswers: ra is Map ? Map<String, dynamic>.from(ra) : const {},
     );
   }
 
@@ -259,6 +298,8 @@ class WizardStep3ConversationFlow {
     int? fallbackMaxRetriesBeforeEscalation,
     String? callClosingBehavior,
     String? closingTransferNumber,
+    List<RefiningQuestion>? refiningQuestions,
+    Map<String, dynamic>? refiningAnswers,
   }) =>
       WizardStep3ConversationFlow(
         primaryObjective: primaryObjective ?? this.primaryObjective,
@@ -268,6 +309,8 @@ class WizardStep3ConversationFlow {
         fallbackMaxRetriesBeforeEscalation: fallbackMaxRetriesBeforeEscalation ?? this.fallbackMaxRetriesBeforeEscalation,
         callClosingBehavior: callClosingBehavior ?? this.callClosingBehavior,
         closingTransferNumber: closingTransferNumber ?? this.closingTransferNumber,
+        refiningQuestions: refiningQuestions ?? this.refiningQuestions,
+        refiningAnswers: refiningAnswers ?? this.refiningAnswers,
       );
 }
 
@@ -410,16 +453,25 @@ class UniversalWizardState {
   }
 }
 
-/// Preset departments for Step 1
+/// Department options with labels for Step 1 (icon-style selection, aligned with Create Operator).
+const List<Map<String, String>> kDepartmentIcons = [
+  {'id': 'admissions', 'label': 'Admissions'},
+  {'id': 'student_financial_services', 'label': 'Student Financial Services'},
+  {'id': 'registrar', 'label': 'Registrar'},
+  {'id': 'residential_life_and_housing', 'label': 'Housing'},
+  {'id': 'information_technology_help_desk', 'label': 'IT Help Desk'},
+  {'id': 'general_front_desk', 'label': 'General Front Desk'},
+];
+
+/// Legacy flat list for backward compatibility
 const List<String> departmentPresets = [
-  'Sales',
-  'Support',
-  'Legal',
-  'Healthcare',
-  'Finance',
-  'HR',
-  'Real Estate',
+  'Admissions',
+  'Student Financial Services',
+  'Registrar',
+  'Housing',
+  'IT Help Desk',
+  'General Front Desk',
   'Education',
-  'Collections',
-  'Appointments',
+  'Healthcare',
+  'Other',
 ];

@@ -53,6 +53,13 @@ String _resolveTenantId() {
   }
   final host = Uri.base.host.toLowerCase();
 
+  // Local dev: use ?tenant=goodwin or ?tenant=ub to switch (e.g. http://localhost:xxxx/?tenant=goodwin)
+  if (host == 'localhost' || host == '127.0.0.1') {
+    final q = (Uri.base.queryParameters['tenant'] ?? '').toLowerCase().trim();
+    if (q == 'goodwin') return 'goodwin';
+    if (q == 'ub') return 'ub';
+  }
+
   // Prod custom domains
   if (host.startsWith('goodwin.')) return 'goodwin';
   if (host.startsWith('ub.')) return 'ub';

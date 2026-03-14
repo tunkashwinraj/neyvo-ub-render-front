@@ -4,26 +4,28 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../neyvo_pulse_api.dart';
 import '../../managed_profiles/managed_profile_api_service.dart';
 import '../../managed_profiles/profile_detail_page.dart';
 import '../../../theme/neyvo_theme.dart';
+import '../../../utils/voice_preview_player.dart';
 import 'universal_wizard_state.dart';
 
 const String _draftKey = 'universal_operator_wizard_draft';
-const int _totalSteps = 5;
+const int _totalSteps = 6;
 
-/// Suggested primary objective text by department (Step 3).
-const Map<String, String> _departmentPrimaryObjectiveSuggestions = {
-  'Education': 'Confirm the student\'s attendance and answer questions about next steps, deadlines, and resources.',
-  'Admissions': 'Welcome the prospect, answer questions about programs and application steps, and offer to schedule a call or campus visit.',
-  'Financial Aid': 'Explain aid status, next steps, and deadlines; offer to transfer to a specialist if needed.',
-  'Registrar': 'Answer registration, transcripts, and enrollment verification questions; direct to forms or portal when needed.',
-  'Healthcare': 'Confirm appointment or referral, collect brief intake information, and direct to the right department or voicemail.',
-  'Other': 'Help the caller with their request, answer questions, and offer next steps or transfer as appropriate.',
-};
+/// Refining questions template (goal-based). Shown after user enters primary objective.
+List<RefiningQuestion> buildRefiningQuestionsForGoal(String goal) {
+  return [
+    const RefiningQuestion(id: 'q1', text: 'Should the operator offer to schedule a callback?', type: 'mcq', options: ['Yes, always', 'Only if the caller asks', 'No']),
+    const RefiningQuestion(id: 'q2', text: 'Should the operator transfer to a live person when needed?', type: 'mcq', options: ['Yes', 'No', 'Only for specific topics']),
+    const RefiningQuestion(id: 'q3', text: 'What level of detail should the operator give?', type: 'mcq', options: ['Brief and to the point', 'Detailed when asked', 'Proactive and thorough']),
+    const RefiningQuestion(id: 'q4', text: 'Should the operator collect any information from the caller?', type: 'checkbox', options: ['Name', 'Phone', 'Student ID', 'Email', 'None']),
+    const RefiningQuestion(id: 'q5_extra', text: 'Anything else you want this operator to do or avoid?', type: 'text', options: []),
+  ];
+}
 
 class UniversalOperatorWizardScreen extends StatefulWidget {
   const UniversalOperatorWizardScreen({super.key, this.initialState});
@@ -42,10 +44,12 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
   bool _saving = false;
   List<Map<String, dynamic>> _tools = [];
   bool _toolsLoaded = false;
+  List<Map<String, dynamic>> _voicesForTier = [];
+  bool _voicesLoaded = false;
+  String? _voicesError;
+  String? _playingVoiceId;
   /// When non-null, a draft was found; show "Restore or start fresh?" dialog before applying.
   String? _pendingDraftJson;
-  final FlutterTts _tts = FlutterTts();
-  bool _isPlayingPreview = false;
 
   @override
   void initState() {
@@ -53,6 +57,45 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
     _state = widget.initialState ?? const UniversalWizardState();
     _loadDraft();
     _loadTools();
+    _loadVoices();
+  }
+
+  Future<void> _loadVoices() async {
+    if (_voicesLoaded) return;
+    setState(() { _voicesError = null; });
+    try {
+      final res = await NeyvoPulseApi.getVoices(tier: 'all');
+      final list = _extractVoicesFromResponse(res);
+      if (mounted) {
+        setState(() {
+          _voicesForTier = list;
+          _voicesLoaded = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _voicesError = e.toString(); _voicesLoaded = true; });
+    }
+  }
+
+  List<Map<String, dynamic>> _extractVoicesFromResponse(dynamic res) {
+    final List<Map<String, dynamic>> out = [];
+    void addFromList(List<dynamic> raw) {
+      for (final v in raw) {
+        if (v is Map) out.add(Map<String, dynamic>.from(v));
+      }
+    }
+    if (res is List) {
+      addFromList(res);
+    } else if (res is Map) {
+      if (res['voices'] is List) {
+        addFromList(res['voices'] as List);
+      } else {
+        for (final key in ['neutral', 'natural', 'ultra']) {
+          if (res[key] is List) addFromList(res[key] as List);
+        }
+      }
+    }
+    return out;
   }
 
   Future<void> _loadDraft() async {
@@ -141,18 +184,71 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
     }
   }
 
+  Future<void> _onNext() async {
+    if (_step == 2 && _state.step3.primaryObjective.trim().isNotEmpty) {
+      setState(() { _loading = true; _error = null; });
+      List<RefiningQuestion> questions;
+      bool usedFallback = false;
+      try {
+        final res = await ManagedProfileApiService.aiGoalQuestions(_state.step3.primaryObjective.trim());
+        if (res['error'] != null) {
+          questions = buildRefiningQuestionsForGoal(_state.step3.primaryObjective);
+          usedFallback = true;
+        } else {
+          final raw = res['questions'];
+          if (raw is List && raw.isNotEmpty) {
+            questions = raw.map((e) => RefiningQuestion.fromJson(e is Map ? Map<String, dynamic>.from(e) : null)).where((q) => q.id.isNotEmpty && q.text.isNotEmpty).toList();
+            if (questions.length < 4) {
+              questions = buildRefiningQuestionsForGoal(_state.step3.primaryObjective);
+              usedFallback = true;
+            }
+          } else {
+            questions = buildRefiningQuestionsForGoal(_state.step3.primaryObjective);
+            usedFallback = true;
+          }
+        }
+      } catch (_) {
+        questions = buildRefiningQuestionsForGoal(_state.step3.primaryObjective);
+        usedFallback = true;
+      }
+      if (!mounted) return;
+      setState(() {
+        _state = UniversalWizardState(
+          step1: _state.step1,
+          step2: _state.step2,
+          step3: _state.step3.copyWith(refiningQuestions: questions),
+          step4: _state.step4,
+          step5: _state.step5,
+        );
+        _step++;
+        _loading = false;
+      });
+      _persistDraft();
+      if (mounted && usedFallback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: const Text('Using default questions.'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } else {
+      setState(() => _step++);
+      _persistDraft();
+    }
+  }
+
   bool _canProceed() {
     switch (_step) {
       case 0:
-        return _state.step1.businessName.trim().isNotEmpty &&
-            _state.step1.operatorDisplayName.trim().isNotEmpty;
+        return _state.step1.operatorDisplayName.trim().isNotEmpty;
       case 1:
-        return _state.step2.agentFirstName.trim().isNotEmpty;
+        return true;
       case 2:
         return _state.step3.primaryObjective.trim().isNotEmpty;
       case 3:
-        return true;
       case 4:
+      case 5:
         return true;
       default:
         return true;
@@ -210,7 +306,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
         if (!mounted) return;
         final updated = _state;
         if (updated.step5.generatedSystemPrompt == null || updated.step5.generatedSystemPrompt!.isEmpty) {
-          setState(() { _error = 'Generate a prompt first (Step 5) or fill Steps 1–4 and regenerate'; _saving = false; });
+          setState(() { _error = 'Generate a prompt first (Review step) or complete previous steps and tap Regenerate.'; _saving = false; });
           return;
         }
       }
@@ -250,10 +346,11 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
   @override
   Widget build(BuildContext context) {
     final stepTitles = [
-      'Business & Department',
-      'Persona & Voice',
-      'Conversation Flow',
-      'Tools & Integrations',
+      'Identity',
+      'Voice',
+      'Goal',
+      'Refine',
+      'Tools',
       'Review & Generate',
     ];
     return Scaffold(
@@ -278,9 +375,23 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
-              child: _loading && _step == 4
-                  ? const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()))
-                  : _buildStepContent(),
+              child: _loading && _step == 2
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(48),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 16),
+                            Text('Generating questions from your goal…', style: NeyvoTextStyles.body),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _loading && _step == 5
+                      ? const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()))
+                      : _buildStepContent(),
             ),
           ),
           Padding(
@@ -296,7 +407,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
                 const SizedBox(width: 8),
                 if (_step < _totalSteps - 1)
                   FilledButton(
-                    onPressed: (_canProceed() && !_saving && !_loading) ? () => setState(() => _step++) : null,
+                    onPressed: (_canProceed() && !_saving && !_loading) ? _onNext : null,
                     style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                     child: const Text('Next'),
                   )
@@ -317,85 +428,33 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
   Widget _buildStepContent() {
     switch (_step) {
       case 0:
-        return _buildStep1();
+        return _buildStep1Identity();
       case 1:
-        return _buildStep2();
+        return _buildStep2Voice();
       case 2:
-        return _buildStep3();
+        return _buildStep3Goal();
       case 3:
-        return _buildStep4();
+        return _buildStepRefining();
       case 4:
-        return _buildStep5();
+        return _buildStep4Tools();
+      case 5:
+        return _buildStep5Review();
       default:
         return const SizedBox();
     }
   }
 
-  static const List<String> _industryVerticals = [
-    'Education', 'Healthcare', 'Admissions', 'Financial Aid', 'Registrar', 'Finance', 'Other',
-  ];
-
-  Widget _buildStep1() {
+  /// Step 0 — Identity: Operator name first, callback, compliance. Industry default Education. Departments as icons.
+  Widget _buildStep1Identity() {
     final s1 = _state.step1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Business name', style: NeyvoTextStyles.label),
-        const SizedBox(height: 4),
-        TextFormField(
-          initialValue: s1.businessName,
-          decoration: const InputDecoration(hintText: 'e.g. Goodwin University', border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: s1.copyWith(businessName: v), step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 16),
-        Text('Industry / vertical', style: NeyvoTextStyles.label),
-        const SizedBox(height: 4),
-        DropdownButtonFormField<String>(
-          initialValue: _industryVerticals.contains(s1.industryVertical) ? s1.industryVertical : 'Other',
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          items: _industryVerticals.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-          onChanged: (v) => _updateState(UniversalWizardState(
-            step1: s1.copyWith(industryVertical: v ?? 'Education', industryOther: v == 'Other' ? s1.industryOther : null),
-            step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5,
-          )),
-        ),
-        if (s1.industryVertical == 'Other') ...[
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: s1.industryOther,
-            decoration: const InputDecoration(labelText: 'Industry (free text)', border: OutlineInputBorder()),
-            onChanged: (v) => _updateState(UniversalWizardState(step1: s1.copyWith(industryOther: v), step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-          ),
-        ],
-        const SizedBox(height: 16),
-        Text('Department', style: NeyvoTextStyles.label),
-        const SizedBox(height: 4),
-        DropdownButtonFormField<String>(
-          initialValue: departmentPresets.contains(s1.department) ? s1.department : 'Other',
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          items: [
-            ...departmentPresets.map((d) => DropdownMenuItem(value: d, child: Text(d))),
-            const DropdownMenuItem(value: 'Other', child: Text('Other')),
-          ],
-          onChanged: (v) => _updateState(UniversalWizardState(
-            step1: s1.copyWith(department: v == 'Other' ? 'Other' : (v ?? 'Education'), departmentOther: v == 'Other' ? s1.departmentOther : null),
-            step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5,
-          )),
-        ),
-        if (s1.department == 'Other') ...[
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: s1.departmentOther,
-            decoration: const InputDecoration(labelText: 'Department (free text)', border: OutlineInputBorder()),
-            onChanged: (v) => _updateState(UniversalWizardState(step1: s1.copyWith(departmentOther: v), step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-          ),
-        ],
-        const SizedBox(height: 16),
-        Text('Operator display name', style: NeyvoTextStyles.label),
+        Text('Operator name', style: NeyvoTextStyles.label),
         const SizedBox(height: 4),
         TextFormField(
           initialValue: s1.operatorDisplayName,
-          decoration: const InputDecoration(hintText: 'e.g. SNAP Check-in', border: OutlineInputBorder()),
+          decoration: const InputDecoration(hintText: 'e.g. Front Desk, Support Operator', border: OutlineInputBorder()),
           onChanged: (v) => _updateState(UniversalWizardState(step1: s1.copyWith(operatorDisplayName: v), step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5)),
         ),
         const SizedBox(height: 16),
@@ -405,6 +464,27 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
           initialValue: s1.mainPhone,
           decoration: const InputDecoration(hintText: 'e.g. 860-727-6936', border: OutlineInputBorder()),
           onChanged: (v) => _updateState(UniversalWizardState(step1: s1.copyWith(mainPhone: v.isEmpty ? null : v), step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5)),
+        ),
+        const SizedBox(height: 16),
+        Text('Department', style: NeyvoTextStyles.label),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: kDepartmentIcons.map((d) {
+            final id = d['id'] ?? '';
+            final label = d['label'] ?? id;
+            final selected = s1.department == id;
+            return FilterChip(
+              selected: selected,
+              label: Text(label),
+              avatar: Icon(selected ? Icons.check_circle : Icons.business, size: 18, color: selected ? NeyvoColors.white : NeyvoColors.textSecondary),
+              onSelected: (_) => _updateState(UniversalWizardState(
+                step1: s1.copyWith(department: id, departmentOther: null),
+                step2: _state.step2, step3: _state.step3, step4: _state.step4, step5: _state.step5,
+              )),
+            );
+          }).toList(),
         ),
         const SizedBox(height: 16),
         Text('Compliance', style: NeyvoTextStyles.label),
@@ -443,161 +523,205 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
     );
   }
 
-  Widget _buildStep2() {
+  /// Step 1 — Voice tone + voice picker (tier handles technical config).
+  Widget _buildStep2Voice() {
     final s2 = _state.step2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextFormField(
-          initialValue: s2.agentFirstName,
-          decoration: const InputDecoration(labelText: 'Agent first name', border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(agentFirstName: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 12),
-        TextFormField(
-          initialValue: s2.roleTitle,
-          decoration: const InputDecoration(labelText: 'Role title', hintText: 'e.g. SNAP Department representative', border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(roleTitle: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 12),
-        Text('Personality (e.g. warm, energetic, empathetic)', style: NeyvoTextStyles.label),
-        const SizedBox(height: 4),
-        TextFormField(
-          initialValue: s2.personalityAdjectives.join(', '),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(
-            step1: _state.step1,
-            step2: s2.copyWith(personalityAdjectives: v.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()),
-            step3: _state.step3, step4: _state.step4, step5: _state.step5,
-          )),
-        ),
-        const SizedBox(height: 16),
-        Text('Voice provider', style: NeyvoTextStyles.label),
-        DropdownButtonFormField<String>(
-          initialValue: s2.voiceProvider,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          items: const [
-            DropdownMenuItem(value: '11labs', child: Text('ElevenLabs')),
-            DropdownMenuItem(value: 'playht', child: Text('PlayHT')),
-            DropdownMenuItem(value: 'deepgram', child: Text('Deepgram')),
-            DropdownMenuItem(value: 'azure', child: Text('Azure')),
-          ],
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(voiceProvider: v ?? '11labs'), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 12),
-        TextFormField(
-          initialValue: s2.voiceId,
-          decoration: const InputDecoration(labelText: 'Voice ID', border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(voiceId: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 16),
-        Text('Stability (lower = more expressive)', style: NeyvoTextStyles.label),
-        Slider(
-          value: s2.stability,
-          min: 0,
-          max: 1,
-          divisions: 10,
-          label: s2.stability.toStringAsFixed(1),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(stability: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        Text('Similarity boost', style: NeyvoTextStyles.label),
-        Slider(
-          value: s2.similarityBoost,
-          min: 0,
-          max: 1,
-          divisions: 10,
-          label: s2.similarityBoost.toStringAsFixed(1),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(similarityBoost: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
-        Text('Style (affects tone variation)', style: NeyvoTextStyles.label),
-        Slider(
-          value: s2.style,
-          min: 0,
-          max: 1,
-          divisions: 10,
-          label: s2.style.toStringAsFixed(1),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(style: v), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
-        ),
+        Text('Voice tone', style: NeyvoTextStyles.label),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: _isPlayingPreview ? null : () => _playVoicePreview(),
-          icon: _isPlayingPreview ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.volume_up),
-          label: Text(_isPlayingPreview ? 'Playing…' : 'Preview voice (device TTS)'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: kVoiceToneIds.map((toneId) {
+            final selected = s2.voiceTone == toneId;
+            return FilterChip(
+              selected: selected,
+              label: Text(kVoiceToneLabels[toneId] ?? toneId),
+              onSelected: (_) => _updateState(UniversalWizardState(step1: _state.step1, step2: s2.copyWith(voiceTone: toneId), step3: _state.step3, step4: _state.step4, step5: _state.step5)),
+            );
+          }).toList(),
         ),
+        const SizedBox(height: 20),
+        Text('Choose a voice', style: NeyvoTextStyles.label),
+        const SizedBox(height: 4),
+        if (_voicesError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(_voicesError!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+          )
+        else if (!_voicesLoaded)
+          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+        else if (_voicesForTier.isEmpty)
+          Text('No voices available. Your plan will use the default voice.', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary))
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 320),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _voicesForTier.length,
+              itemBuilder: (context, index) {
+                final v = _voicesForTier[index];
+                final vid = (v['voice_id'] ?? '').toString();
+                final name = (v['name'] ?? v['voice_name'] ?? vid).toString();
+                final provider = (v['provider'] ?? '11labs').toString();
+                final isSelected = s2.voiceId == vid;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  color: isSelected ? NeyvoColors.tealGlow : NeyvoColors.bgRaised,
+                  child: ListTile(
+                    leading: Icon(isSelected ? Icons.check_circle : Icons.record_voice_over_outlined, color: isSelected ? NeyvoColors.teal : null),
+                    title: Text(name, style: NeyvoTextStyles.body),
+                    subtitle: Text(provider, style: NeyvoTextStyles.micro),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(_playingVoiceId == vid ? Icons.stop : Icons.volume_up),
+                          onPressed: () => _playVoicePreview(v),
+                        ),
+                        TextButton(
+                          onPressed: () => _updateState(UniversalWizardState(
+                            step1: _state.step1,
+                            step2: s2.copyWith(voiceId: vid, voiceProvider: provider),
+                            step3: _state.step3, step4: _state.step4, step5: _state.step5,
+                          )),
+                          child: Text(isSelected ? 'Selected' : 'Select'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
       ],
     );
   }
 
-  static const String _voicePreviewSentence = 'Hello, this is a quick sample of how your operator might sound.';
-
-  Future<void> _playVoicePreview() async {
-    setState(() => _isPlayingPreview = true);
+  Future<void> _playVoicePreview(Map<String, dynamic> voice) async {
+    final voiceId = (voice['voice_id'] ?? '').toString();
+    final provider = (voice['provider'] ?? '11labs').toString();
+    if (voiceId.isEmpty) return;
+    setState(() => _playingVoiceId = voiceId);
     try {
-      await _tts.speak(_voicePreviewSentence);
-      await Future<void>.delayed(const Duration(milliseconds: 2500));
-      if (mounted) await _tts.stop();
-    } catch (_) {}
-    if (mounted) setState(() => _isPlayingPreview = false);
+      final res = await NeyvoPulseApi.postVoicePreview(voiceId: voiceId, provider: provider);
+      await playVoicePreview(res);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preview unavailable for this voice.')),
+        );
+      }
+    }
+    if (mounted) setState(() => _playingVoiceId = null);
   }
 
-  Widget _buildStep3() {
+  /// Step 2 — Goal only (what should this operator accomplish).
+  Widget _buildStep3Goal() {
     final s3 = _state.step3;
-    final dept = _state.step1.department == 'Other' ? (_state.step1.departmentOther ?? 'Other') : _state.step1.department;
-    final suggested = _departmentPrimaryObjectiveSuggestions[dept] ?? _departmentPrimaryObjectiveSuggestions['Other'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Primary call objective', style: NeyvoTextStyles.label),
-        if (suggested != null) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Suggested for $dept:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary)),
-              ),
-              TextButton(
-                onPressed: () => _updateState(UniversalWizardState(
-                  step1: _state.step1, step2: _state.step2,
-                  step3: s3.copyWith(primaryObjective: suggested),
-                  step4: _state.step4, step5: _state.step5,
-                )),
-                child: const Text('Use this'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-        ],
-        const SizedBox(height: 4),
+        Text('What should this operator accomplish on each call?', style: NeyvoTextStyles.label),
+        const SizedBox(height: 6),
+        Text(
+          'Describe the main purpose in 1–3 sentences. Include: what the operator should do (e.g. remind, guide, answer, collect), for whom, and any key actions (offer callback, transfer, send confirmation). Use short phrases separated by semicolons or line breaks.',
+          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
         TextFormField(
           initialValue: s3.primaryObjective,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'What should this operator accomplish on each call?', border: OutlineInputBorder()),
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Remind students to accept federal loans; guide them through the portal; offer a callback if they\'re busy. Or: Answer questions about appointments; collect name and reason for call; offer to transfer to the front desk.',
+            border: OutlineInputBorder(),
+            alignLabelWithHint: true,
+          ),
           onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(primaryObjective: v), step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 12),
-        Text('Fallback when unclear', style: NeyvoTextStyles.label),
-        TextFormField(
-          initialValue: s3.fallbackUnclearResponse,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(fallbackUnclearResponse: v), step4: _state.step4, step5: _state.step5)),
-        ),
-        const SizedBox(height: 12),
-        Text('Call closing', style: NeyvoTextStyles.label),
-        DropdownButtonFormField<String>(
-          initialValue: s3.callClosingBehavior,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          items: const [
-            DropdownMenuItem(value: 'endCall', child: Text('End call')),
-            DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
-            DropdownMenuItem(value: 'voicemail', child: Text('Voicemail')),
-          ],
-          onChanged: (v) => _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(callClosingBehavior: v ?? 'endCall'), step4: _state.step4, step5: _state.step5)),
         ),
       ],
     );
   }
 
-  Widget _buildStep4() {
+  /// Step 3 — Refining questions (4–5 based on goal): MCQ/checkbox + text.
+  Widget _buildStepRefining() {
+    final s3 = _state.step3;
+    final questions = s3.refiningQuestions.isEmpty ? buildRefiningQuestionsForGoal(s3.primaryObjective) : s3.refiningQuestions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('A few questions to refine your operator', style: NeyvoTextStyles.heading),
+        const SizedBox(height: 12),
+        ...questions.map((q) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(q.text, style: NeyvoTextStyles.label),
+                const SizedBox(height: 6),
+                if (q.type == 'text')
+                  TextFormField(
+                    initialValue: (s3.refiningAnswers[q.id] ?? '').toString(),
+                    maxLines: 2,
+                    decoration: const InputDecoration(hintText: 'Optional', border: OutlineInputBorder()),
+                    onChanged: (v) {
+                      final ans = Map<String, dynamic>.from(s3.refiningAnswers);
+                      ans[q.id] = v;
+                      _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(refiningAnswers: ans), step4: _state.step4, step5: _state.step5));
+                    },
+                  )
+                else if (q.type == 'mcq')
+                  Wrap(
+                    spacing: 8,
+                    children: q.options.map((opt) {
+                      final selected = (s3.refiningAnswers[q.id] ?? '').toString() == opt;
+                      return ChoiceChip(
+                        selected: selected,
+                        label: Text(opt),
+                        onSelected: (_) {
+                          final ans = Map<String, dynamic>.from(s3.refiningAnswers);
+                          ans[q.id] = opt;
+                          _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(refiningAnswers: ans), step4: _state.step4, step5: _state.step5));
+                        },
+                      );
+                    }).toList(),
+                  )
+                else if (q.type == 'checkbox')
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: q.options.map((opt) {
+                      final list = (s3.refiningAnswers[q.id] is List ? (s3.refiningAnswers[q.id] as List).cast<String>() : <String>[]);
+                      final selected = list.contains(opt);
+                      return FilterChip(
+                        selected: selected,
+                        label: Text(opt),
+                        onSelected: (_) {
+                          final ans = Map<String, dynamic>.from(s3.refiningAnswers);
+                          final list = (s3.refiningAnswers[q.id] is List ? (s3.refiningAnswers[q.id] as List).cast<String>() : <String>[]).toList();
+                          if (selected) {
+                            list.remove(opt);
+                          } else {
+                            list.add(opt);
+                          }
+                          ans[q.id] = list;
+                          _updateState(UniversalWizardState(step1: _state.step1, step2: _state.step2, step3: s3.copyWith(refiningAnswers: ans), step4: _state.step4, step5: _state.step5));
+                        },
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildStep4Tools() {
     final s4 = _state.step4;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -628,7 +752,7 @@ class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardS
     );
   }
 
-  Widget _buildStep5() {
+  Widget _buildStep5Review() {
     final s5 = _state.step5;
     final hasPrompt = (s5.generatedSystemPrompt ?? '').trim().isNotEmpty;
     return Column(
