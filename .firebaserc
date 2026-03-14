@@ -5,11 +5,15 @@
   "targets": {
     "ub-neyvo": {
       "hosting": {
-        "default": "ub-neyvo",
         "goodwin-staging": [
           "goodwin-neyvo-staging"
         ],
-        "staging": "ub-neyvo-staging"
+        "default": [
+          "ub-neyvo"
+        ],
+        "staging": [
+          "ub-neyvo-staging"
+        ]
       }
     }
   },
