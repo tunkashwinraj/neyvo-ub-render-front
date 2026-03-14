@@ -466,11 +466,17 @@ class NeyvoPulseApi {
   }
 
   // Calls
-  static Future<Map<String, dynamic>> listCalls({String? studentId, String? from, String? to}) async {
+  static Future<Map<String, dynamic>> listCalls({
+    String? studentId,
+    String? from,
+    String? to,
+    int? limit,
+  }) async {
     final params = <String, dynamic>{};
     if (studentId != null) params['student_id'] = studentId;
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
+    if (limit != null) params['limit'] = limit.clamp(1, 500);
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
   }
 

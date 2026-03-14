@@ -37,6 +37,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   _CallSort _sortBy = _CallSort.dateNewest;
   final Set<String> _selectedCallIds = <String>{};
   bool _selectionMode = false;
+  static const int _pageSize = 50;
+  int _currentLimit = _pageSize;
 
   @override
   void initState() {
@@ -63,7 +65,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
-      final res = await NeyvoPulseApi.listCalls();
+      final res = await NeyvoPulseApi.listCalls(limit: _currentLimit);
       final list = res['calls'] as List? ?? [];
       if (mounted) {
         setState(() {
@@ -255,6 +257,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
         );
       }
     }
+  }
+
+  Future<void> _loadMore() async {
+    if (_currentLimit >= 500) return;
+    setState(() {
+      _currentLimit = (_currentLimit + _pageSize).clamp(1, 500);
+    });
+    await _load();
   }
 
   Future<void> _exportCsv() async {
@@ -517,7 +527,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                     ],
                   ),
                 )
-              else
+              else ...[
                 ListView.builder(
                   padding: const EdgeInsets.all(NeyvoSpacing.md),
                   shrinkWrap: true,
@@ -817,6 +827,19 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         );
                   },
                 ),
+                if (_allCalls.length >= _currentLimit && _currentLimit < 500)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: NeyvoSpacing.md,
+                      right: NeyvoSpacing.md,
+                      bottom: NeyvoSpacing.lg,
+                    ),
+                    child: OutlinedButton(
+                      onPressed: _loadMore,
+                      child: const Text('Load more calls'),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
