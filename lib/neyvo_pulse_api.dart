@@ -498,6 +498,7 @@ class NeyvoPulseApi {
     String? to,
     int? limit,
     int? offset,
+    String? q,
   }) async {
     final params = <String, dynamic>{};
     if (studentId != null) params['student_id'] = studentId;
@@ -505,6 +506,8 @@ class NeyvoPulseApi {
     if (to != null) params['to'] = to;
     if (limit != null) params['limit'] = limit.clamp(1, 500);
     if (offset != null && offset > 0) params['offset'] = offset;
+    final search = (q ?? '').trim();
+    if (search.isNotEmpty) params['q'] = search;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
   }
 

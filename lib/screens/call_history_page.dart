@@ -40,6 +40,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   static const int _pageSize = 20;
   bool _hasMore = true;
   bool _loadingMore = false;
+  /// When set, list calls use backend search (q param); clear to revert to normal pagination.
+  String? _searchQuery;
 
   @override
   void initState() {
@@ -66,7 +68,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
-      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: 0);
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _pageSize,
+        offset: 0,
+        q: _searchQuery?.trim().isEmpty == true ? null : _searchQuery,
+      );
       final list = res['calls'] as List? ?? [];
       if (mounted) {
         setState(() {
@@ -126,6 +132,21 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     if (created is String) return DateTime.tryParse(created);
     if (created is int) return DateTime.fromMillisecondsSinceEpoch(created);
     return null;
+  }
+
+  void _runSearch() {
+    setState(() {
+      _searchQuery = _searchController.text.trim().isEmpty ? null : _searchController.text.trim();
+    });
+    _load();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = null;
+    });
+    _load();
   }
 
   void _filterCalls() {
@@ -268,7 +289,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _loadingMore = true;
     });
     try {
-      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset);
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _pageSize,
+        offset: offset,
+        q: _searchQuery?.trim().isEmpty == true ? null : _searchQuery,
+      );
       final list = res['calls'] as List? ?? [];
       if (mounted) {
         final existingIds = _allCalls
@@ -411,21 +436,25 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                       child: TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: 'Search by phone number',
+                          hintText: 'Search by phone or name',
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           prefixIcon: const Icon(Icons.search, size: 20),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 20),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _filterCalls();
-                                  },
+                                  onPressed: _clearSearch,
                                 )
                               : null,
                         ),
+                        onSubmitted: (_) => _runSearch(),
                       ),
+                    ),
+                    const SizedBox(width: NeyvoSpacing.sm),
+                    FilledButton.icon(
+                      onPressed: _loading ? null : _runSearch,
+                      icon: const Icon(Icons.search, size: 20),
+                      label: const Text('Search'),
                     ),
                     const SizedBox(width: NeyvoSpacing.md),
                     IconButton(
