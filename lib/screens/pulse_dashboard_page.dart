@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
@@ -588,7 +589,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     }
 
     final tenant = TenantScope.of(context)?.config;
-    final isGoodwinTenant = (tenant?.tenantId ?? '').toLowerCase() == 'goodwin';
+    // Treat Goodwin as the current tenant either when the tenant scope says so,
+    // or when we are running on the Goodwin domain (defensive fallback in case
+    // tenant resolution fails on the frontend).
+    final tenantId = (tenant?.tenantId ?? '').toLowerCase();
+    final host = kIsWeb ? Uri.base.host.toLowerCase() : '';
+    final isGoodwinTenant =
+        tenantId == 'goodwin' || host.startsWith('goodwin.') || host.contains('.goodwin.');
     final ubReady = _ubStatus == 'ready';
 
     // Keep the dedicated "create first operator" experience only for UB.
@@ -698,7 +705,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildHeroSection(orbState, callOk, contentWidth),
+                        _buildHeroSection(context, orbState, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
                         const SizedBox(height: 24),
@@ -716,7 +723,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     );
   }
 
-  Widget _buildHeroSection(NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
+  Widget _buildHeroSection(BuildContext context, NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
+    final tenant = TenantScope.of(context)?.config;
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
         (_perf?['total_calls'] as num?)?.toInt() ??
         _recentCalls.length;

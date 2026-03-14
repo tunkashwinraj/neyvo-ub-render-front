@@ -2421,7 +2421,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ],
               if (_audienceMode == 'contact_list' || _audienceMode == 'excel')
                 const Divider(),
-            ],
             if (_audienceMode == 'excel') ...[
               const SizedBox(height: NeyvoSpacing.md),
               Text('Search by excel and selection',
