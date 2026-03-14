@@ -2,6 +2,14 @@
   "projects": {
     "ub-neyvo": "ub-neyvo"
   },
-  "targets": {},
+  "targets": {
+    "ub-neyvo": {
+      "hosting": {
+        "goodwin-staging": [
+          "ub-neyvo"
+        ]
+      }
+    }
+  },
   "etags": {}
 }
