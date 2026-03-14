@@ -1,5 +1,6 @@
-// Executive Dashboard – call center KPIs for staging sites.
-// ASA = Average Speed of Answer, AHT = Average Handled Time (both in seconds).
+// Executive Dashboard – call center KPIs (exact layout per reference image).
+// ASA = Average Speed of Answer, AHT = Average Handle Time (seconds).
+// Data from getKpiOverview / getKpiDepartmentSummary (Firestore via backend).
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -71,7 +72,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: NeyvoTheme.bgBase,
+      backgroundColor: NeyvoColors.bgBase,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -86,10 +87,12 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                   if (_loading)
                     const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()))
                   else if (_error != null)
-                    Center(child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(_error!, style: TextStyle(color: NeyvoTheme.error)),
-                    ))
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(_error!, style: TextStyle(color: NeyvoTheme.error)),
+                      ),
+                    )
                   else
                     _buildContent(),
                 ],
@@ -119,7 +122,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: active ? NeyvoTheme.ubLightBlue : Colors.transparent,
+                    color: active ? NeyvoColors.ubLightBlue : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -139,73 +142,87 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
   }
 
   Widget _buildFiltersPanel() {
-    final deptNames = _departments.map((d) => d['department_name'] as String? ?? '').where((s) => s.isNotEmpty).toSet().toList()..sort();
-    if (deptNames.isEmpty) deptNames.addAll(['Air Conditioner', 'Fridge', 'Microwave Oven', 'Television', 'Toaster', 'Washing Machine']);
+    final deptNames = _departments
+        .map((d) => d['department_name'] as String? ?? '')
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    if (deptNames.isEmpty) {
+      deptNames.addAll(['Air Conditioner', 'Fridge', 'Microwave Oven', 'Television', 'Toaster', 'Washing Machine']);
+    }
     return Container(
       width: 260,
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: NeyvoTheme.bgRaised,
+        color: NeyvoColors.bgRaised,
         border: Border(left: BorderSide(color: NeyvoTheme.borderSubtle)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Filters', style: NeyvoTextStyles.heading),
-          const SizedBox(height: 16),
-          Text('Year', style: NeyvoTextStyles.label),
-          const SizedBox(height: 4),
-          DropdownButton<int>(
-            value: _selectedYear,
-            isExpanded: true,
-            items: [for (int y = DateTime.now().year; y >= DateTime.now().year - 5; y--) DropdownMenuItem(value: y, child: Text('$y'))],
-            onChanged: (v) => setState(() { _selectedYear = v ?? DateTime.now().year; _load(); }),
-          ),
-          const SizedBox(height: 16),
-          Text('Month', style: NeyvoTextStyles.label),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: List.generate(12, (i) {
-              final m = i + 1;
-              final selected = _selectedMonths.contains(m);
-              return FilterChip(
-                label: Text(DateFormat('MMM').format(DateTime(2023, m)), style: const TextStyle(fontSize: 11)),
-                selected: selected,
-                onSelected: (v) {
-                  setState(() {
-                    if (v) _selectedMonths = [..._selectedMonths, m]..sort();
-                    else _selectedMonths = _selectedMonths.where((x) => x != m).toList();
-                    _load();
-                  });
-                },
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Filters', style: NeyvoTextStyles.heading),
+            const SizedBox(height: 16),
+            Text('Year', style: NeyvoTextStyles.label),
+            const SizedBox(height: 4),
+            DropdownButton<int>(
+              value: _selectedYear,
+              isExpanded: true,
+              items: [
+                for (int y = DateTime.now().year; y >= DateTime.now().year - 5; y--)
+                  DropdownMenuItem(value: y, child: Text('$y')),
+              ],
+              onChanged: (v) => setState(() { _selectedYear = v ?? DateTime.now().year; _load(); }),
+            ),
+            const SizedBox(height: 16),
+            Text('Month Name', style: NeyvoTextStyles.label),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(12, (i) {
+                final m = i + 1;
+                final selected = _selectedMonths.contains(m);
+                final label = DateFormat('MMM-yy').format(DateTime(_selectedYear, m));
+                return FilterChip(
+                  label: Text(label, style: const TextStyle(fontSize: 11)),
+                  selected: selected,
+                  onSelected: (v) {
+                    setState(() {
+                      if (v) _selectedMonths = [..._selectedMonths, m]..sort();
+                      else _selectedMonths = _selectedMonths.where((x) => x != m).toList();
+                      _load();
+                    });
+                  },
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
+            Text('Department', style: NeyvoTextStyles.label),
+            const SizedBox(height: 8),
+            ...deptNames.take(20).map((name) {
+              final selected = _selectedDepartments.isEmpty || _selectedDepartments.contains(name);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: CheckboxListTile(
+                  value: selected,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  title: Text(name, style: NeyvoTextStyles.micro),
+                  onChanged: (v) {
+                    setState(() {
+                      if (v == true) _selectedDepartments = [..._selectedDepartments, name];
+                      else _selectedDepartments = _selectedDepartments.where((x) => x != name).toList();
+                      _load();
+                    });
+                  },
+                ),
               );
             }),
-          ),
-          const SizedBox(height: 16),
-          Text('Department', style: NeyvoTextStyles.label),
-          const SizedBox(height: 8),
-          ...deptNames.take(10).map((name) {
-            final selected = _selectedDepartments.isEmpty || _selectedDepartments.contains(name);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: CheckboxListTile(
-                value: selected,
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: true,
-                title: Text(name, style: NeyvoTextStyles.micro),
-                onChanged: (v) {
-                  setState(() {
-                    if (v == true) _selectedDepartments = [..._selectedDepartments, name];
-                    else _selectedDepartments = _selectedDepartments.where((x) => x != name).toList();
-                    _load();
-                  });
-                },
-              ),
-            );
-          }),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -268,30 +285,37 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
     required int asaSec,
     required int ahtSec,
   }) {
+    const double kMinCardWidth = 160;
     final cards = [
       _KpiCard(title: 'Total Calls', value: NumberFormat('#,###').format(totalCalls), icon: Icons.phone_outlined, color: const Color(0xFFE6A800)),
-      _KpiCard(title: 'Calls Answered', value: NumberFormat('#,###').format(callsAnswered), icon: Icons.phone_callback_outlined, color: const Color(0xFF7B4FA8)),
+      _KpiCard(title: 'Calls Answered', value: NumberFormat('#,###').format(callsAnswered), icon: Icons.person_outline, color: const Color(0xFF7B4FA8)),
       _KpiCard(title: 'Abandon Rate', value: '${abandonRate.toStringAsFixed(1)}%', icon: Icons.phone_disabled_outlined, color: const Color(0xFFE91E8C)),
       _KpiCard(
         title: 'ASA (Sec)',
         value: '$asaSec',
         icon: Icons.timer_outlined,
         color: const Color(0xFF4CAF50),
-        subtitle: 'Average Speed of Answer',
+        subtitle: 'Average Speed to Answer',
       ),
       _KpiCard(
         title: 'AHT (Sec)',
         value: '$ahtSec',
         icon: Icons.schedule_outlined,
         color: const Color(0xFFFF9800),
-        subtitle: 'Average Handled Time',
+        subtitle: 'Average Handle Time',
       ),
     ];
-    return Row(
-      children: cards.map((c) => Expanded(child: Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: c,
-      ))).toList(),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: cards.map((c) => SizedBox(
+          width: kMinCardWidth,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: c,
+          ),
+        )).toList(),
+      ),
     );
   }
 
@@ -358,7 +382,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                       sectionsSpace: 2,
                       centerSpaceRadius: 24,
                       sections: [
-                        PieChartSectionData(value: resolutionPct, color: NeyvoTheme.ubLightBlue, showTitle: false),
+                        PieChartSectionData(value: resolutionPct, color: NeyvoColors.ubLightBlue, showTitle: false),
                         PieChartSectionData(value: 100 - resolutionPct, color: Colors.grey.shade300, showTitle: false),
                       ],
                     ),
@@ -390,7 +414,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
             Text(avgCsat.toStringAsFixed(1), style: NeyvoTextStyles.display.copyWith(fontSize: 24)),
             const SizedBox(height: 16),
             if (depts.isNotEmpty) ...[
-              Text('By department', style: NeyvoTextStyles.label),
+              Text('Customer Satisfaction Score by Department', style: NeyvoTextStyles.label),
               const SizedBox(height: 8),
               SizedBox(
                 height: 120,
@@ -417,7 +441,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                     barGroups: List.generate(depts.length, (i) {
                       final v = (depts[i]['avg_csat'] as num?)?.toDouble() ?? 0.0;
                       return BarChartGroupData(x: i, barRods: [
-                        BarChartRodData(toY: v, color: NeyvoTheme.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+                        BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
                       ], showingTooltipIndicators: []);
                     }),
                   ),
@@ -444,7 +468,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
             Text('NPS By Department', style: NeyvoTextStyles.heading),
             const SizedBox(height: 12),
             SizedBox(
-              height: 40.0 * depts.length,
+              height: (40.0 * depts.length).clamp(80.0, 320.0),
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
@@ -469,7 +493,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                   barGroups: List.generate(depts.length, (i) {
                     final v = (depts[i]['nps_score'] as num?)?.toDouble() ?? 0.0;
                     return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: v, color: NeyvoTheme.ubLightBlue, width: 20, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
+                      BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 20, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
                     ], showingTooltipIndicators: []);
                   }),
                 ),
@@ -483,7 +507,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
 
   Widget _buildCallsHandledResolutionByDept() {
     final depts = _departments.take(8).toList();
-    if (depts.isEmpty) return _emptyChartCard('Calls Handled & Resolution %');
+    if (depts.isEmpty) return _emptyChartCard('Calls Handled & Resolution % By Department');
     final maxCalls = depts.fold<int>(0, (m, d) {
       final v = (d['calls_answered'] as num?)?.toInt() ?? 0;
       return v > m ? v : m;
@@ -499,11 +523,11 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
             Text('Calls Handled & Resolution % By Department', style: NeyvoTextStyles.heading),
             const SizedBox(height: 12),
             SizedBox(
-              height: 40.0 * depts.length,
+              height: (40.0 * depts.length).clamp(80.0, 320.0),
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: (maxCalls * 1.2).toDouble(),
+                  maxY: (maxCalls * 1.2).clamp(1.0, double.infinity),
                   barTouchData: BarTouchData(enabled: false),
                   titlesData: FlTitlesData(
                     show: true,
@@ -523,7 +547,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                   barGroups: List.generate(depts.length, (i) {
                     final ca = (depts[i]['calls_answered'] as num?)?.toInt() ?? 0;
                     return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: ca.toDouble(), color: NeyvoTheme.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+                      BarChartRodData(toY: ca.toDouble(), color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
                     ], showingTooltipIndicators: []);
                   }),
                 ),
@@ -532,7 +556,10 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 16,
-              children: depts.map((d) => Text('${d['department_name']}: ${(d['resolution_rate_pct'] as num?)?.toStringAsFixed(1) ?? '0'}%', style: NeyvoTextStyles.micro)).toList(),
+              children: depts.map((d) => Text(
+                '${d['department_name']}: ${(d['resolution_rate_pct'] as num?)?.toStringAsFixed(1) ?? '0'}%',
+                style: NeyvoTextStyles.micro,
+              )).toList(),
             ),
           ],
         ),
@@ -554,7 +581,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
             Text('Call Abandon Rate By Department', style: NeyvoTextStyles.heading),
             const SizedBox(height: 12),
             SizedBox(
-              height: 40.0 * depts.length,
+              height: (40.0 * depts.length).clamp(80.0, 320.0),
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
@@ -662,49 +689,44 @@ class _SemiGauge extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = ((value - min) / (max - min)).clamp(0.0, 1.0);
     Color needleColor = Colors.grey;
-    if (value >= 50) needleColor = Colors.green;
-    else if (value > 0) needleColor = Colors.orange;
+    if (max > 0 && value >= (min + max) / 2) needleColor = Colors.green;
+    else if (value > min) needleColor = Colors.orange;
     else needleColor = Colors.red;
     return SizedBox(
       height: 48,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 12,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    gradient: LinearGradient(
-                      colors: [Colors.red, Colors.grey, Colors.green],
-                      stops: const [0.0, 0.5, 1.0],
-                    ),
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Stack(
-                        children: [
-                          Positioned(
-                            left: constraints.maxWidth * pct - 2,
-                            top: -4,
-                            child: Container(
-                              width: 4,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                color: needleColor,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+          Expanded(
+            child: Container(
+              height: 12,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                gradient: LinearGradient(
+                  colors: [Colors.red, Colors.grey, Colors.green],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
-            ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Stack(
+                    children: [
+                      Positioned(
+                        left: constraints.maxWidth * pct - 2,
+                        top: -4,
+                        child: Container(
+                          width: 4,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: needleColor,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -728,9 +750,13 @@ class _StackedBarSegment extends StatelessWidget {
         const SizedBox(height: 2),
         SizedBox(
           height: 8,
-          child: LinearProgressIndicator(value: pct / 100, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(color)),
+          child: LinearProgressIndicator(
+            value: (pct / 100).clamp(0.0, 1.0),
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
         ),
-        Text('${pct.toStringAsFixed(1)}%', style: NeyvoTextStyles.micro),
+        Text('${pct.toStringAsFixed(2)}%', style: NeyvoTextStyles.micro),
       ],
     );
   }
@@ -758,18 +784,20 @@ class _ResolutionBar extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                flex: 1,
                 child: SizedBox(
                   height: 20,
                   child: LinearProgressIndicator(
-                    value: t > 0 ? (value / t) : 0,
+                    value: t > 0 ? (value / t).clamp(0.0, 1.0) : 0,
                     backgroundColor: Colors.grey.shade200,
                     valueColor: AlwaysStoppedAnimation<Color>(color),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text('${NumberFormat('#,###').format(value)}${t != value ? ', ${pct.toStringAsFixed(1)}%' : ''}', style: NeyvoTextStyles.micro),
+              Text(
+                '${NumberFormat('#,###').format(value)}${t != value ? ', ${pct.toStringAsFixed(1)}%' : ''}',
+                style: NeyvoTextStyles.micro,
+              ),
             ],
           ),
         ],

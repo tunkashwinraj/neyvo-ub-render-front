@@ -300,24 +300,30 @@ class NeyvoPulseApi {
       _get('/api/analytics/agents/$agentId');
 
   // Executive Dashboard KPI (call center style; ASA = Average Speed of Answer, AHT = Average Handled Time)
-  static Future<Map<String, dynamic>> getKpiOverview({String? from, String? to}) async {
+  // Tries /api/pulse/kpi/* first; on 404 falls back to /api/kpi/* for backends that only register routes in main.py.
+  static Future<Map<String, dynamic>> _getKpiWithFallback(String pulsePath, String legacyPath, {String? from, String? to}) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/kpi/overview', params: params.isEmpty ? null : params);
+    final p = params.isEmpty ? null : params;
+    try {
+      return await _get(pulsePath, params: p);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        return _get(legacyPath, params: p);
+      }
+      rethrow;
+    }
   }
-  static Future<Map<String, dynamic>> getKpiDepartmentSummary({String? from, String? to}) async {
-    final params = <String, dynamic>{};
-    if (from != null) params['from'] = from;
-    if (to != null) params['to'] = to;
-    return _get('/api/kpi/department-summary', params: params.isEmpty ? null : params);
-  }
-  static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async {
-    final params = <String, dynamic>{};
-    if (from != null) params['from'] = from;
-    if (to != null) params['to'] = to;
-    return _get('/api/kpi/nps-breakdown', params: params.isEmpty ? null : params);
-  }
+
+  static Future<Map<String, dynamic>> getKpiOverview({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/overview', '/api/kpi/overview', from: from, to: to);
+
+  static Future<Map<String, dynamic>> getKpiDepartmentSummary({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/department-summary', '/api/kpi/department-summary', from: from, to: to);
+
+  static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/nps-breakdown', '/api/kpi/nps-breakdown', from: from, to: to);
 
   // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({

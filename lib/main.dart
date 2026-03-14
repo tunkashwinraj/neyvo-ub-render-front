@@ -36,12 +36,20 @@ import 'widgets/neyvo_loading_screen.dart';
     defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
   );
 
+/// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
+const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
+
 String _resolveTenantId() {
   if (!kIsWeb) {
     // For mobile/desktop builds we can keep using the default tenant for now.
     return '';
   }
   final host = Uri.base.host.toLowerCase();
+
+  // Local dev: allow forcing Goodwin (or ub) so you can run "goodwin in local"
+  if ((host == 'localhost' || host == '127.0.0.1') && _kLocalTenant.isNotEmpty) {
+    return _kLocalTenant.toLowerCase();
+  }
 
   // Prod custom domains
   if (host.startsWith('goodwin.')) return 'goodwin';

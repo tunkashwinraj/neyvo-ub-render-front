@@ -966,7 +966,7 @@ extension on _PulseShellState {
     }
     switch (route) {
       case PulseRouteNames.dashboard:
-        return const PulseDashboardPage();
+        return const ExecutiveDashboardPage();
       case PulseRouteNames.launch:
         // Launch wizard page (implemented as separate screen/route).
         return const LaunchPage();
