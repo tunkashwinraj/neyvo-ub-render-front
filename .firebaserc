@@ -6,8 +6,24 @@
     "ub-neyvo": {
       "hosting": {
         "default": "ub-neyvo",
-        "staging": "ub-neyvo-staging",
-        "goodwin-staging": "goodwin-neyvo-staging"
+        "staging": [
+          "-",
+          "a",
+          "b",
+          "e",
+          "g",
+          "i",
+          "n",
+          "o",
+          "s",
+          "t",
+          "u",
+          "v",
+          "y"
+        ],
+        "goodwin-staging": [
+          "goodwin-neyvo-staging"
+        ]
       }
     }
   },

@@ -299,6 +299,26 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getAnalyticsAgent(String agentId) async =>
       _get('/api/analytics/agents/$agentId');
 
+  // Executive Dashboard KPI (call center style; ASA = Average Speed of Answer, AHT = Average Handled Time)
+  static Future<Map<String, dynamic>> getKpiOverview({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/overview', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getKpiDepartmentSummary({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/department-summary', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/nps-breakdown', params: params.isEmpty ? null : params);
+  }
+
   // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({
     bool? hasBalance,
@@ -465,18 +485,20 @@ class NeyvoPulseApi {
     );
   }
 
-  // Calls
+  // Calls (offset = pagination: 0 = first page, then 20, 40, ... for next 20)
   static Future<Map<String, dynamic>> listCalls({
     String? studentId,
     String? from,
     String? to,
     int? limit,
+    int? offset,
   }) async {
     final params = <String, dynamic>{};
     if (studentId != null) params['student_id'] = studentId;
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
     if (limit != null) params['limit'] = limit.clamp(1, 500);
+    if (offset != null && offset > 0) params['offset'] = offset;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
   }
 

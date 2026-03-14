@@ -27,6 +27,8 @@ String? _legacyPulsePathToCanonical(String path) {
       return PulseRouteNames.calls;
     case '/pulse/analytics':
       return PulseRouteNames.analytics;
+    case '/pulse/executive-dashboard':
+      return PulseRouteNames.executiveDashboard;
     default:
       return null;
   }
@@ -94,6 +96,8 @@ class PulseRouter {
         return MaterialPageRoute(builder: (_) => const UniversalOperatorWizardScreen());
       case PulseRouteNames.analytics:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+      case PulseRouteNames.executiveDashboard:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.executiveDashboard));
       case PulseRouteNames.billing:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
       case PulseRouteNames.wallet:

@@ -18,6 +18,7 @@ import 'campaigns_page.dart';
 import 'phone_numbers_page.dart';
 import 'call_history_page.dart';
 import 'analytics_page.dart';
+import 'executive_dashboard_page.dart';
 import 'callbacks_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
@@ -121,6 +122,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
     _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'audit_log'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
+    _NavItem('Executive Dashboard', Icons.dashboard_outlined, PulseRouteNames.executiveDashboard, 'insights'),
     _NavItem('Training', Icons.quiz_outlined, PulseRouteNames.training, 'settings'), // temporary: FAQ + policy
     _NavItem('Health', Icons.monitor_heart_outlined, PulseRouteNames.health, 'settings'),
     _NavItem('Billing', Icons.account_balance_wallet_outlined, PulseRouteNames.billing, 'billing'),
@@ -987,6 +989,8 @@ extension on _PulseShellState {
         return const TestCallPage();
       case PulseRouteNames.analytics:
         return const AnalyticsPage();
+      case PulseRouteNames.executiveDashboard:
+        return const ExecutiveDashboardPage();
       case PulseRouteNames.health:
         return const HealthCheckPage();
       case PulseRouteNames.integrations:

@@ -1,5 +1,6 @@
   import 'dart:async';
 
+  import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
@@ -34,6 +35,15 @@ import 'widgets/neyvo_loading_screen.dart';
   const String _kStagingBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL_STAGING',
     defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
+  );
+
+  /// reCAPTCHA v3 site key for Firebase App Check (web). Set via:
+  /// flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key
+  /// Get the key from Firebase Console > App Check > reCAPTCHA v3, and from
+  /// https://www.google.com/recaptcha/admin (create v3 key for your domains).
+  const String _kRecaptchaV3SiteKey = String.fromEnvironment(
+    'RECAPTCHA_V3_SITE_KEY',
+    defaultValue: '',
   );
 
 String _resolveTenantId() {
@@ -84,6 +94,21 @@ String get _kFallbackAccountId {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
+    // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
+    if (kIsWeb && _kRecaptchaV3SiteKey.isNotEmpty) {
+      await FirebaseAppCheck.instance.activate(
+        webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    } else if (!kIsWeb) {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    }
 
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
@@ -188,6 +213,7 @@ String get _kFallbackAccountId {
     PulseRouteNames.team,
     PulseRouteNames.auditLog,
     PulseRouteNames.analytics,
+    PulseRouteNames.executiveDashboard,
     PulseRouteNames.billing,
     PulseRouteNames.wallet,
     PulseRouteNames.settings,
