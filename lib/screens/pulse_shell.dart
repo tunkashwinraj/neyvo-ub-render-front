@@ -481,6 +481,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                     alignment: Alignment.centerLeft,
                     child: Builder(
                       builder: (context) {
+                        
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
                         final tenantId = (tenant?.tenantId ?? '').toLowerCase();
