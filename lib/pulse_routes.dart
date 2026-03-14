@@ -12,6 +12,7 @@ import 'ui/screens/calls/calls_page.dart';
 import 'ui/screens/calls/test_call_page.dart';
 import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';
+import 'features/operators/universal_operator_wizard/universal_operator_wizard_screen.dart';
 
 /// Maps legacy Pulse paths to canonical (tab-matching) route names for deep links.
 String? _legacyPulsePathToCanonical(String path) {
@@ -26,6 +27,8 @@ String? _legacyPulsePathToCanonical(String path) {
       return PulseRouteNames.calls;
     case '/pulse/analytics':
       return PulseRouteNames.analytics;
+    case '/pulse/executive-dashboard':
+      return PulseRouteNames.executiveDashboard;
     default:
       return null;
   }
@@ -89,8 +92,12 @@ class PulseRouter {
             initialProfileId: profileId,
           ),
         );
+      case PulseRouteNames.universalOperatorWizard:
+        return MaterialPageRoute(builder: (_) => const UniversalOperatorWizardScreen());
       case PulseRouteNames.analytics:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+      case PulseRouteNames.executiveDashboard:
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.executiveDashboard));
       case PulseRouteNames.billing:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
       case PulseRouteNames.wallet:

@@ -299,6 +299,32 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getAnalyticsAgent(String agentId) async =>
       _get('/api/analytics/agents/$agentId');
 
+  // Executive Dashboard KPI (call center style; ASA = Average Speed of Answer, AHT = Average Handled Time)
+  // Tries /api/pulse/kpi/* first; on 404 falls back to /api/kpi/* for backends that only register routes in main.py.
+  static Future<Map<String, dynamic>> _getKpiWithFallback(String pulsePath, String legacyPath, {String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    final p = params.isEmpty ? null : params;
+    try {
+      return await _get(pulsePath, params: p);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        return _get(legacyPath, params: p);
+      }
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getKpiOverview({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/overview', '/api/kpi/overview', from: from, to: to);
+
+  static Future<Map<String, dynamic>> getKpiDepartmentSummary({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/department-summary', '/api/kpi/department-summary', from: from, to: to);
+
+  static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async =>
+      _getKpiWithFallback('/api/pulse/kpi/nps-breakdown', '/api/kpi/nps-breakdown', from: from, to: to);
+
   // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({
     bool? hasBalance,
@@ -465,12 +491,20 @@ class NeyvoPulseApi {
     );
   }
 
-  // Calls
-  static Future<Map<String, dynamic>> listCalls({String? studentId, String? from, String? to}) async {
+  // Calls (offset = pagination: 0 = first page, then 20, 40, ... for next 20)
+  static Future<Map<String, dynamic>> listCalls({
+    String? studentId,
+    String? from,
+    String? to,
+    int? limit,
+    int? offset,
+  }) async {
     final params = <String, dynamic>{};
     if (studentId != null) params['student_id'] = studentId;
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
+    if (limit != null) params['limit'] = limit.clamp(1, 500);
+    if (offset != null && offset > 0) params['offset'] = offset;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
   }
 

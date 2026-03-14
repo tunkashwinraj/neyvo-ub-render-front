@@ -37,6 +37,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   _CallSort _sortBy = _CallSort.dateNewest;
   final Set<String> _selectedCallIds = <String>{};
   bool _selectionMode = false;
+  static const int _pageSize = 20;
+  bool _hasMore = true;
+  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -63,12 +66,13 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
-      final res = await NeyvoPulseApi.listCalls();
+      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: 0);
       final list = res['calls'] as List? ?? [];
       if (mounted) {
         setState(() {
           _allCalls = list;
           _filteredCalls = list;
+          _hasMore = list.length >= _pageSize;
           _loading = false;
         });
         _filterCalls();
@@ -257,6 +261,42 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
   }
 
+  Future<void> _loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    final offset = _allCalls.length;
+    setState(() {
+      _loadingMore = true;
+    });
+    try {
+      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset);
+      final list = res['calls'] as List? ?? [];
+      if (mounted) {
+        final existingIds = _allCalls
+            .map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final newCalls = list.where((c) {
+          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
+          return id.isNotEmpty && !existingIds.contains(id);
+        }).toList();
+        setState(() {
+          _allCalls = [..._allCalls, ...newCalls];
+          _filteredCalls = _allCalls;
+          _hasMore = list.length >= _pageSize;
+          _loadingMore = false;
+        });
+        _filterCalls();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loadingMore = false;
+        });
+      }
+    }
+  }
+
   Future<void> _exportCsv() async {
     final sb = StringBuffer();
     sb.writeln('Contact Name,Phone,Date,Status,Duration,Recording URL,Transcript');
@@ -339,7 +379,16 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     
     return Scaffold(
-      appBar: AppBar(title: const Text('Call History')),
+      appBar: AppBar(
+        title: const Text('Call History'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading ? null : _load,
+            tooltip: 'Refresh (load latest 20 calls)',
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: SingleChildScrollView(
@@ -517,16 +566,22 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                     ],
                   ),
                 )
-              else
+              else ...[
                 ListView.builder(
-                  padding: const EdgeInsets.all(NeyvoSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: NeyvoSpacing.sm,
+                    vertical: NeyvoSpacing.sm,
+                  ),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
                   itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
-                            padding: const EdgeInsets.all(NeyvoSpacing.md),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: NeyvoSpacing.sm,
+                              vertical: NeyvoSpacing.sm,
+                            ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -748,7 +803,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               children: [
                                 if (recordingUrl != null && recordingUrl.isNotEmpty)
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.sm, NeyvoSpacing.md, 0),
+                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
                                     child: InkWell(
                                       onTap: () async {
                                         final uri = Uri.tryParse(recordingUrl);
@@ -773,10 +828,10 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                   ),
                                 if (transcript.isNotEmpty)
                                   Padding(
-                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                    padding: const EdgeInsets.all(NeyvoSpacing.sm),
                                     child: Container(
                                       width: double.infinity,
-                                      padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                      padding: const EdgeInsets.all(NeyvoSpacing.sm),
                                       decoration: BoxDecoration(
                                         color: NeyvoTheme.bgHover,
                                         borderRadius: BorderRadius.circular(NeyvoRadius.sm),
@@ -817,6 +872,25 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         );
                   },
                 ),
+                if (_hasMore)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: NeyvoSpacing.md,
+                      right: NeyvoSpacing.md,
+                      bottom: NeyvoSpacing.lg,
+                    ),
+                    child: OutlinedButton(
+                      onPressed: _loadingMore ? null : _loadMore,
+                      child: _loadingMore
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Load more calls'),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),

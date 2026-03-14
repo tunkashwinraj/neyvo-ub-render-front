@@ -1,5 +1,6 @@
   import 'dart:async';
 
+  import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
@@ -28,6 +29,22 @@ import 'widgets/neyvo_loading_screen.dart';
     'SPEARIA_BASE_URL',
     defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
   );
+  /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
+  /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
+  /// If not set, staging uses the same URL as prod (single Render service).
+  const String _kStagingBaseUrl = String.fromEnvironment(
+    'SPEARIA_BASE_URL_STAGING',
+    defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
+  );
+
+/// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
+const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
+  /// reCAPTCHA v3 site key for Firebase App Check (web). Set via:
+  /// flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key
+  const String _kRecaptchaV3SiteKey = String.fromEnvironment(
+    'RECAPTCHA_V3_SITE_KEY',
+    defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+  );
 
 String _resolveTenantId() {
   if (!kIsWeb) {
@@ -35,16 +52,38 @@ String _resolveTenantId() {
     return '';
   }
   final host = Uri.base.host.toLowerCase();
+
+  // Local dev: dart-define NEYVO_TENANT=goodwin or ?tenant=goodwin / ?tenant=ub
+  if (host == 'localhost' || host == '127.0.0.1') {
+    if (_kLocalTenant.isNotEmpty) return _kLocalTenant.toLowerCase();
+    final q = (Uri.base.queryParameters['tenant'] ?? '').toLowerCase().trim();
+    if (q == 'goodwin') return 'goodwin';
+    if (q == 'ub') return 'ub';
+  }
+
+  // Prod custom domains
   if (host.startsWith('goodwin.')) return 'goodwin';
   if (host.startsWith('ub.')) return 'ub';
+
+  // Staging web.app domains
+  if (host.startsWith('goodwin-neyvo-staging')) return 'goodwin';
+  if (host.startsWith('ub-neyvo-staging')) return 'ub';
+
   return '';
 }
 
+/// True when the app is running on the Firebase staging host (e.g. ub-neyvo-staging.web.app).
+bool get _isStagingHost {
+  if (!kIsWeb) return false;
+  final host = Uri.base.host.toLowerCase();
+  return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');
+}
+
 String _resolveBaseUrlForTenant(String tenantId) {
-  // For now, always use the existing Render backend URL. When custom
-  // API subdomains (api.ub.neyvo.ai, api.goodwin.neyvo.ai) are fully
-  // configured and have DNS + TLS, this helper can be updated to
-  // route per-tenant to those hosts instead.
+  // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
+  if (_isStagingHost) return _kStagingBaseUrl;
+  // For now, prod uses the existing Render backend URL. When custom
+  // API subdomains are configured, this can route per-tenant.
   return _kDefaultBaseUrl;
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
@@ -63,6 +102,21 @@ String get _kFallbackAccountId {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
+    // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
+    if (kIsWeb) {
+      await FirebaseAppCheck.instance.activate(
+        webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    } else {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    }
 
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
@@ -167,6 +221,7 @@ String get _kFallbackAccountId {
     PulseRouteNames.team,
     PulseRouteNames.auditLog,
     PulseRouteNames.analytics,
+    PulseRouteNames.executiveDashboard,
     PulseRouteNames.billing,
     PulseRouteNames.wallet,
     PulseRouteNames.settings,
