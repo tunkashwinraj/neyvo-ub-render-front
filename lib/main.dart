@@ -188,6 +188,7 @@ String get _kFallbackAccountId {
     PulseRouteNames.team,
     PulseRouteNames.auditLog,
     PulseRouteNames.analytics,
+    PulseRouteNames.executiveDashboard,
     PulseRouteNames.billing,
     PulseRouteNames.wallet,
     PulseRouteNames.settings,

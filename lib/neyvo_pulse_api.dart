@@ -299,6 +299,26 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getAnalyticsAgent(String agentId) async =>
       _get('/api/analytics/agents/$agentId');
 
+  // Executive Dashboard KPI (call center style; ASA = Average Speed of Answer, AHT = Average Handled Time)
+  static Future<Map<String, dynamic>> getKpiOverview({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/overview', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getKpiDepartmentSummary({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/department-summary', params: params.isEmpty ? null : params);
+  }
+  static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async {
+    final params = <String, dynamic>{};
+    if (from != null) params['from'] = from;
+    if (to != null) params['to'] = to;
+    return _get('/api/kpi/nps-breakdown', params: params.isEmpty ? null : params);
+  }
+
   // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({
     bool? hasBalance,

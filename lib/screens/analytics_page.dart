@@ -249,23 +249,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final comms = _comms ?? {};
     final creditsConsumed = (d['total_credits_consumed'] ?? d['credits_consumed'] ?? 0) as num;
     final walletCredits = (d['wallet_credits'] ?? d['credits'] ?? 0) as num;
-    final totalCalls = (d['total_calls'] ?? d['calls_total'] ?? d['calls_this_period'] ?? 0) as num;
+    final totalCalls = (d['total_calls'] ?? d['calls_this_period'] ?? 0) as num;
     final ttsMinutes = (d['total_tts_minutes'] ?? d['tts_minutes'] ?? 0) as num;
-    final totalMinutes = (d['total_minutes'] ?? 0) as num;
-
-    // Lightweight ASA/AHT-style KPIs using existing aggregates only.
-    // We treat "answered" as completed/success calls from the comms endpoint.
-    final resolved = (comms['resolved_count'] ?? 0) as num;
-    final unresolved = (comms['unresolved_count'] ?? 0) as num;
-    final noAnswer = (comms['no_answer_count'] ?? 0) as num;
-    final transferred = (comms['transferred_count'] ?? 0) as num;
-    final totalForAbandon = resolved + unresolved + noAnswer + transferred;
-    final abandonRatePct =
-        totalForAbandon > 0 ? (unresolved / totalForAbandon * 100).clamp(0, 100) : 0;
-
-    // Average handle time in seconds, approximated from total talk minutes / total calls.
-    final ahtSeconds = totalCalls > 0 ? (totalMinutes * 60) / totalCalls : 0;
-
     final List<FlSpot> creditsSpots = _creditsBurnedSpots(d);
     // Prefer calls-by-calendar-date for the analysis chart (Overview)
     final callsByDateRaw = comms['calls_by_date'] as List?;
@@ -286,34 +271,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             spacing: 16,
             runSpacing: 16,
             children: [
-              _OverviewStatCard(
-                label: 'Total Calls',
-                value: totalCalls.toInt().toString(),
-              ),
-              _OverviewStatCard(
-                label: 'Calls Answered',
-                value: resolved.toInt().toString(),
-              ),
-              _OverviewStatCard(
-                label: 'Abandon Rate',
-                value: '${abandonRatePct.toStringAsFixed(1)}%',
-              ),
-              _OverviewStatCard(
-                label: 'AHT (sec)',
-                value: ahtSeconds.isNaN ? '0' : ahtSeconds.toStringAsFixed(1),
-              ),
-              _OverviewStatCard(
-                label: 'Credits Consumed',
-                value: creditsConsumed.toInt().toString(),
-              ),
-              _OverviewStatCard(
-                label: 'Wallet Balance',
-                value: walletCredits.toInt().toString(),
-              ),
-              _OverviewStatCard(
-                label: 'TTS Minutes',
-                value: ttsMinutes.toStringAsFixed(0),
-              ),
+              _OverviewStatCard(label: 'Total Calls', value: totalCalls.toInt().toString()),
+              _OverviewStatCard(label: 'Credits Consumed', value: creditsConsumed.toInt().toString()),
+              _OverviewStatCard(label: 'Wallet Balance', value: walletCredits.toInt().toString()),
+              _OverviewStatCard(label: 'TTS Minutes', value: ttsMinutes.toStringAsFixed(0)),
             ],
           ),
           const SizedBox(height: 20),
