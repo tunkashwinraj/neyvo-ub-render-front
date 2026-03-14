@@ -150,7 +150,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   }
 
   void _filterCalls() {
-    final query = _searchController.text.toLowerCase();
+    // Search is backend-only: use the Search button to fetch results with q=.
+    // Do not filter by search text on current loaded logs.
     setState(() {
       var list = _allCalls.where((c) {
         if (!_isInDateRange(c)) return false;
@@ -158,12 +159,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
           final dir = (c['direction'] as String?)?.toLowerCase();
           if (dir != _filterDirection) return false;
         }
-        final contactName = (c['student_name'] ?? c['contact_name'] ?? c['agent_name'] ?? '').toString().toLowerCase();
-        final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString().toLowerCase();
-        final matchesSearch = query.isEmpty ||
-            contactName.contains(query) ||
-            phone.contains(query);
-        if (!matchesSearch) return false;
         if (_filterStatus != 'all') {
           final status = (c['status']?.toString() ?? '').toLowerCase();
           if (status != _filterStatus) return false;
