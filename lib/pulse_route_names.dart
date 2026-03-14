@@ -37,6 +37,7 @@ abstract class PulseRouteNames {
   static const String agentDetail = '/pulse/agent-detail';
   static const String managedProfiles = '/pulse/managed-profiles';
   static const String managedProfileDetail = '/pulse/managed-profile-detail';
+  static const String universalOperatorWizard = '/pulse/universal-operator-wizard';
   static const String agency = '/pulse/agency';
   static const String callbacks = '/pulse/callbacks';
   static const String onboarding = '/onboarding';
