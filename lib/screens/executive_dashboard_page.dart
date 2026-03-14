@@ -661,14 +661,31 @@ class _KpiCard extends StatelessWidget {
                 children: [
                   Icon(icon, color: color, size: 24),
                   const SizedBox(width: 8),
-                  Text(title, style: NeyvoTextStyles.label),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: NeyvoTextStyles.label,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(value, style: NeyvoTextStyles.title.copyWith(fontSize: 22)),
+              Text(
+                value,
+                style: NeyvoTextStyles.title.copyWith(fontSize: 22),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
-                Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                Text(
+                  subtitle!,
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ],
             ],
           ),
@@ -794,9 +811,13 @@ class _ResolutionBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '${NumberFormat('#,###').format(value)}${t != value ? ', ${pct.toStringAsFixed(1)}%' : ''}',
-                style: NeyvoTextStyles.micro,
+              Flexible(
+                child: Text(
+                  '${NumberFormat('#,###').format(value)}${t != value ? ', ${pct.toStringAsFixed(1)}%' : ''}',
+                  style: NeyvoTextStyles.micro,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
