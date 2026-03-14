@@ -6,6 +6,8 @@ import '../../theme/neyvo_theme.dart';
 import '../../tenant/tenant_brand.dart';
 import '../agents/create_agent_wizard.dart';
 import '../agents/create_first_operator_panel.dart';
+import '../operators/universal_operator_wizard/universal_operator_wizard_screen.dart';
+import '../../pulse_route_names.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
 
@@ -66,6 +68,17 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
     }
   }
 
+  Future<void> _openUniversalWizard() async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => const UniversalOperatorWizardScreen(),
+      ),
+    );
+    if (created == true && mounted) {
+      _load();
+    }
+  }
+
   void _openProfileDetail(String profileId) {
     // Always open detail on a separate page (inside Pulse shell when callback is set).
     final onOpen = widget.onOpenProfileDetail;
@@ -99,14 +112,26 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     color: NeyvoColors.textPrimary,
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _openCreateAgent,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create Operator'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _openUniversalWizard,
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text('Create (universal)'),
+                      style: OutlinedButton.styleFrom(foregroundColor: primary),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _openCreateAgent,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create Operator'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primary,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

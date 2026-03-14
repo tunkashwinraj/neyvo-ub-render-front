@@ -271,8 +271,16 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset);
       final list = res['calls'] as List? ?? [];
       if (mounted) {
+        final existingIds = _allCalls
+            .map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final newCalls = list.where((c) {
+          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
+          return id.isNotEmpty && !existingIds.contains(id);
+        }).toList();
         setState(() {
-          _allCalls = [..._allCalls, ...list];
+          _allCalls = [..._allCalls, ...newCalls];
           _filteredCalls = _allCalls;
           _hasMore = list.length >= _pageSize;
           _loadingMore = false;

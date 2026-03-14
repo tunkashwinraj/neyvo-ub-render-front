@@ -32,6 +32,6 @@ void debugSessionLog(String location, String message, Map<String, dynamic> data,
     Uri.parse(_endpoint),
     headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': _sessionId},
     body: jsonEncode(payload),
-  ).catchError((_) {});
+  ).catchError((_, __) => Future.value(http.Response('', 500)));
 }
 // #endregion

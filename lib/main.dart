@@ -1,5 +1,6 @@
   import 'dart:async';
 
+  import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
@@ -38,6 +39,12 @@ import 'widgets/neyvo_loading_screen.dart';
 
 /// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
 const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
+  /// reCAPTCHA v3 site key for Firebase App Check (web). Set via:
+  /// flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key
+  const String _kRecaptchaV3SiteKey = String.fromEnvironment(
+    'RECAPTCHA_V3_SITE_KEY',
+    defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+  );
 
 String _resolveTenantId() {
   if (!kIsWeb) {
@@ -46,9 +53,12 @@ String _resolveTenantId() {
   }
   final host = Uri.base.host.toLowerCase();
 
-  // Local dev: allow forcing Goodwin (or ub) so you can run "goodwin in local"
-  if ((host == 'localhost' || host == '127.0.0.1') && _kLocalTenant.isNotEmpty) {
-    return _kLocalTenant.toLowerCase();
+  // Local dev: dart-define NEYVO_TENANT=goodwin or ?tenant=goodwin / ?tenant=ub
+  if (host == 'localhost' || host == '127.0.0.1') {
+    if (_kLocalTenant.isNotEmpty) return _kLocalTenant.toLowerCase();
+    final q = (Uri.base.queryParameters['tenant'] ?? '').toLowerCase().trim();
+    if (q == 'goodwin') return 'goodwin';
+    if (q == 'ub') return 'ub';
   }
 
   // Prod custom domains
@@ -92,6 +102,21 @@ String get _kFallbackAccountId {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
+    // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
+    if (kIsWeb) {
+      await FirebaseAppCheck.instance.activate(
+        webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    } else {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
+      );
+    }
 
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
