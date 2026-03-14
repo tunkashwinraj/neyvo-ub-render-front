@@ -71,7 +71,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: NeyvoTheme.bgBase,
+      backgroundColor: NeyvoColors.bgBase,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -119,7 +119,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: active ? NeyvoTheme.ubLightBlue : Colors.transparent,
+                    color: active ? NeyvoColors.ubLightBlue : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -145,7 +145,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
       width: 260,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: NeyvoTheme.bgRaised,
+        color: NeyvoColors.bgRaised,
         border: Border(left: BorderSide(color: NeyvoTheme.borderSubtle)),
       ),
       child: Column(
@@ -358,7 +358,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                       sectionsSpace: 2,
                       centerSpaceRadius: 24,
                       sections: [
-                        PieChartSectionData(value: resolutionPct, color: NeyvoTheme.ubLightBlue, showTitle: false),
+                        PieChartSectionData(value: resolutionPct, color: NeyvoColors.ubLightBlue, showTitle: false),
                         PieChartSectionData(value: 100 - resolutionPct, color: Colors.grey.shade300, showTitle: false),
                       ],
                     ),
@@ -417,7 +417,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                     barGroups: List.generate(depts.length, (i) {
                       final v = (depts[i]['avg_csat'] as num?)?.toDouble() ?? 0.0;
                       return BarChartGroupData(x: i, barRods: [
-                        BarChartRodData(toY: v, color: NeyvoTheme.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+                        BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
                       ], showingTooltipIndicators: []);
                     }),
                   ),
@@ -469,7 +469,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                   barGroups: List.generate(depts.length, (i) {
                     final v = (depts[i]['nps_score'] as num?)?.toDouble() ?? 0.0;
                     return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: v, color: NeyvoTheme.ubLightBlue, width: 20, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
+                      BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 20, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
                     ], showingTooltipIndicators: []);
                   }),
                 ),
@@ -523,7 +523,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
                   barGroups: List.generate(depts.length, (i) {
                     final ca = (depts[i]['calls_answered'] as num?)?.toInt() ?? 0;
                     return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: ca.toDouble(), color: NeyvoTheme.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+                      BarChartRodData(toY: ca.toDouble(), color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
                     ], showingTooltipIndicators: []);
                   }),
                 ),

@@ -173,6 +173,10 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> aiCraftPromptV3(Map<String, dynamic> wizardMeta) async =>
       _post('/api/managed-profiles/ai-craft-prompt-v3', {'wizardMeta': wizardMeta});
 
+  /// Universal wizard: generate refining questions from goal (OpenAI). Returns { "questions": [ { "id", "text", "type", "options" }, ... ] }.
+  static Future<Map<String, dynamic>> aiGoalQuestions(String goal) async =>
+      _post('/api/managed-profiles/ai-goal-questions', {'goal': goal});
+
   /// Fetch a prebuilt prompt template (e.g. "sfs" for Student Financial Services).
   static Future<Map<String, dynamic>> getPromptTemplate(String templateId) async =>
       _get('/api/managed-profiles/prompt-templates/$templateId');
