@@ -39,11 +39,11 @@ import 'widgets/neyvo_loading_screen.dart';
 
   /// reCAPTCHA v3 site key for Firebase App Check (web). Set via:
   /// flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key
-  /// Get the key from Firebase Console > App Check > reCAPTCHA v3, and from
-  /// https://www.google.com/recaptcha/admin (create v3 key for your domains).
+  /// Uses Google's test key by default so captcha runs on login for UB and Goodwin;
+  /// replace with your key from Firebase Console > App Check and recaptcha admin.
   const String _kRecaptchaV3SiteKey = String.fromEnvironment(
     'RECAPTCHA_V3_SITE_KEY',
-    defaultValue: '',
+    defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
   );
 
 String _resolveTenantId() {
@@ -97,13 +97,13 @@ String get _kFallbackAccountId {
 
     // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
     // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
-    if (kIsWeb && _kRecaptchaV3SiteKey.isNotEmpty) {
+    if (kIsWeb) {
       await FirebaseAppCheck.instance.activate(
         webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
         androidProvider: AndroidProvider.debug,
         appleProvider: AppleProvider.debug,
       );
-    } else if (!kIsWeb) {
+    } else {
       await FirebaseAppCheck.instance.activate(
         androidProvider: AndroidProvider.debug,
         appleProvider: AppleProvider.debug,

@@ -1,7 +1,9 @@
 // lib/neyvo_pulse/screens/pulse_auth_page.dart
 // Neyvo Pulse – Auth (new layout, same colors/fonts).
 
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -11,6 +13,7 @@ import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_scope.dart';
 import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../widgets/recaptcha_v2_checkbox.dart';
 
 class PulseAuthPage extends StatefulWidget {
   const PulseAuthPage({super.key});
@@ -23,6 +26,8 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
+  bool _verifying = false;
+  bool _recaptchaVerified = false; // reCAPTCHA v2 "I'm not a robot" checked (web only)
   String? _error;
 
   @override
@@ -168,6 +173,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     setState(() {
       _error = null;
       _loading = true;
+      _verifying = false;
     });
     if (!_validateInputs()) {
       setState(() => _loading = false);
@@ -175,6 +181,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
     }
     final email = _email.text.trim();
     final password = _password.text;
+
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
@@ -384,21 +391,44 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                                 ),
                               ),
                             ],
+                            if (kIsWeb) ...[
+                              const SizedBox(height: NeyvoSpacing.lg),
+                              buildRecaptchaV2Checkbox(
+                                siteKey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+                                onVerified: (token) {
+                                  if (mounted) setState(() => _recaptchaVerified = true);
+                                },
+                              ),
+                              const SizedBox(height: NeyvoSpacing.sm),
+                            ],
                             const SizedBox(height: NeyvoSpacing.xl),
                             FilledButton(
-                              onPressed: _loading ? null : _submit,
-                      style: FilledButton.styleFrom(backgroundColor: primary),
+                              onPressed: (_loading || _verifying || (kIsWeb && !_recaptchaVerified)) ? null : _submit,
+                              style: FilledButton.styleFrom(backgroundColor: primary),
                               child: _loading
-                                  ? const SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Text('Sign in'),
+                                      ? const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Text('Sign in'),
                             ),
+                            if (kIsWeb) ...[
+                              const SizedBox(height: NeyvoSpacing.xs),
+                              Center(
+                                child: Text(
+                                  'Protected by reCAPTCHA. Privacy & Terms apply.',
+                                  style: NeyvoType.bodySmall.copyWith(
+                                    color: NeyvoTheme.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: NeyvoSpacing.sm),
                             TextButton(
-                              onPressed: _loading ? null : _showForgotPasswordDialog,
+                              onPressed: (_loading || _verifying) ? null : _showForgotPasswordDialog,
                               child: Text(
                                 'Forgot password?',
                                 style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
