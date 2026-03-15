@@ -516,6 +516,7 @@ class NeyvoPulseApi {
     int? limit,
     int? offset,
     String? q,
+    bool syncFromVapi = true,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
@@ -524,6 +525,7 @@ class NeyvoPulseApi {
     if (to != null) params['to'] = to;
     if (limit != null) params['limit'] = q != null && q.trim().isNotEmpty ? limit.clamp(1, 2000) : limit.clamp(1, 500);
     if (offset != null && offset > 0) params['offset'] = offset;
+    if (syncFromVapi) params['sync_initiated'] = '1';
     final search = (q ?? '').trim();
     if (search.isNotEmpty) params['q'] = search;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);

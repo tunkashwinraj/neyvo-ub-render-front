@@ -580,7 +580,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                           });
                           if (kIsWeb) url_helper.updateBrowserUrl(item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
-                          if (item.label == 'Numbers') _loadNumbersSummary();
+                          if (item.label == 'Lines') _loadNumbersSummary();
                         },
                       );
                     },

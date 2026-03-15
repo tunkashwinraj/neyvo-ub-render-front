@@ -10,6 +10,7 @@ import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/spearia_api.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 import '../tenant/tenant_brand.dart';
@@ -68,12 +69,7 @@ class _StudentsHubPageState extends State<StudentsHubPage>
           _SyncTab(key: const ValueKey('sync')),
         ],
       ),
-      floatingActionButton: _tabController.index == 0
-          ? FloatingActionButton(
-              onPressed: () => _directoryKey.currentState?.openAddStudentDialog(),
-              child: const Icon(Icons.add),
-            )
-          : null,
+      floatingActionButton: null,
     );
   }
 }
@@ -460,6 +456,80 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
   }
 
+  List<Map<String, dynamic>> _outboundProfiles = [];
+  bool _profilesLoaded = false;
+
+  Future<String?> _getDefaultOutboundProfileId() async {
+    if (!_profilesLoaded) {
+      try {
+        final res = await ManagedProfileApiService.listProfiles();
+        final list = (res['profiles'] as List?)?.cast<dynamic>() ?? const [];
+        final profiles = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (mounted) {
+          setState(() {
+            _outboundProfiles = profiles;
+            _profilesLoaded = true;
+          });
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    if (_outboundProfiles.isEmpty) return null;
+    return (_outboundProfiles.first['profile_id'] ?? _outboundProfiles.first['id'])?.toString();
+  }
+
+  Future<void> _startVapiCall(Map<String, dynamic> s) async {
+    final phoneRaw = s['phone']?.toString().trim() ?? '';
+    final phone = normalizeToE164Us(phoneRaw);
+    if (phone.isEmpty || !RegExp(r'^\+[0-9]{8,15}$').hasMatch(phone)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Valid phone number required to place Vapi call.')),
+        );
+      }
+      return;
+    }
+    final profileId = await _getDefaultOutboundProfileId();
+    if (profileId == null || profileId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No outbound agent configured. Add an agent in Settings or Dialer.')),
+        );
+      }
+      return;
+    }
+    final studentId = s['id']?.toString().trim();
+    final name = _studentDisplayName(s);
+    try {
+      await ManagedProfileApiService.makeOutboundCall(
+        profileId: profileId,
+        customerPhone: phone,
+        studentId: studentId?.isEmpty == true ? null : studentId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Call started to $name via Vapi.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Call failed: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  void _openStudentDetails(String id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StudentDetailPage(studentId: id, onUpdated: _load),
+      ),
+    );
+  }
+
   Future<void> _confirmDeleteStudent(BuildContext context, String id, String name) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -572,120 +642,111 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
       );
     }
 
-    // Slightly larger text scale for the student section (zoomed-in view).
-    final mediaQuery = MediaQuery.of(context).copyWith(textScaleFactor: 1.15);
-    return MediaQuery(
-      data: mediaQuery,
-      child: Column(
-        children: [
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Container(
-            padding: const EdgeInsets.all(NeyvoSpacing.md),
+            margin: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.md, NeyvoSpacing.md, 0),
+            padding: const EdgeInsets.all(NeyvoSpacing.lg),
             decoration: BoxDecoration(
               color: NeyvoTheme.surface,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by name, phone, or student ID...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
-                        )
-                      : null,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: NeyvoColors.borderSubtle, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: NeyvoColors.ubPurple.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              const SizedBox(height: NeyvoSpacing.sm),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _FilterChip(
-                      label: 'All',
-                      selected: _filterStatus == 'all',
-                      onTap: () {
-                        setState(() => _filterStatus = 'all');
-                        _load();
-                      },
-                    ),
-                    const SizedBox(width: NeyvoSpacing.sm),
-                    _FilterChip(
-                      label: 'Balance > 0',
-                      selected: _filterStatus == 'with_balance',
-                      onTap: () {
-                        setState(() => _filterStatus = 'with_balance');
-                        _load();
-                      },
-                    ),
-                    const SizedBox(width: NeyvoSpacing.sm),
-                    _FilterChip(
-                      label: 'Overdue only',
-                      selected: _filterStatus == 'overdue',
-                      onTap: () {
-                        setState(() => _filterStatus = 'overdue');
-                        _load();
-                      },
-                    ),
-                    if (_isEducationOrg) ...[
-                      const SizedBox(width: NeyvoSpacing.sm),
-                      _FilterChip(
-                        label: 'Due This Week',
-                        selected: _filterStatus == 'due_this_week',
-                        onTap: () {
-                          setState(() => _filterStatus = 'due_this_week');
-                          _load();
-                        },
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search by name, phone, email, or ID...',
+                          hintStyle: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted),
+                          prefixIcon: Icon(Icons.search_rounded, color: NeyvoColors.ubPurple.withOpacity(0.7), size: 22),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(Icons.clear_rounded, size: 20, color: NeyvoColors.textMuted),
+                                  onPressed: () => _searchController.clear(),
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: NeyvoColors.bgHover.withOpacity(0.5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: NeyvoColors.borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: NeyvoColors.borderSubtle),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: NeyvoColors.ubPurple, width: 1.5),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
                       ),
-                      const SizedBox(width: NeyvoSpacing.sm),
-                      _FilterChip(
-                        label: 'No Balance',
-                        selected: _filterStatus == 'no_balance',
-                        onTap: () {
-                          setState(() => _filterStatus = 'no_balance');
-                          _load();
-                        },
+                    ),
+                    const SizedBox(width: NeyvoSpacing.md),
+                    FilledButton.icon(
+                      onPressed: () => openAddStudentDialog(),
+                      icon: const Icon(Icons.person_add_rounded, size: 20),
+                      label: const Text('Add student'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NeyvoColors.ubPurple,
+                        foregroundColor: NeyvoColors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
                       ),
-                    ],
+                    ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: _filteredStudents.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.school_outlined,
-                            size: 64, color: NeyvoColors.textMuted),
-                        const SizedBox(height: NeyvoSpacing.md),
-                        Text(
-                          _allStudents.isEmpty
-                              ? 'No students yet'
-                              : 'No students found',
-                          style: NeyvoType.bodyMedium
-                              .copyWith(color: NeyvoColors.textMuted),
-                        ),
-                      ],
-                    ),
-                  )
-                : Builder(
+            if (_filteredStudents.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.school_outlined,
+                          size: 64, color: NeyvoColors.textMuted),
+                      const SizedBox(height: NeyvoSpacing.md),
+                      Text(
+                        _allStudents.isEmpty
+                            ? 'No students yet'
+                            : 'No students found',
+                        style: NeyvoType.bodyMedium
+                            .copyWith(color: NeyvoColors.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Builder(
                     builder: (context) {
                       // Ensure table entry animation runs when table is first shown
                       if (_filteredStudents.isNotEmpty) {
@@ -693,115 +754,165 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       }
                       return AnimatedBuilder(
                         animation: _tableAnimationController,
-                        builder: (context, child) {
-                      return Opacity(
-                        opacity: _tableFade.value,
-                        child: Transform.translate(
-                          offset: Offset(0, _tableSlide.value.dy * 80),
-                          child: Transform.scale(
-                            scale: _tableScale.value,
-                            alignment: Alignment.topCenter,
-                            child: child,
-                          ),
-                        ),
-                      );
-                    },
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(NeyvoSpacing.md),
-                          scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                            headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
-                            dataRowMinHeight: 52,
-                            dataRowMaxHeight: 56,
-                            columns: [
-                              DataColumn(label: Text('Student Name', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('ID', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Department', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Phone Number', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Email', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Year of student', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Import List', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Last Call Status', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Last Call Time', style: NeyvoType.labelLarge)),
-                              DataColumn(label: Text('Actions', style: NeyvoType.labelLarge)),
-                            ],
-                            rows: _filteredStudents.map((s) {
-                              final id = s['id'] as String? ?? '';
-                              final name = _studentDisplayName(s);
-                              final studentId = s['student_id']?.toString() ?? s['external_id']?.toString() ?? '—';
-                              final department = (s['department'] as String?)?.trim();
-                              final phone = s['phone'] as String? ?? '';
-                              final email = (s['email'] as String?)?.trim();
-                              final yearOfStudy = (s['year_of_study'] as String?)?.trim();
-                              final importList = (s['import_name'] as String?)?.trim();
-                              final lastStatus = _lastCallStatusLabel(s['last_call_outcome']);
-                              final lastTime = _lastCallTimeLabel(s['last_call_date']);
-                              final statusColor = _lastCallStatusColor(lastStatus);
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(name, style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(studentId, style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(department?.isNotEmpty == true ? department! : '—', style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(phone, style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(email?.isNotEmpty == true ? email! : '—', style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(yearOfStudy?.isNotEmpty == true ? yearOfStudy! : '—', style: NeyvoType.bodyMedium)),
-                                  DataCell(Text(importList?.isNotEmpty == true ? importList! : '—', style: NeyvoType.bodyMedium)),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: statusColor.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: statusColor.withOpacity(0.4), width: 1),
-                                      ),
-                                      child: Text(lastStatus, style: NeyvoType.bodyMedium.copyWith(color: statusColor, fontWeight: FontWeight.w600)),
-                                    ),
-                                  ),
-                                  DataCell(Text(lastTime, style: NeyvoType.bodyMedium)),
-                                  DataCell(Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.phone_outlined, size: 22),
-                                        tooltip: 'Call',
-                                        onPressed: phone.isEmpty ? null : () => _launchCall(phone),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined, size: 22),
-                                        tooltip: 'Edit',
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => StudentDetailPage(
-                                                studentId: id,
-                                                onUpdated: _load,
-                                              ),
+                        builder: (context, _) {
+                            final animValue = _tableAnimationController.value;
+                            return Opacity(
+                              opacity: _tableFade.value,
+                              child: Transform.translate(
+                                offset: Offset(0, _tableSlide.value.dy * 60),
+                                child: Transform.scale(
+                                  scale: _tableScale.value,
+                                  alignment: Alignment.topCenter,
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final minTableWidth = constraints.maxWidth > 0 ? constraints.maxWidth : 900.0;
+                                      return Padding(
+                                        padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(minWidth: minTableWidth),
+                                            child: DataTable(
+                                              showCheckboxColumn: false,
+                                              headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
+                                              dataRowMinHeight: 48,
+                                              dataRowMaxHeight: 52,
+                                              columnSpacing: NeyvoSpacing.md,
+                                              columns: [
+                                                DataColumn(label: Text('Student Name', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('ID', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Department', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Phone Number', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Email', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Year of student', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Import List', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Last Call Status', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Last Call Time', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('Actions', style: NeyvoType.labelSmall)),
+                                              ],
+                                              rows: _filteredStudents.asMap().entries.map((entry) {
+                                                final rowIndex = entry.key;
+                                                final s = entry.value;
+                                                final id = s['id'] as String? ?? '';
+                                                final name = _studentDisplayName(s);
+                                                final studentId = s['student_id']?.toString() ?? s['external_id']?.toString() ?? '—';
+                                                final department = (s['department'] as String?)?.trim();
+                                                final phone = s['phone'] as String? ?? '';
+                                                final email = (s['email'] as String?)?.trim();
+                                                final yearOfStudy = (s['year_of_study'] as String?)?.trim();
+                                                final importList = (s['import_name'] as String?)?.trim();
+                                                final lastStatus = _lastCallStatusLabel(s['last_call_outcome']);
+                                                final lastTime = _lastCallTimeLabel(s['last_call_date']);
+                                                final statusColor = _lastCallStatusColor(lastStatus);
+                                                final rowOpacity = (animValue * (_filteredStudents.length + 4) - rowIndex).clamp(0.0, 1.0);
+                                                return DataRow(
+                                                  onSelectChanged: (_) => _openStudentDetails(id),
+                                                  cells: [
+                                                    DataCell(
+                                                      Opacity(
+                                                        opacity: rowOpacity,
+                                                        child: InkWell(
+                                                          onTap: () => _openStudentDetails(id),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          child: Padding(
+                                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                                            child: Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              children: [
+                                                                CircleAvatar(
+                                                                  radius: 18,
+                                                                  backgroundColor: NeyvoTheme.primary.withOpacity(0.12),
+                                                                  child: Text(
+                                                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                                                    style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 10),
+                                                                Text(name, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(studentId, style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(department?.isNotEmpty == true ? department! : '—', style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(phone, style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(email?.isNotEmpty == true ? email! : '—', style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(yearOfStudy?.isNotEmpty == true ? yearOfStudy! : '—', style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(importList?.isNotEmpty == true ? importList! : '—', style: NeyvoType.bodySmall))),
+                                                    DataCell(
+                                                      Opacity(
+                                                        opacity: rowOpacity,
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                          decoration: BoxDecoration(
+                                                            color: statusColor.withOpacity(0.15),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                            border: Border.all(color: statusColor.withOpacity(0.4), width: 1),
+                                                          ),
+                                                          child: Text(
+                                                            lastStatus,
+                                                            style: NeyvoType.bodySmall.copyWith(
+                                                              color: statusColor,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(lastTime, style: NeyvoType.bodySmall))),
+                                                    DataCell(
+                                                      PopupMenuButton<String>(
+                                                        icon: const Icon(Icons.more_vert, size: 22),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        tooltip: 'Actions',
+                                                        onSelected: (value) async {
+                                                          switch (value) {
+                                                            case 'call_vapi':
+                                                              await _startVapiCall(s);
+                                                              break;
+                                                            case 'view':
+                                                            case 'edit':
+                                                              _openStudentDetails(id);
+                                                              break;
+                                                            case 'delete':
+                                                              _confirmDeleteStudent(context, id, name);
+                                                              break;
+                                                            case 'dial':
+                                                              await _launchCall(phone);
+                                                              break;
+                                                          }
+                                                        },
+                                                        itemBuilder: (context) => [
+                                                          const PopupMenuItem(value: 'call_vapi', child: Row(children: [Icon(Icons.phone_in_talk, size: 20), SizedBox(width: 12), Text('Call with Vapi')])),
+                                                          const PopupMenuItem(value: 'dial', child: Row(children: [Icon(Icons.phone_outlined, size: 20), SizedBox(width: 12), Text('Dial number')])),
+                                                          const PopupMenuDivider(),
+                                                          const PopupMenuItem(value: 'view', child: Row(children: [Icon(Icons.person_outline, size: 20), SizedBox(width: 12), Text('View details')])),
+                                                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 20), SizedBox(width: 12), Text('Edit')])),
+                                                          const PopupMenuDivider(),
+                                                          PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 20, color: NeyvoColors.error), const SizedBox(width: 12), Text('Delete', style: TextStyle(color: NeyvoColors.error))])),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                              }).toList(),
                                             ),
-                                          );
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.delete_outline, size: 22, color: NeyvoColors.error),
-                                        tooltip: 'Delete',
-                                        onPressed: () => _confirmDeleteStudent(context, id, name),
-                                      ),
-                                    ],
-                                  )),
-                                ],
-                              );
-                            }).toList(),
-                            ),
-                          ),
-                        ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                       );
                     },
                   ),
-          ),
+          ],
         ),
-        ],
       ),
     );
   }
