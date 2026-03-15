@@ -685,14 +685,40 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       }
     }
 
-    final rows = [
-      ('Total in Campaign', total, Colors.indigo),
-      ('In Queue', queue, Colors.amber),
-      ('Ongoing / Talking', ongoing, Colors.green),
-      ('Unanswered / VM', unanswered, Colors.red),
-      ('Scheduled / Callback', scheduled, Colors.purple),
-      ('Failed', failed, Colors.grey),
+    final hasRunningCampaign = _runningCampaignId != null || _campaignItems.isNotEmpty;
+    final semanticColors = [
+      Colors.indigo,
+      Colors.amber,
+      Colors.green,
+      Colors.red,
+      Colors.purple,
+      Colors.grey.shade700,
     ];
+    const rainbowColors = [
+      Color(0xFFE53935),
+      Color(0xFFFB8C00),
+      Color(0xFFFDD835),
+      Color(0xFF43A047),
+      Color(0xFF1E88E5),
+      Color(0xFF8E24AA),
+    ];
+    final rowColors = hasRunningCampaign ? semanticColors : rainbowColors;
+
+    final rows = [
+      ('Total Contacts', total, rowColors[0]),
+      ('In Queue', queue, rowColors[1]),
+      ('On-going / Talking', ongoing, rowColors[2]),
+      ('Unanswered / VM', unanswered, rowColors[3]),
+      ('Scheduled / Callback', scheduled, rowColors[4]),
+      ('Failed', failed, rowColors[5]),
+    ];
+
+    final completionStr = total > 0 ? '${completion.toStringAsFixed(0)}%' : '0%';
+    final estRemainingParts = estimatedRemaining.startsWith('~')
+        ? (estimatedRemaining.split(' ')..removeWhere((s) => s.isEmpty))
+        : <String>[];
+    final estRemainingValue = estRemainingParts.isNotEmpty ? estRemainingParts[0] : estimatedRemaining;
+    final estRemainingUnit = estRemainingParts.length > 1 ? estRemainingParts[1] : '';
 
     return Card(
       elevation: 0,
@@ -702,25 +728,71 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Live Call Activity', style: NeyvoTextStyles.heading),
+            const SizedBox(height: 4),
             Row(
               children: [
-                Text('Live Call Activity', style: NeyvoTextStyles.heading),
-                const SizedBox(width: 8),
-                if (_refreshing) Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: NeyvoColors.ubLightBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                  child: Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.ubLightBlue)),
+                Expanded(
+                  child: Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
                 ),
+                if (_refreshing)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 6),
+                        Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
-            if (_runningCampaignId == null && _campaignItems.isEmpty)
-              Text('No active campaign', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted))
-            else
-              ...rows.map((r) => _LiveBarRow(label: r.$1, count: r.$2, pct: totalForBars > 0 ? (r.$2 / totalForBars) : 0, color: r.$3)),
-            const SizedBox(height: 8),
-            Text('Completion %: ${completion.toStringAsFixed(1)}%', style: NeyvoTextStyles.micro),
-            Text('Estimated remaining: $estimatedRemaining', style: NeyvoTextStyles.micro),
+            Divider(height: 1, color: NeyvoTheme.borderSubtle),
+            const SizedBox(height: 12),
+            if (!hasRunningCampaign)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('No campaign is currently running.', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted)),
+              ),
+            ...rows.map((r) => _LiveBarRow(label: r.$1, count: r.$2, pct: totalForBars > 0 ? (r.$2 / totalForBars) : 0, color: r.$3)),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: NeyvoTheme.borderSubtle),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Completion:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                    const SizedBox(height: 2),
+                    Text(completionStr, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.ubPurple, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('Est. remaining:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                    const SizedBox(height: 2),
+                    Text(estRemainingValue, style: NeyvoTextStyles.label.copyWith(fontWeight: FontWeight.w700)),
+                    if (estRemainingUnit.isNotEmpty)
+                      Text(estRemainingUnit, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -1221,18 +1293,38 @@ class _LiveBarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fill = pct.clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          SizedBox(width: 140, child: Text(label, style: NeyvoTextStyles.micro)),
+          SizedBox(width: 140, child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: color))),
           Expanded(
             child: SizedBox(
               height: 20,
-              child: LinearProgressIndicator(
-                value: pct.clamp(0.0, 1.0),
-                backgroundColor: Colors.grey.shade200,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final w = constraints.maxWidth;
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Row(
+                      children: [
+                        if (fill > 0)
+                          Container(
+                            width: (w * fill).clamp(0.0, w),
+                            height: 20,
+                            color: color,
+                          ),
+                        Expanded(
+                          child: Container(
+                            height: 20,
+                            color: Colors.grey.shade200,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),
