@@ -1278,7 +1278,28 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     });
   }
 
+  /// Deep-copy a value for JSON export (maps and lists recursively, keys as string).
+  static dynamic _dynamicDeepCopy(dynamic v) {
+    if (v is Map) {
+      return (v as Map).map((k, v) => MapEntry(k.toString(), _dynamicDeepCopy(v)));
+    }
+    if (v is List) {
+      return (v as List).map(_dynamicDeepCopy).toList();
+    }
+    return v;
+  }
+
+  /// Full model object from VAPI JSON for override (includes toolIds, messages, etc.).
+  static Map<String, dynamic> _deepCopyModelMap(Map model) {
+    final result = <String, dynamic>{};
+    for (final e in model.entries) {
+      result[e.key.toString()] = _dynamicDeepCopy(e.value);
+    }
+    return result;
+  }
+
   /// Parse full VAPI assistant JSON and update this operator's system prompt and voicemail.
+  /// Import overrides all operator config from the JSON except the operator name (profile name).
   Future<void> _importFromVapiJson() async {
     final raw = _vapiJsonImportController.text.trim();
     if (raw.isEmpty) {
@@ -1342,17 +1363,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         );
       }
 
-      // Model overrides: only model/provider/maxTokens/temperature; toolIds still come from tools.
+      // Model overrides: full override from JSON (model, provider, maxTokens, temperature, toolIds, messages, etc.).
       final model = data['model'];
       if (model is Map) {
-        final modelOverrides = <String, dynamic>{};
-        if (model['model'] != null) modelOverrides['model'] = model['model'];
-        if (model['provider'] != null) modelOverrides['provider'] = model['provider'];
-        if (model['maxTokens'] != null) modelOverrides['maxTokens'] = model['maxTokens'];
-        if (model['temperature'] != null) modelOverrides['temperature'] = model['temperature'];
-        if (modelOverrides.isNotEmpty) {
-          overrides['model'] = modelOverrides;
-        }
+        overrides['model'] = _deepCopyModelMap(model);
       }
 
       // Analysis plan.
@@ -1851,7 +1865,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           child: ExpansionTile(
             title: Text('Import from VAPI JSON', style: NeyvoTextStyles.heading),
             subtitle: Text(
-              'Paste the full assistant JSON from Vapi dashboard to update this operator\'s system prompt and voicemail.',
+              'Paste the full assistant JSON from Vapi dashboard. All operator settings (voice, model, prompt, voicemail, tools, analysis, hooks, etc.) will be overridden; only the operator name is kept.',
               style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
             ),
             children: [
@@ -1861,7 +1875,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'We extract: system prompt (from model.messages) and voicemailMessage. Paste the full VAPI assistant JSON below.',
+                      'Paste the full VAPI assistant JSON below. Everything from the JSON overrides this operator (voice, model, toolIds, messages, firstMessage, transcriber, endCallPhrases, analysisPlan, messagePlan, hooks, etc.). Only the operator name is not changed.',
                       style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
                     ),
                     const SizedBox(height: 12),
