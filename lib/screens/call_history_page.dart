@@ -68,12 +68,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
-      final res = await NeyvoPulseApi.listCalls(
-        limit: _pageSize,
-        offset: 0,
-        q: _searchQuery?.trim().isEmpty == true ? null : _searchQuery,
-      );
-      final list = res['calls'] as List? ?? [];
+      final list = _searchQuery != null && _searchQuery!.trim().isNotEmpty
+          ? (await NeyvoPulseApi.searchCalls(q: _searchQuery!.trim(), limit: _pageSize, offset: 0))['calls'] as List? ?? []
+          : (await NeyvoPulseApi.listCalls(limit: _pageSize, offset: 0))['calls'] as List? ?? [];
       if (mounted) {
         setState(() {
           _allCalls = list;
@@ -284,12 +281,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _loadingMore = true;
     });
     try {
-      final res = await NeyvoPulseApi.listCalls(
-        limit: _pageSize,
-        offset: offset,
-        q: _searchQuery?.trim().isEmpty == true ? null : _searchQuery,
-      );
-      final list = res['calls'] as List? ?? [];
+      final list = _searchQuery != null && _searchQuery!.trim().isNotEmpty
+          ? (await NeyvoPulseApi.searchCalls(q: _searchQuery!.trim(), limit: _pageSize, offset: offset))['calls'] as List? ?? []
+          : (await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset))['calls'] as List? ?? [];
       if (mounted) {
         final existingIds = _allCalls
             .map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '')

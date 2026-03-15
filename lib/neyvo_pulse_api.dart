@@ -498,7 +498,6 @@ class NeyvoPulseApi {
     String? to,
     int? limit,
     int? offset,
-    String? q,
   }) async {
     final params = <String, dynamic>{};
     if (studentId != null) params['student_id'] = studentId;
@@ -506,9 +505,25 @@ class NeyvoPulseApi {
     if (to != null) params['to'] = to;
     if (limit != null) params['limit'] = limit.clamp(1, 500);
     if (offset != null && offset > 0) params['offset'] = offset;
-    final search = (q ?? '').trim();
-    if (search.isNotEmpty) params['q'] = search;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
+  }
+
+  /// Search entire call log by name or phone. Dedicated API: GET /api/pulse/calls/search?q=...
+  static Future<Map<String, dynamic>> searchCalls({
+    required String q,
+    int? limit,
+    int? offset,
+  }) async {
+    final query = q.trim();
+    if (query.isEmpty) {
+      return {'ok': true, 'calls': <dynamic>[]};
+    }
+    final params = <String, dynamic>{
+      'q': query,
+      'limit': (limit ?? 20).clamp(1, 500),
+    };
+    if (offset != null && offset > 0) params['offset'] = offset;
+    return _get('/api/pulse/calls/search', params: params);
   }
 
   /// Delete one or more call log entries by their ids (as returned in listCalls).
