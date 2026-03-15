@@ -43,6 +43,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   /// Performance Trend view: 'calls' | 'both' | 'rate'
   String _performanceTrendTab = 'both';
 
+  /// Current week (Monday 00:00 through end of today) for Performance Trend.
+  ({String from, String to}) _currentWeekRangeIso() {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    final endOfToday = startOfToday.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+    final weekday = now.weekday;
+    final daysFromMonday = weekday - 1;
+    final startOfWeek = startOfToday.subtract(Duration(days: daysFromMonday));
+    return (from: startOfWeek.toIso8601String(), to: endOfToday.toIso8601String());
+  }
+
   ({String from, String to}) _dateRangeToIso() {
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
@@ -494,10 +505,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   /// Performance Trend: Total Calls (bars) + Resolution Rate % (line). Tabs: Calls | Both | Rate.
+  /// Uses current week (Mon–today) with one data point per day (datewise).
   Widget _buildPerformanceTrendCard() {
+    final weekRange = _currentWeekRangeIso();
+    final weekFrom = DateTime.parse(weekRange.from);
+    final weekTo = DateTime.parse(weekRange.to);
     final dailyBreakdown = _dailyCallBreakdown();
+    final breakdownByDate = {for (var d in dailyBreakdown) (d['date'] ?? '').toString(): d};
+
+    final weekDays = <Map<String, dynamic>>[];
+    for (var d = DateTime(weekFrom.year, weekFrom.month, weekFrom.day);
+        !d.isAfter(DateTime(weekTo.year, weekTo.month, weekTo.day));
+        d = d.add(const Duration(days: 1))) {
+      final key = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final row = breakdownByDate[key] ?? {'date': key, 'resolved': 0, 'unresolved': 0, 'no_answer': 0};
+      weekDays.add(row);
+    }
+
     final year = DateTime.now().year;
-    final trendData = dailyBreakdown.map((d) {
+    final trendData = weekDays.map((d) {
       final r = (d['resolved'] as num?)?.toInt() ?? 0;
       final u = (d['unresolved'] as num?)?.toInt() ?? 0;
       final n = (d['no_answer'] as num?)?.toInt() ?? 0;
@@ -505,6 +531,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final resolutionRate = total > 0 ? (r / total * 100) : 0.0;
       return {'date': d['date'], 'total': total, 'resolutionRate': resolutionRate};
     }).toList();
+
     String dateRangeLabel = '—';
     if (trendData.isNotEmpty) {
       try {
@@ -2050,6 +2077,12 @@ class _PerformanceTrendChart extends StatelessWidget {
   static const double _leftAxisWidth = 92;
   static const double _rightAxisWidth = 98;
 
+  /// Maps calls value to y position (0 = top, _chartAreaHeight = bottom). Bars start at 0 (bottom).
+  static double _callsToY(double value, int yCallsMin, int yCallsMax) {
+    if (yCallsMax <= yCallsMin) return _chartAreaHeight;
+    return _chartAreaHeight - (value - yCallsMin) / (yCallsMax - yCallsMin) * _chartAreaHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (trendData.isEmpty) return const SizedBox.shrink();
@@ -2063,6 +2096,7 @@ class _PerformanceTrendChart extends StatelessWidget {
     final showBars = tab == 'calls' || tab == 'both';
     final showLine = tab == 'rate' || tab == 'both';
     final gridValuesCalls = [yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0].toSet().toList()..sort((a, b) => b.compareTo(a));
+    final gridYPositions = gridValuesCalls.map((v) => _callsToY(v.toDouble(), yCallsMin, yCallsMax)).toList();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -2097,10 +2131,23 @@ class _PerformanceTrendChart extends StatelessWidget {
                     if (showBars)
                       SizedBox(
                         height: _chartAreaHeight,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: gridValuesCalls.map((v) => Text('$v', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                        child: Stack(
+                          children: [
+                            for (var i = 0; i < gridValuesCalls.length; i++)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: gridYPositions[i] - 6,
+                                height: 12,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    '${gridValuesCalls[i]}',
+                                    style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       )
                     else
@@ -2113,7 +2160,7 @@ class _PerformanceTrendChart extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 4),
-        // Chart area: bars + line
+        // Chart area: bars + line; grid aligned to scale so 0 is at bottom
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2123,10 +2170,11 @@ class _PerformanceTrendChart extends StatelessWidget {
                 height: _chartAreaHeight,
                 child: Stack(
                   children: [
-                    // Horizontal dashed grid lines
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(5, (_) => Container(height: 1, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE4E9F2), style: BorderStyle.solid))))),
+                    // Horizontal grid lines at scale positions (0 at bottom)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _PerformanceTrendGridPainter(yPositions: gridYPositions),
+                      ),
                     ),
                     // Bars (when calls or both)
                     if (showBars)
@@ -2180,14 +2228,14 @@ class _PerformanceTrendChart extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              // X-axis date labels (every ~5th + last)
+              // X-axis date labels (every day when <=7 points, else every ~5th + last)
               SizedBox(
                 height: 18,
                 child: Row(
                   children: trendData.asMap().entries.map((entry) {
                     final i = entry.key;
                     final d = entry.value;
-                    final showLabel = i % 5 == 0 || i == trendData.length - 1;
+                    final showLabel = trendData.length <= 7 || i % 5 == 0 || i == trendData.length - 1;
                     String dateLabel = '';
                     if (showLabel) {
                       try {
@@ -2258,6 +2306,28 @@ class _PerformanceTrendChart extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Draws horizontal grid lines at data-scale y positions (0 at bottom of chart).
+class _PerformanceTrendGridPainter extends CustomPainter {
+  final List<double> yPositions;
+
+  _PerformanceTrendGridPainter({required this.yPositions});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFE4E9F2)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (final y in yPositions) {
+      final yy = y.clamp(0.0, size.height - 1);
+      canvas.drawLine(Offset(0, yy), Offset(size.width, yy), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Draws dashed polyline through points (for resolution rate line).
