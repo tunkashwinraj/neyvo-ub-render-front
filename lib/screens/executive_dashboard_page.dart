@@ -1,11 +1,10 @@
 // Executive Dashboard – rebuild per spec: tabs, date filter, KPIs from listCalls,
 // Live Call Activity, Call Resolution, CSAT, Recent Call Logs, Quick Actions.
-// Data from NeyvoPulseApi; 5s auto-refresh. Charts via fl_chart.
+// Data from NeyvoPulseApi; 5s auto-refresh. Call Resolution donut is custom-painted.
 
 import 'dart:async';
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
 import '../neyvo_pulse_api.dart';
@@ -845,39 +844,10 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRect(
-                  child: SizedBox(
-                    width: 90,
-                    height: 90,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        PieChart(
-                          PieChartData(
-                            sectionsSpace: 2,
-                            centerSpaceRadius: 30.6,
-                            sections: total > 0
-                                ? [
-                                    PieChartSectionData(value: resolutionPct, color: Colors.blue, showTitle: false),
-                                    PieChartSectionData(value: (succeededNotResolved / total * 100), color: Colors.purple, showTitle: false),
-                                    PieChartSectionData(value: ((total - succeeded) / total * 100).clamp(0.0, 100.0), color: Colors.grey.shade300, showTitle: false),
-                                  ]
-                                : [
-                                    PieChartSectionData(value: 100, color: Colors.grey.shade300, showTitle: false),
-                                  ],
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('${resolutionPct.toStringAsFixed(1)}%', style: NeyvoTextStyles.title.copyWith(fontSize: 16)),
-                            Text('resolved', style: NeyvoTextStyles.micro),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                _ResolutionDonutChart(
+                  resolutionPct: resolutionPct,
+                  succeededNotResolvedPct: total > 0 ? (succeededNotResolved / total * 100) : 0.0,
+                  unresolvedPct: total > 0 ? ((total - succeeded) / total * 100).clamp(0.0, 100.0) : 100.0,
                 ),
                 const SizedBox(width: 28),
                 Expanded(
@@ -1344,6 +1314,131 @@ class _LiveBarRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Donut chart for Call Resolution: blue (resolved), purple (succeeded not resolved), grey (rest).
+/// Matches reference: large ring, hollow center, big bold % and smaller "resolved" label.
+class _ResolutionDonutChart extends StatelessWidget {
+  final double resolutionPct;
+  final double succeededNotResolvedPct;
+  final double unresolvedPct;
+
+  const _ResolutionDonutChart({
+    required this.resolutionPct,
+    required this.succeededNotResolvedPct,
+    required this.unresolvedPct,
+  });
+
+  static const double _size = 140.0;
+  static const double _strokeWidth = 18.0;
+  static const Color _blue = Color(0xFF418AF8);
+  static const Color _purple = Color(0xFF8A4ECB);
+  static const Color _grey = Color(0xFFE8EAEF);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _size,
+      height: _size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(_size, _size),
+            painter: _ResolutionDonutPainter(
+              resolutionPct: resolutionPct,
+              succeededNotResolvedPct: succeededNotResolvedPct,
+              unresolvedPct: unresolvedPct,
+              strokeWidth: _strokeWidth,
+              blue: _blue,
+              purple: _purple,
+              grey: _grey,
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${resolutionPct.toStringAsFixed(0)}%',
+                style: NeyvoTextStyles.title.copyWith(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: NeyvoTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'resolved',
+                style: NeyvoTextStyles.micro.copyWith(
+                  color: NeyvoTheme.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResolutionDonutPainter extends CustomPainter {
+  final double resolutionPct;
+  final double succeededNotResolvedPct;
+  final double unresolvedPct;
+  final double strokeWidth;
+  final Color blue;
+  final Color purple;
+  final Color grey;
+
+  _ResolutionDonutPainter({
+    required this.resolutionPct,
+    required this.succeededNotResolvedPct,
+    required this.unresolvedPct,
+    required this.strokeWidth,
+    required this.blue,
+    required this.purple,
+    required this.grey,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide / 2) - strokeWidth / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const startFromTop = -pi / 2;
+
+    double sweepBlue = (resolutionPct / 100 * 2 * pi).clamp(0.0, 2 * pi);
+    double sweepPurple = (succeededNotResolvedPct / 100 * 2 * pi).clamp(0.0, 2 * pi);
+    double remaining = 2 * pi - sweepBlue - sweepPurple;
+    if (remaining < 0) remaining = 0;
+    double sweepGrey = remaining;
+
+    void drawSegment(double start, double sweep, Color color) {
+      if (sweep <= 0) return;
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(rect, start, sweep, false, paint);
+    }
+
+    double cursor = startFromTop;
+    drawSegment(cursor, sweepBlue, blue);
+    cursor += sweepBlue;
+    drawSegment(cursor, sweepPurple, purple);
+    cursor += sweepPurple;
+    drawSegment(cursor, sweepGrey, grey);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ResolutionDonutPainter oldDelegate) {
+    return oldDelegate.resolutionPct != resolutionPct
+        || oldDelegate.succeededNotResolvedPct != succeededNotResolvedPct
+        || oldDelegate.unresolvedPct != unresolvedPct;
   }
 }
 
