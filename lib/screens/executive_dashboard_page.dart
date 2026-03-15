@@ -634,18 +634,20 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         tooltip: 'Average Handle Time',
       ),
     ];
-    return Row(
-      children: [
-        Expanded(child: cards[0]),
-        const SizedBox(width: 12),
-        Expanded(child: cards[1]),
-        const SizedBox(width: 12),
-        Expanded(child: cards[2]),
-        const SizedBox(width: 12),
-        Expanded(child: cards[3]),
-        const SizedBox(width: 12),
-        Expanded(child: cards[4]),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[1]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[2]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[3]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[4]),
+        ],
+      ),
     );
   }
 
@@ -764,45 +766,50 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 90,
-                  height: 90,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      PieChart(
-                        PieChartData(
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 30.6,
-                          sections: total > 0
-                              ? [
-                                  PieChartSectionData(value: resolutionPct, color: Colors.blue, showTitle: false),
-                                  PieChartSectionData(value: (succeededNotResolved / total * 100), color: Colors.purple, showTitle: false),
-                                  PieChartSectionData(value: ((total - succeeded) / total * 100).clamp(0.0, 100.0), color: Colors.grey.shade300, showTitle: false),
-                                ]
-                              : [
-                                  PieChartSectionData(value: 25, color: Colors.amber, showTitle: false),
-                                  PieChartSectionData(value: 25, color: Colors.purple, showTitle: false),
-                                  PieChartSectionData(value: 25, color: Colors.blue, showTitle: false),
-                                  PieChartSectionData(value: 25, color: Colors.grey, showTitle: false),
-                                ],
+                ClipRect(
+                  child: SizedBox(
+                    width: 90,
+                    height: 90,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 30.6,
+                            sections: total > 0
+                                ? [
+                                    PieChartSectionData(value: resolutionPct, color: Colors.blue, showTitle: false),
+                                    PieChartSectionData(value: (succeededNotResolved / total * 100), color: Colors.purple, showTitle: false),
+                                    PieChartSectionData(value: ((total - succeeded) / total * 100).clamp(0.0, 100.0), color: Colors.grey.shade300, showTitle: false),
+                                  ]
+                                : [
+                                    PieChartSectionData(value: 25, color: Colors.amber, showTitle: false),
+                                    PieChartSectionData(value: 25, color: Colors.purple, showTitle: false),
+                                    PieChartSectionData(value: 25, color: Colors.blue, showTitle: false),
+                                    PieChartSectionData(value: 25, color: Colors.grey, showTitle: false),
+                                  ],
+                          ),
                         ),
-                      ),
-                      Text('${resolutionPct.toStringAsFixed(1)}%', style: NeyvoTextStyles.title.copyWith(fontSize: 16)),
-                    ],
+                        Text('${resolutionPct.toStringAsFixed(1)}%', style: NeyvoTextStyles.title.copyWith(fontSize: 16)),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 28),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LegendRow('Received', total, Colors.amber),
-                      _LegendRow('Succeeded', succeeded, Colors.purple),
-                      _LegendRow('Resolved', resolved, Colors.blue),
-                      _LegendRow('Unresolved', unresolved, Colors.grey),
-                    ],
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _LegendRow('Received', total, Colors.amber),
+                        _LegendRow('Succeeded', succeeded, Colors.purple),
+                        _LegendRow('Resolved', resolved, Colors.blue),
+                        _LegendRow('Unresolved', unresolved, Colors.grey),
+                      ],
+                    ),
                   ),
                 ),
               ],
