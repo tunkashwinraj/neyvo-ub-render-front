@@ -1331,6 +1331,112 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       if ((customSystemPrompt ?? '').isNotEmpty) body['custom_system_prompt'] = customSystemPrompt;
       if (voicemailMessage != null && voicemailMessage.isNotEmpty) body['voicemail_message'] = voicemailMessage;
 
+      // Extended per-profile VAPI overrides (voice/model/analysis/behavior/etc.).
+      final overrides = <String, dynamic>{};
+
+      // Voice (we keep provider/model/voiceId/etc.; backend will enforce tier rules).
+      final voice = data['voice'];
+      if (voice is Map) {
+        overrides['voice'] = Map<String, dynamic>.from(
+          voice.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      // Model overrides: only model/provider/maxTokens/temperature; toolIds still come from tools.
+      final model = data['model'];
+      if (model is Map) {
+        final modelOverrides = <String, dynamic>{};
+        if (model['model'] != null) modelOverrides['model'] = model['model'];
+        if (model['provider'] != null) modelOverrides['provider'] = model['provider'];
+        if (model['maxTokens'] != null) modelOverrides['maxTokens'] = model['maxTokens'];
+        if (model['temperature'] != null) modelOverrides['temperature'] = model['temperature'];
+        if (modelOverrides.isNotEmpty) {
+          overrides['model'] = modelOverrides;
+        }
+      }
+
+      // Analysis plan.
+      final analysisPlan = data['analysisPlan'];
+      if (analysisPlan is Map) {
+        overrides['analysisPlan'] = Map<String, dynamic>.from(
+          analysisPlan.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      // Message/behavior plans and hooks.
+      final messagePlan = data['messagePlan'];
+      if (messagePlan is Map) {
+        overrides['messagePlan'] = Map<String, dynamic>.from(
+          messagePlan.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      final startSpeakingPlan = data['startSpeakingPlan'];
+      if (startSpeakingPlan is Map) {
+        overrides['startSpeakingPlan'] = Map<String, dynamic>.from(
+          startSpeakingPlan.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      final stopSpeakingPlan = data['stopSpeakingPlan'];
+      if (stopSpeakingPlan is Map) {
+        overrides['stopSpeakingPlan'] = Map<String, dynamic>.from(
+          stopSpeakingPlan.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      final hooks = data['hooks'];
+      if (hooks is List) {
+        overrides['hooks'] = hooks.map((e) {
+          if (e is Map) {
+            return Map<String, dynamic>.from(
+              e.map((k, v) => MapEntry(k.toString(), v)),
+            );
+          }
+          return e;
+        }).toList();
+      }
+
+      final voicemailDetection = data['voicemailDetection'];
+      if (voicemailDetection is Map) {
+        overrides['voicemailDetection'] = Map<String, dynamic>.from(
+          voicemailDetection.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      // End call phrases.
+      final endCallPhrases = data['endCallPhrases'];
+      if (endCallPhrases is List) {
+        overrides['endCallPhrases'] = endCallPhrases.map((e) => e.toString()).toList();
+      }
+
+      // Background flags and transcriber.
+      if (data.containsKey('backgroundSound')) {
+        overrides['backgroundSound'] = data['backgroundSound'];
+      }
+      if (data.containsKey('backgroundDenoisingEnabled')) {
+        overrides['backgroundDenoisingEnabled'] = data['backgroundDenoisingEnabled'];
+      }
+
+      final transcriber = data['transcriber'];
+      if (transcriber is Map) {
+        overrides['transcriber'] = Map<String, dynamic>.from(
+          transcriber.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+
+      // First message fields (we do not import name/id).
+      if (data['firstMessage'] != null) {
+        overrides['firstMessage'] = data['firstMessage'];
+      }
+      if (data['firstMessageMode'] != null) {
+        overrides['firstMessageMode'] = data['firstMessageMode'];
+      }
+
+      if (overrides.isNotEmpty) {
+        body['vapi_overrides'] = overrides;
+      }
+
       final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
       if (!mounted) return;
       setState(() {

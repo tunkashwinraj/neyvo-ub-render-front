@@ -331,6 +331,11 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
       if (data['messagePlan'] is Map) payload['message_plan'] = Map<String, dynamic>.from(data['messagePlan'] as Map);
       if (data['startSpeakingPlan'] is Map) payload['start_speaking_plan'] = Map<String, dynamic>.from(data['startSpeakingPlan'] as Map);
       if (data['stopSpeakingPlan'] is Map) payload['stop_speaking_plan'] = Map<String, dynamic>.from(data['stopSpeakingPlan'] as Map);
+      if (data['hooks'] is List) {
+        payload['hooks'] = (data['hooks'] as List)
+            .map((e) => e is Map ? Map<String, dynamic>.from(e as Map) : e)
+            .toList();
+      }
 
       if (payload.isEmpty) {
         if (mounted) {
