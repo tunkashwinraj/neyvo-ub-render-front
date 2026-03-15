@@ -138,7 +138,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final name = (a['name'] ?? 'Unnamed operator').toString();
         if (id.isNotEmpty) operators.add({'value': 'agent:$id', 'name': name, 'type': 'agent'});
       }
-      final studentsRes = await NeyvoPulseApi.listStudents();
+      // Load all students for campaign audience (high limit so contact list shows everyone)
+      final studentsRes = await NeyvoPulseApi.listStudents(limit: 5000);
       final studentsList = studentsRes['students'] as List? ?? [];
       _students = studentsList.cast<Map<String, dynamic>>();
 
