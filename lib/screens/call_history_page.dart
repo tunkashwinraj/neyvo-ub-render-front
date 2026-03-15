@@ -68,14 +68,22 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
+      // Ensure account is set so backend returns calls for the correct org
+      if (NeyvoPulseApi.defaultAccountId.isEmpty) {
+        final accountRes = await NeyvoPulseApi.getAccountInfo();
+        final accountId = (accountRes['account_id'] ?? accountRes['id'] ?? '').toString().trim();
+        if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
+      }
+      // Search: GET /calls?q=...&limit=2000 (all matching logs). Normal list: limit 20, no q.
       final list = _searchQuery != null && _searchQuery!.trim().isNotEmpty
-          ? (await NeyvoPulseApi.searchCalls(q: _searchQuery!.trim(), limit: _pageSize, offset: 0))['calls'] as List? ?? []
+          ? (await NeyvoPulseApi.listCalls(q: _searchQuery!.trim(), limit: 2000, offset: 0))['calls'] as List? ?? []
           : (await NeyvoPulseApi.listCalls(limit: _pageSize, offset: 0))['calls'] as List? ?? [];
       if (mounted) {
+        final isSearch = _searchQuery != null && _searchQuery!.trim().isNotEmpty;
         setState(() {
           _allCalls = list;
           _filteredCalls = list;
-          _hasMore = list.length >= _pageSize;
+          _hasMore = isSearch ? list.length >= 2000 : list.length >= _pageSize;
           _loading = false;
         });
         _filterCalls();
@@ -282,7 +290,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     });
     try {
       final list = _searchQuery != null && _searchQuery!.trim().isNotEmpty
-          ? (await NeyvoPulseApi.searchCalls(q: _searchQuery!.trim(), limit: _pageSize, offset: offset))['calls'] as List? ?? []
+          ? (await NeyvoPulseApi.listCalls(q: _searchQuery!.trim(), limit: 2000, offset: offset))['calls'] as List? ?? []
           : (await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset))['calls'] as List? ?? [];
       if (mounted) {
         final existingIds = _allCalls
@@ -293,10 +301,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
           final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
           return id.isNotEmpty && !existingIds.contains(id);
         }).toList();
+        final isSearch = _searchQuery != null && _searchQuery!.trim().isNotEmpty;
         setState(() {
           _allCalls = [..._allCalls, ...newCalls];
           _filteredCalls = _allCalls;
-          _hasMore = list.length >= _pageSize;
+          _hasMore = isSearch ? list.length >= 2000 : list.length >= _pageSize;
           _loadingMore = false;
         });
         _filterCalls();
