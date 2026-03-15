@@ -2531,6 +2531,38 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onChanged: (v) => setState(() => _filterOverdueOnly = v ?? false),
               ),
               const Divider(),
+              if (filtered.isEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.xl),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.people_outline, size: 48, color: NeyvoTheme.textMuted),
+                        const SizedBox(height: NeyvoSpacing.md),
+                        Text(
+                          'No contacts in this account yet.',
+                          style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textSecondary),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Text(
+                          'Add contacts from the Contacts page, then return here to create a campaign.',
+                          style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.lg),
+                        FilledButton.icon(
+                          onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
+                          icon: const Icon(Icons.people, size: 20),
+                          label: const Text('Go to Contacts'),
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -2597,6 +2629,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   },
                 );
               }),
+              ],
             ],
           ],
         ),

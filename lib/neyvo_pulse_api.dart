@@ -335,6 +335,7 @@ class NeyvoPulseApi {
     String? dueAfter,
   }) async {
     final params = <String, dynamic>{};
+    if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
     if (hasBalance != null) params['has_balance'] = hasBalance;
     if (isOverdue != null) params['is_overdue'] = isOverdue;
     if (balanceMin != null) params['balance_min'] = balanceMin;
