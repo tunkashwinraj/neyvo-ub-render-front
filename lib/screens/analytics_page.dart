@@ -34,7 +34,55 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   List<Map<String, dynamic>> _campaigns = [];
   List<Map<String, dynamic>> _agents = [];
   List<Map<String, dynamic>> _numbers = [];
+  List<Map<String, dynamic>> _callsForKpi = [];
+  List<Map<String, dynamic>> _priorCallsForKpi = [];
   String _dateRange = '30d';
+
+  ({String from, String to}) _dateRangeToIso() {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    final endOfToday = startOfToday.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+    String toIso(DateTime d) => d.toIso8601String();
+    switch (_dateRange) {
+      case 'today':
+        return (from: toIso(startOfToday), to: toIso(endOfToday));
+      case '7d':
+        final from = startOfToday.subtract(const Duration(days: 6));
+        return (from: toIso(from), to: toIso(endOfToday));
+      case '90d':
+        final from = startOfToday.subtract(const Duration(days: 89));
+        return (from: toIso(from), to: toIso(endOfToday));
+      case '30d':
+      default:
+        final from = startOfToday.subtract(const Duration(days: 29));
+        return (from: toIso(from), to: toIso(endOfToday));
+    }
+  }
+
+  ({String from, String to}) _priorRangeIso() {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    final endOfToday = startOfToday.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+    String toIso(DateTime d) => d.toIso8601String();
+    switch (_dateRange) {
+      case 'today':
+        final y = startOfToday.subtract(const Duration(days: 1));
+        return (from: toIso(y), to: toIso(y.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1))));
+      case '7d':
+        final from = startOfToday.subtract(const Duration(days: 13));
+        final to = startOfToday.subtract(const Duration(days: 7)).subtract(const Duration(microseconds: 1));
+        return (from: toIso(from), to: toIso(to));
+      case '90d':
+        final from = startOfToday.subtract(const Duration(days: 179));
+        final to = startOfToday.subtract(const Duration(days: 90)).subtract(const Duration(microseconds: 1));
+        return (from: toIso(from), to: toIso(to));
+      case '30d':
+      default:
+        final from = startOfToday.subtract(const Duration(days: 59));
+        final to = startOfToday.subtract(const Duration(days: 30)).subtract(const Duration(microseconds: 1));
+        return (from: toIso(from), to: toIso(to));
+    }
+  }
 
   @override
   void initState() {
@@ -44,11 +92,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
+    final range = _dateRangeToIso();
+    final prior = _priorRangeIso();
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAnalyticsOverview(),
-        NeyvoPulseApi.getAnalyticsComms(),
-        NeyvoPulseApi.getAnalyticsStudio(),
+        NeyvoPulseApi.getAnalyticsOverview(from: range.from, to: range.to),
+        NeyvoPulseApi.getAnalyticsComms(from: range.from, to: range.to),
+        NeyvoPulseApi.getAnalyticsStudio(from: range.from, to: range.to),
         NeyvoPulseApi.getInsights().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getCallbacksAnalytics().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getBillingWallet().catchError((_) => <String, dynamic>{}),
@@ -57,12 +107,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         NeyvoPulseApi.listCampaigns().catchError((_) => <String, dynamic>{'campaigns': []}),
         NeyvoPulseApi.listAgents().catchError((_) => <String, dynamic>{'agents': []}),
         NeyvoPulseApi.listNumbers().catchError((_) => <String, dynamic>{'numbers': []}),
+        NeyvoPulseApi.listCalls(from: range.from, to: range.to, limit: 500).catchError((_) => <String, dynamic>{'calls': []}),
+        NeyvoPulseApi.listCalls(from: prior.from, to: prior.to, limit: 500).catchError((_) => <String, dynamic>{'calls': []}),
       ]);
       if (!mounted) return;
       final stList = (results[7] as Map)['students'] as List? ?? [];
       final campList = (results[8] as Map)['campaigns'] as List? ?? [];
       final agList = (results[9] as Map)['agents'] as List? ?? [];
       final numList = (results[10] as Map)['numbers'] as List? ?? (results[10] as Map)['items'] as List? ?? [];
+      final callsRes = results[11] as Map<String, dynamic>;
+      final priorCallsRes = results[12] as Map<String, dynamic>;
+      final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final priorCalls = (priorCallsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
       setState(() {
         _overview = results[0] as Map<String, dynamic>;
         _comms = results[1] as Map<String, dynamic>;
@@ -75,6 +131,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         _campaigns = campList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         _agents = agList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         _numbers = numList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _callsForKpi = calls;
+        _priorCallsForKpi = priorCalls;
         _loading = false;
       });
     } catch (e) {
@@ -261,12 +319,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ? overviewCallsByDate.map((e) => (e['count'] as num?)?.toInt() ?? 0).toList()
         : (comms['calls_per_day'] as List?) ?? [];
     final hasCallsChart = overviewCallsByDate.isNotEmpty || overviewCallsPerDay.isNotEmpty;
+    final kpi = _computeKpis(_callsForKpi);
+    final priorKpi = _computeKpis(_priorCallsForKpi);
+
     return NeyvoGlassPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Overview', style: NeyvoTextStyles.heading),
           const SizedBox(height: 16),
+          _buildKpiRow(kpi: kpi, priorKpi: priorKpi),
+          const SizedBox(height: 20),
           Wrap(
             spacing: 16,
             runSpacing: 16,
@@ -307,6 +370,151 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       )
                     : _CreditsLineChart(spots: creditsSpots),
           ),
+        ],
+      ),
+    );
+  }
+
+  ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) _computeKpis(List<Map<String, dynamic>> calls) {
+    int total = calls.length;
+    final answeredList = calls.where((c) {
+      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+      return o == 'answered' || o == 'completed' || o == 'goal_achieved' || o == 'success';
+    }).toList();
+    int answered = answeredList.length;
+    int abandoned = calls.where((c) {
+      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+      return o == 'dropped' || o == 'no_answer';
+    }).length;
+
+    int? asaSec;
+    int? ahtSec;
+    int asaSum = 0;
+    int ahtSum = 0;
+    int asaCount = 0;
+    for (final c in answeredList) {
+      final start = _parseDate(c['created_at'] ?? c['start_time'] ?? c['date']);
+      final answer = _parseDate(c['answered_at'] ?? c['answer_time']);
+      if (start != null && answer != null) {
+        asaSum += answer.difference(start).inSeconds;
+        asaCount++;
+      }
+      final dur = c['duration_seconds'] ?? c['duration_sec'];
+      if (dur != null) {
+        final s = dur is int ? dur : int.tryParse(dur.toString());
+        if (s != null) ahtSum += s;
+      }
+    }
+    if (asaCount > 0) asaSec = (asaSum / asaCount).round();
+    if (answeredList.isNotEmpty && ahtSum > 0) ahtSec = (ahtSum / answeredList.length).round();
+
+    return (total: total, answered: answered, abandoned: abandoned, asaSec: asaSec, ahtSec: ahtSec);
+  }
+
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    return null;
+  }
+
+  Widget _buildKpiRow({
+    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) kpi,
+    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) priorKpi,
+  }) {
+    final total = kpi.total;
+    final answerRate = total > 0 ? (kpi.answered / total * 100) : 0.0;
+    final abandonRate = total > 0 ? (kpi.abandoned / total * 100) : 0.0;
+
+    String trendTotal = '';
+    if (priorKpi.total > 0) {
+      final d = kpi.total - priorKpi.total;
+      trendTotal = d >= 0 ? '+$d' : '$d';
+    }
+    String trendAnswered = '';
+    if (priorKpi.total > 0) {
+      final pctNow = total > 0 ? (kpi.answered / total * 100) : 0.0;
+      final pctPrev = priorKpi.answered / priorKpi.total * 100;
+      final d = pctNow - pctPrev;
+      trendAnswered = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAbandon = '';
+    if (priorKpi.total > 0 && total > 0) {
+      final pctNow = kpi.abandoned / total * 100;
+      final pctPrev = priorKpi.abandoned / priorKpi.total * 100;
+      final d = pctNow - pctPrev;
+      trendAbandon = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAsa = '';
+    if (kpi.asaSec != null && priorKpi.asaSec != null) {
+      final d = kpi.asaSec! - priorKpi.asaSec!;
+      trendAsa = d >= 0 ? '+${d}s' : '${d}s';
+    }
+    String trendAht = '';
+    if (kpi.ahtSec != null && priorKpi.ahtSec != null) {
+      final d = kpi.ahtSec! - priorKpi.ahtSec!;
+      trendAht = d >= 0 ? '+${d}s' : '${d}s';
+    }
+
+    final cards = [
+      _InsightsKpiCard(
+        title: 'TOTAL CALLS',
+        value: total > 0 ? NumberFormat('#,###').format(total) : '--',
+        trend: trendTotal,
+        topBorderColor: Colors.blue,
+        icon: Icons.phone_outlined,
+        iconColor: Colors.blue,
+      ),
+      _InsightsKpiCard(
+        title: 'CALLS ANSWERED',
+        value: total > 0 ? NumberFormat('#,###').format(kpi.answered) : '--',
+        subtitle: total > 0 ? '${answerRate.toStringAsFixed(1)}%' : null,
+        trend: trendAnswered,
+        topBorderColor: Colors.green,
+        icon: Icons.check_circle_outline,
+        iconColor: Colors.green,
+      ),
+      _InsightsKpiCard(
+        title: 'ABANDON CALLS',
+        value: total > 0 ? NumberFormat('#,###').format(kpi.abandoned) : '--',
+        subtitle: total > 0 ? '${abandonRate.toStringAsFixed(1)}%' : null,
+        trend: trendAbandon,
+        topBorderColor: Colors.red,
+        icon: Icons.phone_disabled_outlined,
+        iconColor: Colors.red,
+      ),
+      _InsightsKpiCard(
+        title: 'ASA (Sec)',
+        value: kpi.asaSec != null ? '${kpi.asaSec}' : '--',
+        trend: trendAsa,
+        topBorderColor: Colors.orange,
+        icon: Icons.timer_outlined,
+        iconColor: Colors.orange,
+        tooltip: 'Average Speed of Answer',
+      ),
+      _InsightsKpiCard(
+        title: 'AHT (Sec)',
+        value: kpi.ahtSec != null ? '${kpi.ahtSec}' : '--',
+        trend: trendAht,
+        topBorderColor: Colors.purple,
+        icon: Icons.headset_outlined,
+        iconColor: Colors.purple,
+        tooltip: 'Average Handle Time',
+      ),
+    ];
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[1]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[2]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[3]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[4]),
         ],
       ),
     );
@@ -799,7 +1007,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _dateChip(String label, String value) {
     final isActive = _dateRange == value;
     return GestureDetector(
-      onTap: () => setState(() => _dateRange = value),
+      onTap: () {
+        setState(() => _dateRange = value);
+        _load();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -1231,6 +1442,105 @@ class _CreditsLineChart extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _InsightsKpiCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String? subtitle;
+  final String trend;
+  final Color topBorderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String? tooltip;
+
+  const _InsightsKpiCard({
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.trend,
+    required this.topBorderColor,
+    required this.icon,
+    required this.iconColor,
+    this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip ?? title,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: NeyvoTheme.borderSubtle),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border(top: BorderSide(color: topBorderColor, width: 3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: NeyvoTextStyles.label.copyWith(fontSize: 10, letterSpacing: 0.5),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: iconColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                      child: Icon(icon, color: iconColor, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: NeyvoTextStyles.title.copyWith(fontSize: 22),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (trend.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          trend,
+                          style: NeyvoTextStyles.micro.copyWith(color: trend.startsWith('+') ? Colors.green : Colors.red),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted), overflow: TextOverflow.ellipsis, maxLines: 1),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

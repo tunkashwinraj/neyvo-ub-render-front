@@ -465,14 +465,9 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
   }
 
   Widget _buildExecutiveContent() {
-    final kpi = _computeKpis(_calls);
-    final priorKpi = _computeKpis(_priorCalls);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildKpiRow(kpi: kpi, priorKpi: priorKpi),
-        const SizedBox(height: 24),
         LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 800;
