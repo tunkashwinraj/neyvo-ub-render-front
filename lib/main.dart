@@ -72,8 +72,12 @@ String _resolveTenantId() {
   return '';
 }
 
+/// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
+const bool _kForceStaging = bool.fromEnvironment('FORCE_STAGING', defaultValue: false);
+
 /// True when the app is running on the Firebase staging host (e.g. ub-neyvo-staging.web.app).
 bool get _isStagingHost {
+  if (_kForceStaging && kIsWeb) return true;
   if (!kIsWeb) return false;
   final host = Uri.base.host.toLowerCase();
   return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');

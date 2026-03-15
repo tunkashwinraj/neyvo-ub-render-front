@@ -2049,8 +2049,9 @@ class _PerformanceTrendChart extends StatelessWidget {
       final t = (d['total'] as num?)?.toInt() ?? 0;
       return t > m ? t : m;
     });
+    const yCallsMin = 0;
     final yCallsMax = maxCalls < 2 ? 2 : (maxCalls <= 6 ? 6 : (maxCalls + 2));
-    final callsScale = yCallsMax > 0 ? _chartAreaHeight / yCallsMax : 1.0;
+    final callsScale = (yCallsMax - yCallsMin) > 0 ? _chartAreaHeight / (yCallsMax - yCallsMin) : 1.0;
     final showBars = tab == 'calls' || tab == 'both';
     final showLine = tab == 'rate' || tab == 'both';
     final gridValuesCalls = [yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0].toSet().toList()..sort((a, b) => b.compareTo(a));
@@ -2058,30 +2059,47 @@ class _PerformanceTrendChart extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Left Y-axis: NUMBER OF CALLS
+        // Left Y-axis: NUMBER OF CALLS (vertical label on left)
         SizedBox(
           width: _leftAxisWidth,
           height: _chartAreaHeight + 22,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (showBars) ...[
-                SizedBox(
-                  height: _chartAreaHeight,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: gridValuesCalls.map((v) => Text('$v', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+              SizedBox(
+                width: 16,
+                height: _chartAreaHeight + 22,
+                child: Center(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'NUMBER OF CALLS',
+                      style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
-              ] else
-                SizedBox(height: _chartAreaHeight),
-              const SizedBox(height: 4),
-              Text(
-                'NUMBER OF CALLS',
-                style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (showBars)
+                      SizedBox(
+                        height: _chartAreaHeight,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: gridValuesCalls.map((v) => Text('$v', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                        ),
+                      )
+                    else
+                      SizedBox(height: _chartAreaHeight),
+                    const SizedBox(height: 4),
+                  ],
+                ),
               ),
             ],
           ),
@@ -2113,7 +2131,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(horizontal: 2),
                               child: total > 0
                                   ? Container(
-                                      height: (total * callsScale).clamp(4.0, _chartAreaHeight),
+                                      height: ((total - yCallsMin) * callsScale).clamp(4.0, _chartAreaHeight),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFF3B82F6),
                                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -2184,28 +2202,45 @@ class _PerformanceTrendChart extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 4),
-        // Right Y-axis: RESOLUTION RATE, %
+        // Right Y-axis: RESOLUTION RATE, % (vertical label on right)
         if (showLine)
           SizedBox(
             width: _rightAxisWidth,
             height: _chartAreaHeight + 22,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  height: _chartAreaHeight,
+                Expanded(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: ['100', '75', '50', '25', '0'].map((v) => Text('$v%', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                    children: [
+                      SizedBox(
+                        height: _chartAreaHeight,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: ['100', '75', '50', '25', '0'].map((v) => Text('$v%', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'RESOLUTION RATE, %',
-                  style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 16,
+                  height: _chartAreaHeight + 22,
+                  child: Center(
+                    child: RotatedBox(
+                      quarterTurns: 3,
+                      child: Text(
+                        'RESOLUTION RATE, %',
+                        style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
