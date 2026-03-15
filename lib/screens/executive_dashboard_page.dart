@@ -3,6 +3,7 @@
 // Data from NeyvoPulseApi; 5s auto-refresh. Charts via fl_chart.
 
 import 'dart:async';
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -587,7 +588,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       trendAht = d >= 0 ? '+${d}s' : '${d}s';
     }
 
-    const double kMinCardWidth = 160;
     final cards = [
       _KpiCard(
         title: 'TOTAL CALLS',
@@ -634,11 +634,18 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         tooltip: 'Average Handle Time',
       ),
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: cards.map((c) => SizedBox(width: kMinCardWidth, child: Padding(padding: const EdgeInsets.only(right: 12), child: c))).toList(),
-      ),
+    return Row(
+      children: [
+        Expanded(child: cards[0]),
+        const SizedBox(width: 12),
+        Expanded(child: cards[1]),
+        const SizedBox(width: 12),
+        Expanded(child: cards[2]),
+        const SizedBox(width: 12),
+        Expanded(child: cards[3]),
+        const SizedBox(width: 12),
+        Expanded(child: cards[4]),
+      ],
     );
   }
 
@@ -774,7 +781,10 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                                   PieChartSectionData(value: ((total - succeeded) / total * 100).clamp(0.0, 100.0), color: Colors.grey.shade300, showTitle: false),
                                 ]
                               : [
-                                  PieChartSectionData(value: 1, color: Colors.grey.shade300, showTitle: false),
+                                  PieChartSectionData(value: 25, color: Colors.amber, showTitle: false),
+                                  PieChartSectionData(value: 25, color: Colors.purple, showTitle: false),
+                                  PieChartSectionData(value: 25, color: Colors.blue, showTitle: false),
+                                  PieChartSectionData(value: 25, color: Colors.grey, showTitle: false),
                                 ],
                         ),
                       ),
@@ -783,14 +793,17 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                   ),
                 ),
                 const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _LegendRow('Received', total, Colors.amber),
-                    _LegendRow('Succeeded', succeeded, Colors.purple),
-                    _LegendRow('Resolved', resolved, Colors.blue),
-                    _LegendRow('Unresolved', unresolved, Colors.grey),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LegendRow('Received', total, Colors.amber),
+                      _LegendRow('Succeeded', succeeded, Colors.purple),
+                      _LegendRow('Resolved', resolved, Colors.blue),
+                      _LegendRow('Unresolved', unresolved, Colors.grey),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -816,7 +829,15 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
               width: 160,
               height: 90,
               child: CustomPaint(
-                painter: _HalfDoughnutPainter(value: null),
+                painter: _HalfDoughnutPainter(
+                  value: null,
+                  noDataColors: [
+                    Colors.green,
+                    Colors.green.shade700,
+                    Colors.yellow.shade700,
+                    Colors.red,
+                  ],
+                ),
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1128,7 +1149,15 @@ class _KpiCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(title, style: NeyvoTextStyles.label.copyWith(fontSize: 10, letterSpacing: 0.5)),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: NeyvoTextStyles.label.copyWith(fontSize: 10, letterSpacing: 0.5),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: iconColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
@@ -1141,16 +1170,30 @@ class _KpiCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(value, style: NeyvoTextStyles.title.copyWith(fontSize: 22)),
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: NeyvoTextStyles.title.copyWith(fontSize: 22),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                     if (trend.isNotEmpty) ...[
                       const SizedBox(width: 6),
-                      Text(trend, style: NeyvoTextStyles.micro.copyWith(color: trend.startsWith('+') ? Colors.green : Colors.red)),
+                      Flexible(
+                        child: Text(
+                          trend,
+                          style: NeyvoTextStyles.micro.copyWith(color: trend.startsWith('+') ? Colors.green : Colors.red),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
                     ],
                   ],
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 4),
-                  Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted), overflow: TextOverflow.ellipsis, maxLines: 1),
                 ],
               ],
             ),
@@ -1249,7 +1292,14 @@ class _LegendRow extends StatelessWidget {
         children: [
           Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 8),
-          Text('$label: $value', style: NeyvoTextStyles.micro),
+          Expanded(
+            child: Text(
+              '$label: $value',
+              style: NeyvoTextStyles.micro,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
         ],
       ),
     );
@@ -1258,19 +1308,35 @@ class _LegendRow extends StatelessWidget {
 
 class _HalfDoughnutPainter extends CustomPainter {
   final double? value;
+  final List<Color>? noDataColors;
 
-  _HalfDoughnutPainter({this.value});
+  _HalfDoughnutPainter({this.value, this.noDataColors});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height);
     final radius = size.width / 2;
-    final paint = Paint()
-      ..color = Colors.grey.shade300
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), 0, 3.14159, false, paint);
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const strokeWidth = 12.0;
+
+    if (value == null && noDataColors != null && noDataColors!.length >= 4) {
+      final segmentSweep = pi / noDataColors!.length;
+      for (var i = 0; i < noDataColors!.length; i++) {
+        final paint = Paint()
+          ..color = noDataColors![i]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round;
+        canvas.drawArc(rect, pi + i * segmentSweep, segmentSweep, false, paint);
+      }
+    } else {
+      final paint = Paint()
+        ..color = Colors.grey.shade300
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(rect, pi, pi, false, paint);
+    }
   }
 
   @override
