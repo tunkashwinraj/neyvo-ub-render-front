@@ -953,10 +953,10 @@ class NeyvoPulseApi {
   // Campaigns (bulk outbound calls by filters, snapshot-based execution)
   // -------------------------------------------------------------------------
 
-  /// List campaigns for the school.
-  static Future<Map<String, dynamic>> listCampaigns() async {
+  /// List campaigns for the school. Pass [limit] to control how many are returned (default 100).
+  static Future<Map<String, dynamic>> listCampaigns({int limit = 100}) async {
     try {
-      return await _get('/api/pulse/campaigns');
+      return await _get('/api/pulse/campaigns', params: {'limit': limit});
     } catch (_) {
       return {'campaigns': []};
     }
@@ -970,9 +970,9 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCampaignReport(String campaignId) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/report');
 
-  /// List calls placed for a campaign.
+  /// List calls placed for a campaign (full call docs including transcript, outcome_type). Use [limit] to fetch more (e.g. 500 for "all").
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
-      _get('/api/pulse/campaigns/$campaignId/calls', params: {'limit': limit});
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls', params: {'limit': limit});
 
   /// Real-time campaign runner metrics (pool status + counters).
   static Future<Map<String, dynamic>> getCampaignMetrics(String campaignId) async =>

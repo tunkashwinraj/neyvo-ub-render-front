@@ -1404,7 +1404,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
         final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
 
-        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId);
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 500);
         final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
         final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
         final reportF = isTerminal ? NeyvoPulseApi.getCampaignReport(campaignId) : Future.value(<String, dynamic>{});
@@ -1462,6 +1462,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
               (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
             ) ??
             const <String, Map<String, dynamic>>{};
+        final outcomeSummary = (report['outcome_summary'] as Map?)?.map(
+              (k, v) => MapEntry(k.toString(), (v is int) ? v : (int.tryParse(v?.toString() ?? '') ?? 0)),
+            ) ??
+            const <String, int>{};
         final canStart = status == 'draft' || status == 'scheduled';
         final canRerun = status == 'completed' || status == 'running';
         final canEdit = status == 'draft' || status == 'scheduled';
@@ -1488,6 +1492,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final failedCount = asInt(metrics['failed_count'] ?? c['failed_count'] ?? c['total_failed'] ?? 0);
         final maxConcurrent = asInt(metrics['max_concurrent'] ?? c['max_concurrent'] ?? 10, 10);
         final done = completedCount + failedCount;
+        final totalOperations = asInt(metrics['total_operations'] ?? done, done);
         final progress = totalPlanned > 0 ? (done / totalPlanned).clamp(0.0, 1.0) : 0.0;
         final progressPct = (metrics['progress_percentage'] as num?)?.toDouble() ?? (progress * 100.0);
         final eta = metrics['estimated_completion_time'];
@@ -1728,11 +1733,17 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           children: [
                             _detailChip('Status', status),
                             _detailChip('Concurrency', '$activeCount / $maxConcurrent active'),
+                            _detailChip('Total operations', '$totalOperations'),
                             _detailChip('Queued', '$queuedCount'),
                             _detailChip('Retry', '$retryWaitCount'),
                             _detailChip('Completed', '$completedCount'),
                             _detailChip('Failed', '$failedCount'),
-                            _detailChip('Total', '$totalPlanned'),
+                            _detailChip('Planned', '$totalPlanned'),
+                            if (outcomeSummary.isNotEmpty) ...[
+                              _detailChip('Answered', '${outcomeSummary['answered'] ?? 0}'),
+                              _detailChip('Voicemail', '${outcomeSummary['voicemail'] ?? 0}'),
+                              _detailChip('Not connected', '${outcomeSummary['not_connected'] ?? 0}'),
+                            ],
                             _detailChip('Avg call', '${avgCallSeconds}s'),
                             if (totalCreditsUsed > 0) _detailChip('Credits used', '$totalCreditsUsed cr'),
                             if (totalCreditsUsed > 0 && calls.isNotEmpty) _detailChip('Avg / call', '${avgCreditsPerCall.toStringAsFixed(1)} cr'),
@@ -1993,6 +2004,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                               : const <String, dynamic>{};
                           final outcome = (derived['outcome'] ?? '').toString();
                           final callbackRequested = derived['callbackRequested'] == true;
+                          final backendOutcomeType = (detail?['outcome_type'] ?? detail?['success_metric'] ?? '').toString().trim();
 
                           Color outcomeColor(String o) {
                             switch (o) {
@@ -2009,7 +2021,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
                           final subtitleLines = <String>[
                             '$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}',
-                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome',
+                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome${backendOutcomeType.isNotEmpty ? ' • $backendOutcomeType' : ''}',
                             if (isTerminal && outcome == 'Answered' && callbackRequested) 'Callback requested',
                           ].where((e) => e.trim().isNotEmpty).toList();
                           final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
