@@ -193,23 +193,19 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
       try {
         await NeyvoPulseApi.getAccountInfo();
       } on ApiException catch (e) {
-        final payload = e.payload;
-        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
-        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
-        if (isTenantMismatch) {
-          // Wrong school for this portal: sign out and show a login error
-          // without ever transitioning into the Pulse shell.
+        // Any 403 on account = wrong portal (same as main.dart gate).
+        if (e.statusCode == 403) {
+          NeyvoPulseApi.clearAccountInfoCache();
           await FirebaseAuth.instance.signOut();
           NeyvoPulseApi.setDefaultAccountId(null);
           if (!mounted) return;
           setState(() {
-            _error = 'These credentials are not valid for this portal.';
+            _error = 'These credentials are not valid for this portal. Please sign in at the correct school site (ub.neyvo.ai or goodwin.neyvo.ai).';
             _loading = false;
           });
           return;
         }
-        // For other API errors, fall through and let the post-auth gate
-        // handle them; just stop the loading spinner here.
+        // For other API errors, fall through and let the post-auth gate handle them.
       }
       if (!mounted) return;
       setState(() {
@@ -220,9 +216,14 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
         _error = e.message ?? e.code;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, _) {
+      final msg = e.toString().toLowerCase();
+      final isAppCheckOrThrottle = msg.contains('appcheck') || msg.contains('app check') ||
+          msg.contains('throttl') || msg.contains('403');
       setState(() {
-        _error = e.toString();
+        _error = isAppCheckOrThrottle
+            ? 'Sign-in is temporarily unavailable. Please use the correct portal (ub.neyvo.ai or goodwin.neyvo.ai) or try again later.'
+            : (e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString());
         _loading = false;
       });
     }

@@ -3,7 +3,7 @@
   import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
-  import 'package:flutter/foundation.dart' show kIsWeb;
+  import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
   import 'package:flutter/material.dart';
   import 'package:shared_preferences/shared_preferences.dart';
   import 'package:timezone/data/latest.dart' as tz;
@@ -104,19 +104,26 @@ String get _kFallbackAccountId {
     );
 
     // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
-    // On failure (e.g. 403, wrong key, domain not allowed) we continue so the app still loads.
+    // In debug mode on web we skip activation so login works without 403/throttling from
+    // App Check (e.g. when domain isn't registered or reCAPTCHA key is test key).
+    // In release, activate so production domains get tokens once configured in Firebase Console.
     try {
-      if (kIsWeb) {
-        await FirebaseAppCheck.instance.activate(
-          webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
-          androidProvider: AndroidProvider.debug,
-          appleProvider: AppleProvider.debug,
-        );
+      final shouldActivateAppCheck = !(kIsWeb && kDebugMode);
+      if (shouldActivateAppCheck) {
+        if (kIsWeb) {
+          await FirebaseAppCheck.instance.activate(
+            webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+            androidProvider: AndroidProvider.debug,
+            appleProvider: AppleProvider.debug,
+          );
+        } else {
+          await FirebaseAppCheck.instance.activate(
+            androidProvider: AndroidProvider.debug,
+            appleProvider: AppleProvider.debug,
+          );
+        }
       } else {
-        await FirebaseAppCheck.instance.activate(
-          androidProvider: AndroidProvider.debug,
-          appleProvider: AppleProvider.debug,
-        );
+        debugPrint('Firebase App Check skipped (web debug mode) so sign-in can succeed.');
       }
     } catch (e, st) {
       if (kIsWeb) {
