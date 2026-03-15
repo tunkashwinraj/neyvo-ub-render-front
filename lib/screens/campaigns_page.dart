@@ -12,6 +12,7 @@ import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
+import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/csv_import.dart';
 import '../utils/export_csv.dart';
@@ -1226,7 +1227,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
               }),
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Create Campaign'),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+              style: FilledButton.styleFrom(
+                backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : NeyvoTheme.teal,
+              ),
             ),
             const SizedBox(width: NeyvoSpacing.md),
           ],
@@ -1271,7 +1274,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
             }),
             icon: const Icon(Icons.add, size: 20),
             label: const Text('Create Campaign'),
-            style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+            style: FilledButton.styleFrom(
+              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : NeyvoTheme.teal,
+            ),
           ),
           const SizedBox(width: NeyvoSpacing.md),
         ],
@@ -1300,6 +1305,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 buttonLabel: 'Create Campaign',
                 onAction: () => setState(() => _showCreateWizard = true),
                 icon: Icons.campaign_outlined,
+                actionButtonColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
               )
             else
               ..._campaigns.map((c) => Card(
@@ -2207,7 +2213,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       _launchCampaign();
                     }
                   },
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : NeyvoTheme.teal,
+                  ),
                   child: Text(_wizardStep == steps.length - 1
                       ? (_editingCampaignId != null ? 'Save changes' : 'Create campaign')
                       : 'Next'),

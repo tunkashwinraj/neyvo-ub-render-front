@@ -712,7 +712,9 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       icon: const Icon(Icons.person_add_rounded, size: 20),
                       label: const Text('Add student'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: NeyvoColors.ubPurple,
+                        backgroundColor: TenantBrand.isGoodwin(context)
+                            ? TenantBrand.primary(context)
+                            : NeyvoColors.ubPurple,
                         foregroundColor: NeyvoColors.white,
                         padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -766,34 +768,51 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       final minTableWidth = constraints.maxWidth > 0 ? constraints.maxWidth : 900.0;
-                                      return Padding(
-                                        padding: const EdgeInsets.all(NeyvoSpacing.md),
+                                      return NeyvoCard(
+                                        padding: EdgeInsets.zero,
                                         child: SingleChildScrollView(
                                           scrollDirection: Axis.horizontal,
                                           child: ConstrainedBox(
                                             constraints: BoxConstraints(minWidth: minTableWidth),
                                             child: DataTable(
                                               showCheckboxColumn: false,
-                                              headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
+                                              headingRowColor: MaterialStateProperty.all(NeyvoColors.bgOverlay),
                                               dataRowMinHeight: 48,
                                               dataRowMaxHeight: 52,
                                               columnSpacing: NeyvoSpacing.md,
                                               columns: [
-                                                DataColumn(label: Text('Student Name', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('ID', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Department', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Phone Number', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Email', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Year of student', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Import List', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Last Call Status', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Last Call Time', style: NeyvoType.labelSmall)),
-                                                DataColumn(label: Text('Actions', style: NeyvoType.labelSmall)),
+                                                DataColumn(label: Text('First name', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Last name', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('ID', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Department', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Phone Number', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Email', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Year of student', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Import List', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Last Call Status', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Last Call Time', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Actions', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
                                               ],
                                               rows: _filteredStudents.asMap().entries.map((entry) {
                                                 final rowIndex = entry.key;
                                                 final s = entry.value;
                                                 final id = s['id'] as String? ?? '';
+                                                String firstName = (s['first_name']?.toString().trim() ?? '').trim();
+                                                String lastName = (s['last_name']?.toString().trim() ?? '').trim();
+                                                if (firstName.isEmpty && lastName.isEmpty) {
+                                                  final full = _studentDisplayName(s);
+                                                  if (full != '—') {
+                                                    final parts = full.trim().split(RegExp(r'\s+'));
+                                                    firstName = parts.isNotEmpty ? parts.first : '—';
+                                                    lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '—';
+                                                  } else {
+                                                    firstName = '—';
+                                                    lastName = '—';
+                                                  }
+                                                } else {
+                                                  if (firstName.isEmpty) firstName = '—';
+                                                  if (lastName.isEmpty) lastName = '—';
+                                                }
                                                 final name = _studentDisplayName(s);
                                                 final studentId = s['student_id']?.toString() ?? s['external_id']?.toString() ?? '—';
                                                 final department = (s['department'] as String?)?.trim();
@@ -815,7 +834,7 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                           onTap: () => _openStudentDetails(id),
                                                           borderRadius: BorderRadius.circular(8),
                                                           child: Padding(
-                                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                                            padding: const EdgeInsets.symmetric(vertical: 8),
                                                             child: Row(
                                                               mainAxisSize: MainAxisSize.min,
                                                               children: [
@@ -823,14 +842,27 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                                   radius: 18,
                                                                   backgroundColor: NeyvoTheme.primary.withOpacity(0.12),
                                                                   child: Text(
-                                                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                                                    firstName != '—' ? firstName[0].toUpperCase() : (name.isNotEmpty && name != '—' ? name[0].toUpperCase() : '?'),
                                                                     style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
                                                                   ),
                                                                 ),
                                                                 const SizedBox(width: 10),
-                                                                Text(name, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+                                                                Text(firstName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
                                                               ],
                                                             ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    DataCell(
+                                                      Opacity(
+                                                        opacity: rowOpacity,
+                                                        child: InkWell(
+                                                          onTap: () => _openStudentDetails(id),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          child: Padding(
+                                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                                            child: Text(lastName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
                                                           ),
                                                         ),
                                                       ),

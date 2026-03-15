@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../theme/neyvo_theme.dart';
 
 /// Centered empty state: dashed teal box + icon, title, subtitle, teal action button.
+/// [actionButtonColor] overrides the default button background (e.g. for tenant branding).
 Widget buildNeyvoEmptyState({
   required BuildContext context,
   required String title,
@@ -12,7 +13,9 @@ Widget buildNeyvoEmptyState({
   required String buttonLabel,
   required VoidCallback onAction,
   IconData icon = Icons.inbox_outlined,
+  Color? actionButtonColor,
 }) {
+  final buttonColor = actionButtonColor ?? NeyvoTheme.teal;
   return Center(
     child: Padding(
       padding: const EdgeInsets.all(NeyvoSpacing.xl),
@@ -23,10 +26,10 @@ Widget buildNeyvoEmptyState({
             width: 100,
             height: 100,
             decoration: BoxDecoration(
-              border: Border.all(color: NeyvoTheme.teal, width: 2, strokeAlign: BorderSide.strokeAlignInside),
+              border: Border.all(color: buttonColor, width: 2, strokeAlign: BorderSide.strokeAlignInside),
               borderRadius: BorderRadius.circular(NeyvoRadius.md),
             ),
-            child: Icon(icon, size: 48, color: NeyvoTheme.teal),
+            child: Icon(icon, size: 48, color: buttonColor),
           ),
           const SizedBox(height: NeyvoSpacing.xl),
           Text(
@@ -43,6 +46,7 @@ Widget buildNeyvoEmptyState({
           const SizedBox(height: NeyvoSpacing.xl),
           FilledButton(
             onPressed: onAction,
+            style: FilledButton.styleFrom(backgroundColor: buttonColor),
             child: Text(buttonLabel),
           ),
         ],

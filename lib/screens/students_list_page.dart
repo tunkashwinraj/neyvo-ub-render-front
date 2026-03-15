@@ -9,6 +9,7 @@ import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
+import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import 'student_detail_page.dart';
 
@@ -422,7 +423,11 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         ],
       ),
       floatingActionButton: _selectionMode ? null : (_subTabController.index == 0
-          ? FloatingActionButton(onPressed: _openAddStudent, child: const Icon(Icons.add))
+          ? FloatingActionButton(
+              onPressed: _openAddStudent,
+              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
+              child: const Icon(Icons.add),
+            )
           : FloatingActionButton(
               onPressed: () => _openScheduleReminderModal(),
               child: const Icon(Icons.add_alarm),
@@ -542,6 +547,11 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                               onPressed: _openAddStudent,
                               icon: const Icon(Icons.add),
                               label: const Text('Add first contact'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: TenantBrand.isGoodwin(context)
+                                    ? TenantBrand.primary(context)
+                                    : null,
+                              ),
                             ),
                           ],
                         ],
@@ -1048,6 +1058,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         actions: [
           TextButton(onPressed: () => navigator.pop(), child: const Text('Cancel')),
           FilledButton(
+            style: TenantBrand.isGoodwin(context)
+                ? FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context))
+                : null,
             onPressed: () async {
               final firstName = firstNameC.text.trim();
               final lastName = lastNameC.text.trim();

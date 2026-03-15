@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
 import '../services/user_timezone_service.dart';
+import '../tenant/tenant_brand.dart';
 import '../utils/export_csv.dart';
 import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
@@ -620,7 +621,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 children: [
                                   if (recordingUrl.isNotEmpty)
                                     IconButton(
-                                      icon: const Icon(Icons.audiotrack, color: NeyvoTheme.teal),
+                                      icon: Icon(Icons.audiotrack, color: TenantBrand.primary(context)),
                                       onPressed: () async {
                                         final uri = Uri.tryParse(recordingUrl);
                                         if (uri != null && await canLaunchUrl(uri)) {
@@ -745,12 +746,12 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                       },
                                       child: Row(
                                         children: [
-                                          Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
+                                          Icon(Icons.audiotrack, size: 20, color: TenantBrand.primary(context)),
                                           const SizedBox(width: NeyvoSpacing.sm),
                                           Text(
                                             'Listen to recording',
                                             style: NeyvoType.bodyMedium.copyWith(
-                                              color: NeyvoTheme.teal,
+                                              color: TenantBrand.primary(context),
                                               decoration: TextDecoration.underline,
                                             ),
                                           ),
