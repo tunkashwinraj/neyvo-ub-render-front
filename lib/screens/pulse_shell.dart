@@ -669,14 +669,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                if (_walletCredits != null && _walletCredits! < 500 && _walletCredits! >= 0)
+                // Low-credits banner disabled: min credits = 0 (only show if credits < 0, which never happens)
+                if (_walletCredits != null && _walletCredits! < 0)
                   Material(
-                    color: (_walletCredits! < 200 ? NeyvoColors.error : NeyvoColors.warning).withOpacity(0.15),
+                    color: NeyvoColors.warning.withOpacity(0.15),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: _walletCredits! < 200 ? NeyvoColors.error : NeyvoColors.warning, size: 22),
+                          Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning, size: 22),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -744,12 +745,12 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               margin: const EdgeInsets.only(right: 12),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: _walletCredits! < 500
+                                color: _walletCredits! < 0
                                     ? NeyvoColors.error.withOpacity(0.1)
                                     : brandPrimary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(100),
                                 border: Border.all(
-                                  color: _walletCredits! < 500
+                                  color: _walletCredits! < 0
                                       ? NeyvoColors.error.withOpacity(0.2)
                                       : brandPrimary.withOpacity(0.2),
                                 ),
@@ -757,7 +758,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               child: Text(
                                 '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\\d{1,3})(?=(\\d{3})+(?!\\d))'), (m) => '${m[1]},')} credits',
                                 style: NeyvoTextStyles.label.copyWith(
-                                  color: _walletCredits! < 500 ? NeyvoColors.error : brandPrimary,
+                                  color: _walletCredits! < 0 ? NeyvoColors.error : brandPrimary,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                 ),

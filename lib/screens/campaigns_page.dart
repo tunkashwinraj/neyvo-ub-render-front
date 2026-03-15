@@ -507,39 +507,43 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
-    final baseName = (originalCampaign['name'] ?? 'Campaign').toString().trim();
-    final date = DateTime.now().toIso8601String().substring(0, 10);
-    final retryName = '$baseName (Retry $date)';
-    final agentId = (originalCampaign['agent_id'] ?? '').toString().trim();
-    final profileId = (originalCampaign['profile_id'] ?? '').toString().trim();
-    final templateId = (originalCampaign['template_id'] ?? '').toString().trim();
+    final campaignId = (originalCampaign['id'] ?? '').toString().trim();
+    if (campaignId.isEmpty) return;
 
     try {
-      final created = await NeyvoPulseApi.createCampaign(
-        name: retryName,
-        agentId: agentId.isNotEmpty ? agentId : null,
-        profileId: profileId.isNotEmpty ? profileId : null,
-        templateId: templateId.isNotEmpty ? templateId : null,
-        studentIds: studentIds,
-        audienceType: 'contact_list',
-        filters: null,
-        scheduledAt: null,
+      final res = await NeyvoPulseApi.retryCampaignCalls(
+        campaignId,
+        studentIds,
+        phoneNumberId: _selectedStartPhoneNumberId,
       );
-      final newCampaign = (created['campaign'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-      final newId = (newCampaign['id'] ?? '').toString().trim();
-      if (newId.isEmpty) throw Exception('Campaign created but no id returned');
-
-      final res = await NeyvoPulseApi.startCampaign(newId, phoneNumberId: _selectedStartPhoneNumberId);
       if (!mounted) return;
-      _showCampaignStartResult(res, isRerun: false);
+      final totalRetry = res['total_retry'] ?? studentIds.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message']?.toString() ?? 'Retry: $totalRetry call(s) queued in same campaign.'),
+          backgroundColor: NeyvoTheme.success,
+        ),
+      );
       setState(() {
-        _selectedCampaignId = newId;
         _detailStatusFilter = 'all';
         _campaignDetailRefreshKey++;
       });
+      _load();
       _startDetailAutoRefresh();
     } on ApiException catch (e) {
-      if (mounted) _showInsufficientCreditsSnackBar(e);
+      if (mounted) {
+        final payload = e.payload;
+        if (payload is Map && payload['error'] == 'insufficient_credits') {
+          _showInsufficientCreditsSnackBar(e);
+        } else {
+          final msg = payload is Map
+              ? (payload['message'] ?? payload['error'] ?? e.message)
+              : e.message;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg?.toString() ?? e.toString()), backgroundColor: NeyvoTheme.error),
+          );
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -796,13 +800,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   bool _ensureHasPhoneNumber() {
     if (_hasPhoneNumber) return true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add a phone number to make calls. Go to Phone Numbers to link or purchase a number.'),
-        backgroundColor: NeyvoTheme.warning,
-        duration: Duration(seconds: 5),
-      ),
-    );
+    // Alert removed: no snackbar for missing phone number.
     return false;
   }
 
@@ -1286,27 +1284,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
             if (_error != null) ...[
               Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
               const SizedBox(height: NeyvoSpacing.md),
-            ],
-            if (!_hasPhoneNumber) ...[
-              Card(
-                color: NeyvoTheme.warning.withOpacity(0.15),
-                child: Padding(
-                  padding: const EdgeInsets.all(NeyvoSpacing.lg),
-                  child: Row(
-                    children: [
-                      Icon(Icons.phone_missed, color: NeyvoTheme.warning),
-                      const SizedBox(width: NeyvoSpacing.md),
-                      Expanded(
-                        child: Text(
-                          'Add a phone number to make calls. Go to Phone Numbers to link or purchase a number.',
-                          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: NeyvoSpacing.lg),
             ],
             Text('Campaigns', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: NeyvoSpacing.sm),

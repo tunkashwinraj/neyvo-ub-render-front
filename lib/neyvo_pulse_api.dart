@@ -1218,6 +1218,24 @@ class NeyvoPulseApi {
     );
   }
 
+  /// Retry calls for specific students in the same campaign (e.g. voicemail / not connected).
+  /// Does not create a new campaign.
+  static Future<Map<String, dynamic>> retryCampaignCalls(
+    String campaignId,
+    List<String> studentIds, {
+    String? phoneNumberId,
+  }) async {
+    final body = <String, dynamic>{
+      'student_ids': studentIds,
+      if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
+    };
+    return SpeariaApi.postJsonMap(
+      '/api/pulse/campaigns/$campaignId/retry',
+      body: body,
+      timeout: const Duration(seconds: 60),
+    );
+  }
+
   /// Rebuild audience: deletes snapshot and unlocks audience config.
   static Future<Map<String, dynamic>> rebuildCampaignAudience(String campaignId) async =>
       _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {});

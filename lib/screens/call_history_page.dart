@@ -589,7 +589,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             : (dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '');
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
-                        final recordingUrl = call['recording_url']?.toString();
+                        final recordingUrl = (call['recording_url'] ?? call['recordingUrl'] ?? '').toString().trim();
                         final statusColor = _getStatusColor(status);
                         final successMetric = call['success_metric']?.toString();
                         final attributedAmount = call['attributed_payment_amount']?.toString();
@@ -615,7 +615,23 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
                             ),
                             child: ExpansionTile(
-                              trailing: const Icon(Icons.chevron_right),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (recordingUrl.isNotEmpty)
+                                    IconButton(
+                                      icon: const Icon(Icons.audiotrack, color: NeyvoTheme.teal),
+                                      onPressed: () async {
+                                        final uri = Uri.tryParse(recordingUrl);
+                                        if (uri != null && await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      },
+                                      tooltip: 'Listen to recording',
+                                    ),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
                               leading: CircleAvatar(
                                 backgroundColor: statusColor.withOpacity(0.1),
                                 child: Icon(_getStatusIcon(status), color: statusColor),
@@ -717,7 +733,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ],
                               ),
                               children: [
-                                if (recordingUrl != null && recordingUrl.isNotEmpty)
+                                if (recordingUrl.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
                                     child: InkWell(
