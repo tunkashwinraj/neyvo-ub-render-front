@@ -529,9 +529,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 children: [
                   _performanceTrendTabButton('Calls', 'calls'),
                   const SizedBox(width: 4),
-                  _performanceTrendTabButton('Both', 'both'),
-                  const SizedBox(width: 4),
                   _performanceTrendTabButton('Rate', 'rate'),
+                  const SizedBox(width: 4),
+                  _performanceTrendTabButton('Both', 'both'),
                 ],
               ),
             ],
@@ -600,18 +600,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _performanceTrendTabButton(String label, String value) {
     final isSelected = _performanceTrendTab == value;
     return Material(
-      color: isSelected ? const Color(0xFFE2E8F0) : Colors.transparent,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () => setState(() => _performanceTrendTab = value),
         borderRadius: BorderRadius.circular(6),
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: const Color(0xFF93C5FD), // light blue outline
+              width: 1,
+            ),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
             label,
             style: NeyvoTextStyles.micro.copyWith(
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              color: isSelected ? const Color(0xFF334155) : const Color(0xFF64748B),
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
             ),
           ),
         ),
