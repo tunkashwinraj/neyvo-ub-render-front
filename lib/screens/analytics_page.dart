@@ -1,6 +1,7 @@
 // File: analytics_page.dart
 // Insights: full analytics (Overview, Calls, Campaigns, Students, Operators, Lines, Wallet, Pulse, Callbacks, Studio).
 
+import 'dart:math' show sqrt;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -39,6 +40,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   List<Map<String, dynamic>> _callsForKpi = [];
   List<Map<String, dynamic>> _priorCallsForKpi = [];
   String _dateRange = '30d';
+  /// Performance Trend view: 'calls' | 'both' | 'rate'
+  String _performanceTrendTab = 'both';
 
   ({String from, String to}) _dateRangeToIso() {
     final now = DateTime.now();
@@ -462,7 +465,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  /// Call Volume bar chart + Call Outcomes donut
+  /// Performance Trend (bars + resolution rate line) + Call Outcomes donut
   Widget _buildChartsRow() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -474,7 +477,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               children: [
                 Expanded(
                   flex: 2,
-                  child: _buildCallVolumeCard(),
+                  child: _buildPerformanceTrendCard(),
                 ),
                 if (!narrow) const SizedBox(width: 14),
                 if (!narrow) Expanded(flex: 1, child: _buildCallOutcomesCard()),
@@ -490,21 +493,24 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget _buildCallVolumeCard() {
-    // Daily totals from _callsForKpi (call logs) for selected date range
+  /// Performance Trend: Total Calls (bars) + Resolution Rate % (line). Tabs: Calls | Both | Rate.
+  Widget _buildPerformanceTrendCard() {
     final dailyBreakdown = _dailyCallBreakdown();
-    final dailyTotals = dailyBreakdown.map((d) {
+    final year = DateTime.now().year;
+    final trendData = dailyBreakdown.map((d) {
       final r = (d['resolved'] as num?)?.toInt() ?? 0;
       final u = (d['unresolved'] as num?)?.toInt() ?? 0;
       final n = (d['no_answer'] as num?)?.toInt() ?? 0;
-      return {'date': d['date'], 'total': r + u + n};
+      final total = r + u + n;
+      final resolutionRate = total > 0 ? (r / total * 100) : 0.0;
+      return {'date': d['date'], 'total': total, 'resolutionRate': resolutionRate};
     }).toList();
     String dateRangeLabel = '—';
-    if (dailyTotals.isNotEmpty) {
+    if (trendData.isNotEmpty) {
       try {
-        final first = DateFormat.MMMd().format(DateTime.parse((dailyTotals.first['date'] ?? '').toString().substring(0, 10)));
-        final last = DateFormat.MMMd().format(DateTime.parse((dailyTotals.last['date'] ?? '').toString().substring(0, 10)));
-        dateRangeLabel = '$first to $last';
+        final first = DateFormat.MMMd().format(DateTime.parse((trendData.first['date'] ?? '').toString().substring(0, 10)));
+        final last = DateFormat.MMMd().format(DateTime.parse((trendData.last['date'] ?? '').toString().substring(0, 10)));
+        dateRangeLabel = '$first - $last, $year';
       } catch (_) {}
     }
 
@@ -512,45 +518,103 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Title row with tabs at top right
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Text('Performance Trend', style: NeyvoTextStyles.heading.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Call Volume', style: NeyvoTextStyles.heading.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
+                  _performanceTrendTabButton('Calls', 'calls'),
+                  const SizedBox(width: 4),
+                  _performanceTrendTabButton('Both', 'both'),
+                  const SizedBox(width: 4),
+                  _performanceTrendTabButton('Rate', 'rate'),
+                ],
+              ),
+            ],
+          ),
+          // Notations (legend) below heading
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    'Daily breakdown — $dateRangeLabel',
-                    style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8)),
+                    'Total Calls ($dateRangeLabel)',
+                    style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF64748B)),
                   ),
                 ],
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _legendDot(const Color(0xFF3B82F6), 'Resolved'),
-                  const SizedBox(width: 14),
-                  _legendDot(const Color(0xFFEF4444), 'Unresolved'),
-                  const SizedBox(width: 14),
-                  _legendDot(const Color(0xFF94A3B8), 'No answer'),
+                  CustomPaint(
+                    size: const Size(20, 4),
+                    painter: _DashedLinePainter(color: const Color(0xFFF97316), strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Resolution Rate',
+                    style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF64748B)),
+                  ),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 180,
-            child: dailyTotals.isEmpty
+            height: 220,
+            child: trendData.isEmpty
                 ? Center(
                     child: Text(
-                      'Make calls to see volume data',
+                      'Make calls to see performance trend',
                       style: NeyvoTextStyles.body.copyWith(color: const Color(0xFF94A3B8)),
                     ),
                   )
-                : _CallVolumeBarChart(dailyTotals: dailyTotals),
+                : _PerformanceTrendChart(
+                    trendData: trendData,
+                    tab: _performanceTrendTab,
+                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _performanceTrendTabButton(String label, String value) {
+    final isSelected = _performanceTrendTab == value;
+    return Material(
+      color: isSelected ? const Color(0xFFE2E8F0) : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: () => setState(() => _performanceTrendTab = value),
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: NeyvoTextStyles.micro.copyWith(
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected ? const Color(0xFF334155) : const Color(0xFF64748B),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1939,6 +2003,264 @@ class _CallVolumeBarChart extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Draws a short horizontal dashed line (for legend).
+class _DashedLinePainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+
+  _DashedLinePainter({required this.color, this.strokeWidth = 2});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+    const dashWidth = 4.0;
+    const gap = 3.0;
+    double x = 0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, size.height / 2), Offset((x + dashWidth).clamp(0.0, size.width), size.height / 2), paint);
+      x += dashWidth + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Performance Trend: blue bars (Total Calls) + orange dashed line (Resolution Rate %). Dual Y-axes.
+class _PerformanceTrendChart extends StatelessWidget {
+  final List<Map<String, dynamic>> trendData;
+  final String tab; // 'calls' | 'both' | 'rate'
+
+  const _PerformanceTrendChart({required this.trendData, required this.tab});
+
+  static const double _chartAreaHeight = 148;
+  static const double _leftAxisWidth = 92;
+  static const double _rightAxisWidth = 98;
+
+  @override
+  Widget build(BuildContext context) {
+    if (trendData.isEmpty) return const SizedBox.shrink();
+    final maxCalls = trendData.fold<int>(0, (m, d) {
+      final t = (d['total'] as num?)?.toInt() ?? 0;
+      return t > m ? t : m;
+    });
+    final yCallsMax = maxCalls < 2 ? 2 : (maxCalls <= 6 ? 6 : (maxCalls + 2));
+    final callsScale = yCallsMax > 0 ? _chartAreaHeight / yCallsMax : 1.0;
+    final showBars = tab == 'calls' || tab == 'both';
+    final showLine = tab == 'rate' || tab == 'both';
+    final gridValuesCalls = [yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0].toSet().toList()..sort((a, b) => b.compareTo(a));
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Left Y-axis: NUMBER OF CALLS
+        SizedBox(
+          width: _leftAxisWidth,
+          height: _chartAreaHeight + 22,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (showBars) ...[
+                SizedBox(
+                  height: _chartAreaHeight,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: gridValuesCalls.map((v) => Text('$v', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                  ),
+                ),
+              ] else
+                SizedBox(height: _chartAreaHeight),
+              const SizedBox(height: 4),
+              Text(
+                'NUMBER OF CALLS',
+                style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Chart area: bars + line
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: _chartAreaHeight,
+                child: Stack(
+                  children: [
+                    // Horizontal dashed grid lines
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(5, (_) => Container(height: 1, decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE4E9F2), style: BorderStyle.solid))))),
+                    ),
+                    // Bars (when calls or both)
+                    if (showBars)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: trendData.map((d) {
+                          final total = (d['total'] as num?)?.toInt() ?? 0;
+                          return Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: total > 0
+                                  ? Container(
+                                      height: (total * callsScale).clamp(4.0, _chartAreaHeight),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF3B82F6),
+                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                      ),
+                                    )
+                                  : Container(
+                                      height: 3,
+                                      margin: const EdgeInsets.only(top: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF94A3B8).withValues(alpha: 0.35),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    // Resolution rate line (orange, dashed)
+                    if (showLine && trendData.length >= 2)
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          final n = trendData.length;
+                          final barW = w / n;
+                          final pts = <Offset>[];
+                          for (var i = 0; i < n; i++) {
+                            final rate = (trendData[i]['resolutionRate'] as num?)?.toDouble() ?? 0.0;
+                            final y = _chartAreaHeight - (rate / 100.0 * _chartAreaHeight);
+                            pts.add(Offset((i + 0.5) * barW, y.clamp(0.0, _chartAreaHeight)));
+                          }
+                          return CustomPaint(
+                            size: Size(w, _chartAreaHeight),
+                            painter: _DashedLineChartPainter(pts: pts, color: const Color(0xFFF97316)),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              // X-axis date labels (every ~5th + last)
+              SizedBox(
+                height: 18,
+                child: Row(
+                  children: trendData.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final d = entry.value;
+                    final showLabel = i % 5 == 0 || i == trendData.length - 1;
+                    String dateLabel = '';
+                    if (showLabel) {
+                      try {
+                        dateLabel = DateFormat.MMMd().format(DateTime.parse((d['date'] ?? '').toString().substring(0, 10)));
+                      } catch (_) {}
+                    }
+                    return Expanded(
+                      child: Text(
+                        showLabel ? dateLabel : '',
+                        style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Right Y-axis: RESOLUTION RATE, %
+        if (showLine)
+          SizedBox(
+            width: _rightAxisWidth,
+            height: _chartAreaHeight + 22,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: _chartAreaHeight,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: ['100', '75', '50', '25', '0'].map((v) => Text('$v%', style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontFamily: 'monospace'))).toList(),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'RESOLUTION RATE, %',
+                  style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8), fontSize: 9),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          )
+        else
+          const SizedBox(width: _rightAxisWidth),
+      ],
+    );
+  }
+}
+
+/// Draws dashed polyline through points (for resolution rate line).
+class _DashedLineChartPainter extends CustomPainter {
+  final List<Offset> pts;
+  final Color color;
+
+  _DashedLineChartPainter({required this.pts, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (pts.length < 2) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    const dashLength = 6.0;
+    const gapLength = 4.0;
+    for (var i = 0; i < pts.length - 1; i++) {
+      final p0 = pts[i];
+      final p1 = pts[i + 1];
+      final dx = p1.dx - p0.dx;
+      final dy = p1.dy - p0.dy;
+      final dist = sqrt(dx * dx + dy * dy);
+      if (dist < 0.01) continue;
+      final ux = dx / dist;
+      final uy = dy / dist;
+      double t = 0;
+      bool draw = true;
+      while (t < dist) {
+        final next = draw ? (t + dashLength).clamp(0.0, dist) : (t + gapLength).clamp(0.0, dist);
+        if (draw) {
+          canvas.drawLine(
+            Offset(p0.dx + ux * t, p0.dy + uy * t),
+            Offset(p0.dx + ux * next, p0.dy + uy * next),
+            paint,
+          );
+        }
+        t = next.toDouble();
+        draw = !draw;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Donut center + segments (Resolved / Unresolved / No answer / Transferred)
