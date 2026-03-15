@@ -1756,7 +1756,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   children: [
                     Text(
                       'We extract: system prompt (from model.messages) and voicemailMessage. Paste the full VAPI assistant JSON below.',
-                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textTertiary),
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -1767,7 +1767,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         alignLabelWithHint: true,
                         border: OutlineInputBorder(),
                       ),
-                      style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textPrimary),
+                      style: NeyvoTextStyles.bodyPrimary.copyWith(color: NeyvoColors.textPrimary),
                     ),
                     const SizedBox(height: 12),
                     SizedBox(

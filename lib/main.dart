@@ -295,12 +295,12 @@ String get _kFallbackAccountId {
           });
         }
       } on ApiException catch (e) {
-        // Handle tenant mismatch (user logging into the wrong school domain).
-        final payload = e.payload;
-        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
-        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
-        if (isTenantMismatch) {
+        // Any 403 on account endpoint = wrong portal (tenant mismatch). Stop at auth:
+        // show message, sign out, clear account — user must use the correct domain.
+        if (e.statusCode == 403) {
           if (!mounted) return;
+          NeyvoPulseApi.clearAccountInfoCache();
+          NeyvoPulseApi.setDefaultAccountId(null);
           final tenant = TenantScope.of(context)?.config;
           final tenantId = tenant?.tenantId ?? 'ub';
           final otherDomain = tenantId == 'goodwin' ? 'ub.neyvo.ai' : 'goodwin.neyvo.ai';
@@ -324,13 +324,10 @@ String get _kFallbackAccountId {
             ),
           );
           await FirebaseAuth.instance.signOut();
-          NeyvoPulseApi.setDefaultAccountId(null);
-          // Do not mark this gate as "loaded"; authStateChanges will
-          // rebuild the app back to PulseAuthPage after sign-out so
-          // the user never reaches PulseShell on a mismatched tenant.
+          // Do not set _loaded; authStateChanges will rebuild to PulseAuthPage.
           return;
         }
-        // For all other API errors, fall back to the legacy behavior.
+        // For other API errors: only allow UB fallback on UB tenant; never show wrong tenant data.
         final tenant = TenantScope.of(context)?.config;
         final isUbTenant = tenant == null || tenant.tenantId == 'ub';
         if (isUbTenant && _kFallbackAccountId.isNotEmpty) {

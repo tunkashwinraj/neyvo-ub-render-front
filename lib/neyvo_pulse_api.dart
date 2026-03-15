@@ -22,12 +22,17 @@ class NeyvoPulseApi {
 
   static String get defaultAccountId => _defaultAccountId;
 
+  /// Clear account info cache (e.g. after 403 tenant mismatch so next load is fresh).
+  static void clearAccountInfoCache() {
+    _cachedAccountInfo = null;
+    _cachedAccountInfoAt = null;
+  }
+
   /// Set the account id from API (e.g. getAccountInfo). When empty, requests omit account_id and backend uses its default.
   static void setDefaultAccountId(String? id) {
     _defaultAccountId = (id == null || id.trim().isEmpty) ? '' : id.trim();
     // When switching accounts, clear cached per-account data.
-    _cachedAccountInfo = null;
-    _cachedAccountInfoAt = null;
+    clearAccountInfoCache();
     _cachedBillingWallet = null;
     _cachedBillingWalletAt = null;
     _cachedNumbers = null;
