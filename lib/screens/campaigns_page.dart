@@ -1312,7 +1312,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   color: NeyvoTheme.bgCard,
                   margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
                   child: ListTile(
-                    leading: CircleAvatar(backgroundColor: NeyvoTheme.bgHover, child: const Icon(Icons.campaign_outlined, color: NeyvoTheme.teal)),
+                    leading: CircleAvatar(
+                      backgroundColor: NeyvoTheme.bgHover,
+                      child: Icon(
+                        Icons.campaign_outlined,
+                        color: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : NeyvoTheme.teal,
+                      ),
+                    ),
                     title: Text(c['name']?.toString() ?? 'Unnamed', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
                     subtitle: Text(
                       '${c['total_planned'] ?? c['student_count'] ?? 0} contacts • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',

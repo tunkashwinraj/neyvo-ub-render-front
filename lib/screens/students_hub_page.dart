@@ -790,7 +790,7 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                 DataColumn(label: Text('Year of student', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
                                                 DataColumn(label: Text('Import List', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
                                                 DataColumn(label: Text('Last Call Status', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Last Call Time', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('Last Call', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
                                                 DataColumn(label: Text('Actions', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
                                               ],
                                               rows: _filteredStudents.asMap().entries.map((entry) {
@@ -830,26 +830,22 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                     DataCell(
                                                       Opacity(
                                                         opacity: rowOpacity,
-                                                        child: InkWell(
-                                                          onTap: () => _openStudentDetails(id),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          child: Padding(
-                                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                                            child: Row(
-                                                              mainAxisSize: MainAxisSize.min,
-                                                              children: [
-                                                                CircleAvatar(
-                                                                  radius: 18,
-                                                                  backgroundColor: NeyvoTheme.primary.withOpacity(0.12),
-                                                                  child: Text(
-                                                                    firstName != '—' ? firstName[0].toUpperCase() : (name.isNotEmpty && name != '—' ? name[0].toUpperCase() : '?'),
-                                                                    style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
-                                                                  ),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              CircleAvatar(
+                                                                radius: 18,
+                                                                backgroundColor: NeyvoTheme.primary.withOpacity(0.12),
+                                                                child: Text(
+                                                                  firstName != '—' ? firstName[0].toUpperCase() : (name.isNotEmpty && name != '—' ? name[0].toUpperCase() : '?'),
+                                                                  style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
                                                                 ),
-                                                                const SizedBox(width: 10),
-                                                                Text(firstName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
-                                                              ],
-                                                            ),
+                                                              ),
+                                                              const SizedBox(width: 10),
+                                                              Text(firstName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+                                                            ],
                                                           ),
                                                         ),
                                                       ),
@@ -857,13 +853,9 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                     DataCell(
                                                       Opacity(
                                                         opacity: rowOpacity,
-                                                        child: InkWell(
-                                                          onTap: () => _openStudentDetails(id),
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          child: Padding(
-                                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                                            child: Text(lastName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
-                                                          ),
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                                          child: Text(lastName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
                                                         ),
                                                       ),
                                                     ),

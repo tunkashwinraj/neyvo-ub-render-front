@@ -619,17 +619,23 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (recordingUrl.isNotEmpty)
-                                    IconButton(
-                                      icon: Icon(Icons.audiotrack, color: TenantBrand.primary(context)),
-                                      onPressed: () async {
-                                        final uri = Uri.tryParse(recordingUrl);
-                                        if (uri != null && await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                      },
-                                      tooltip: 'Listen to recording',
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.audiotrack,
+                                      color: recordingUrl.isNotEmpty
+                                          ? TenantBrand.primary(context)
+                                          : NeyvoTheme.textMuted,
                                     ),
+                                    onPressed: recordingUrl.isNotEmpty
+                                        ? () async {
+                                            final uri = Uri.tryParse(recordingUrl);
+                                            if (uri != null && await canLaunchUrl(uri)) {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            }
+                                          }
+                                        : null,
+                                    tooltip: recordingUrl.isNotEmpty ? 'Listen to recording' : 'No recording available',
+                                  ),
                                   const Icon(Icons.chevron_right),
                                 ],
                               ),
@@ -734,31 +740,41 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ],
                               ),
                               children: [
-                                if (recordingUrl.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final uri = Uri.tryParse(recordingUrl);
-                                        if (uri != null && await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                      },
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.audiotrack, size: 20, color: TenantBrand.primary(context)),
-                                          const SizedBox(width: NeyvoSpacing.sm),
-                                          Text(
-                                            'Listen to recording',
-                                            style: NeyvoType.bodyMedium.copyWith(
-                                              color: TenantBrand.primary(context),
-                                              decoration: TextDecoration.underline,
-                                            ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
+                                  child: recordingUrl.isNotEmpty
+                                      ? InkWell(
+                                          onTap: () async {
+                                            final uri = Uri.tryParse(recordingUrl);
+                                            if (uri != null && await canLaunchUrl(uri)) {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            }
+                                          },
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.audiotrack, size: 20, color: TenantBrand.primary(context)),
+                                              const SizedBox(width: NeyvoSpacing.sm),
+                                              Text(
+                                                'Listen to recording',
+                                                style: NeyvoType.bodyMedium.copyWith(
+                                                  color: TenantBrand.primary(context),
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                        )
+                                      : Row(
+                                          children: [
+                                            Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.textMuted),
+                                            const SizedBox(width: NeyvoSpacing.sm),
+                                            Text(
+                                              'No recording available',
+                                              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+                                            ),
+                                          ],
+                                        ),
+                                ),
                                 if (transcript.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.all(NeyvoSpacing.sm),
