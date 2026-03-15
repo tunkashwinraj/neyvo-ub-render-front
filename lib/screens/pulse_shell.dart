@@ -21,7 +21,9 @@ import 'analytics_page.dart';
 import 'executive_dashboard_page.dart';
 import 'callbacks_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
+import '../features/managed_profiles/raw_assistant_detail_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
@@ -158,7 +160,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         if (settings.name == _managedProfileDetailRoute) {
           final profileId = settings.arguments as String? ?? '';
           return MaterialPageRoute<void>(
-            builder: (_) => ManagedProfileDetailPage(profileId: profileId, embedded: false),
+            builder: (_) => _ProfileDetailRouter(profileId: profileId),
           );
         }
         // '/' = list
@@ -179,7 +181,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       },
     );
   }
-
   @override
   void initState() {
     super.initState();
@@ -1138,4 +1139,42 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     );
   }
 }
+
+/// Decide whether to show the wizard-based or raw Vapi detail page for a profile.
+class _ProfileDetailRouter extends StatelessWidget {
+  const _ProfileDetailRouter({required this.profileId});
+
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: ManagedProfileApiService.getProfile(profileId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Scaffold(
+            body: Center(
+              child: Text(
+                'Failed to load operator.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error),
+              ),
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        final isRaw = data['raw_vapi'] == true || data['schema_version'] == 3;
+        if (isRaw) {
+          return RawAssistantDetailPage(profileId: profileId, embedded: false);
+        }
+        return ManagedProfileDetailPage(profileId: profileId, embedded: false);
+      },
+    );
+  }
+}
+
 
