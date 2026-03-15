@@ -1169,10 +1169,10 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     }
     for (var i = 0; i < rows.length; i++) {
       final r = rows[i];
-      final name = getVal(r, ['name', 'student_name']);
+      final name = getVal(r, ['name', 'student_name', 'first_name', 'firstname']);
       final phone = getVal(r, ['phone', 'mobile', 'cell']);
       if (name.isEmpty) {
-        errs.add('Row ${i + 2}: Missing name');
+        errs.add('Row ${i + 2}: Missing name (or first_name)');
         continue;
       }
       if (phone.isEmpty) {
@@ -1320,30 +1320,43 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                       if (_validRows.isNotEmpty) ...[
                         Text('First 5 rows:', style: NeyvoType.labelSmall),
                         const SizedBox(height: 4),
-                        Table(
-                          columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1.5)},
-                          children: [
-                            TableRow(children: [
-                              Text('Name', style: NeyvoType.labelSmall),
-                              Text('Phone', style: NeyvoType.labelSmall),
-                              Text('Balance', style: NeyvoType.labelSmall),
-                            ]),
-                            ..._validRows.take(5).map((r) {
-                              String g(List<String> k) {
-                                for (final key in r.keys) {
-                                  for (final kk in k) {
-                                    if (key.toLowerCase().replaceAll(RegExp(r'[\s_\-]'), '') == kk.toLowerCase()) return r[key] ?? '';
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Table(
+                            columnWidths: const {
+                              0: FlexColumnWidth(2),
+                              1: FlexColumnWidth(1.5),
+                              2: FlexColumnWidth(1.5),
+                              3: FlexColumnWidth(1.2),
+                              4: FlexColumnWidth(1.2),
+                            },
+                            children: [
+                              TableRow(children: [
+                                Text('Name', style: NeyvoType.labelSmall),
+                                Text('Phone', style: NeyvoType.labelSmall),
+                                Text('Email', style: NeyvoType.labelSmall),
+                                Text('Department', style: NeyvoType.labelSmall),
+                                Text('Year', style: NeyvoType.labelSmall),
+                              ]),
+                              ..._validRows.take(5).map((r) {
+                                String g(List<String> k) {
+                                  for (final key in r.keys) {
+                                    for (final kk in k) {
+                                      if (key.toLowerCase().replaceAll(RegExp(r'[\s_\-]'), '') == kk.toLowerCase()) return r[key] ?? '';
+                                    }
                                   }
+                                  return '';
                                 }
-                                return '';
-                              }
-                              return TableRow(children: [
-                                Text(g(['name', 'student_name']), style: NeyvoType.bodySmall),
-                                Text(g(['phone', 'mobile']), style: NeyvoType.bodySmall),
-                                Text(g(['balance']), style: NeyvoType.bodySmall),
-                              ]);
-                            }),
-                          ],
+                                return TableRow(children: [
+                                  Text(g(['name', 'student_name', 'first_name']), style: NeyvoType.bodySmall),
+                                  Text(g(['phone', 'mobile']), style: NeyvoType.bodySmall),
+                                  Text(g(['email']), style: NeyvoType.bodySmall),
+                                  Text(g(['department']), style: NeyvoType.bodySmall),
+                                  Text(g(['year_of_study', 'year']), style: NeyvoType.bodySmall),
+                                ]);
+                              }),
+                            ],
+                          ),
                         ),
                       ],
                       if (_errorLines.isNotEmpty) ...[
