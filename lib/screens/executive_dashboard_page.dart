@@ -344,6 +344,10 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
 
   static const double _kFilterBarHeight = 52;
 
+  /// Fixed height for all three KPI cards (Live Call Activity, Call Resolution, CSAT)
+  /// so they stay aligned and same size; content scrolls inside if needed.
+  static const double _kTopPanelHeight = 380;
+
   Widget _buildDateFilterBar() {
     final labels = {
       _DateRange.today: 'Today',
@@ -400,6 +404,36 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
           const SizedBox(width: 12),
           _LiveBadge(pulse: _pulseController),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTopPanel({
+    required Widget child,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+  }) {
+    return SizedBox(
+      height: _kTopPanelHeight,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: NeyvoTheme.borderSubtle),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: crossAxisAlignment,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: child,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -719,82 +753,78 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
     final estRemainingValue = estRemainingParts.isNotEmpty ? estRemainingParts[0] : estimatedRemaining;
     final estRemainingUnit = estRemainingParts.length > 1 ? estRemainingParts[1] : '';
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Live Call Activity', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-                ),
-                if (_refreshing)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 6),
-                        Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Divider(height: 1, color: NeyvoTheme.borderSubtle),
-            const SizedBox(height: 12),
-            if (!hasRunningCampaign)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('No campaign is currently running.', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted)),
+    return _buildTopPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Live Call Activity', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
               ),
-            ...rows.map((r) => _LiveBarRow(label: r.$1, count: r.$2, pct: totalForBars > 0 ? (r.$2 / totalForBars) : 0, color: r.$3)),
-            const SizedBox(height: 12),
-            Divider(height: 1, color: NeyvoTheme.borderSubtle),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Completion:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-                    const SizedBox(height: 2),
-                    Text(completionStr, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.ubPurple, fontWeight: FontWeight.w700)),
-                  ],
+              if (_refreshing)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Est. remaining:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-                    const SizedBox(height: 2),
-                    Text(estRemainingValue, style: NeyvoTextStyles.label.copyWith(fontWeight: FontWeight.w700)),
-                    if (estRemainingUnit.isNotEmpty)
-                      Text(estRemainingUnit, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-                  ],
-                ),
-              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: NeyvoTheme.borderSubtle),
+          const SizedBox(height: 12),
+          if (!hasRunningCampaign)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('No campaign is currently running.', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted)),
             ),
-          ],
-        ),
+          ...rows.map((r) => _LiveBarRow(label: r.$1, count: r.$2, pct: totalForBars > 0 ? (r.$2 / totalForBars) : 0, color: r.$3)),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: NeyvoTheme.borderSubtle),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Completion:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  const SizedBox(height: 2),
+                  Text(completionStr, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.ubPurple, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('Est. remaining:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  const SizedBox(height: 2),
+                  Text(estRemainingValue, style: NeyvoTextStyles.label.copyWith(fontWeight: FontWeight.w700)),
+                  if (estRemainingUnit.isNotEmpty)
+                    Text(estRemainingUnit, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
+      crossAxisAlignment: CrossAxisAlignment.start,
     );
   }
 
@@ -819,112 +849,104 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
     final resolutionPct = total > 0 ? (resolved / total * 100) : 0.0;
     final succeededNotResolved = succeeded - resolved;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Call Resolution', style: NeyvoTextStyles.heading),
-                  const SizedBox(height: 4),
-                  Text('Success rate by outcome', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _ResolutionBar(label: 'Calls Received', value: total, total: total, color: Colors.orange),
-            _ResolutionBar(label: 'Calls Succeeded', value: succeeded, total: total, color: Colors.purple),
-            _ResolutionBar(label: 'Resolution Count', value: resolved, total: total, color: Colors.blue),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return _buildTopPanel(
+      child: Column(
+        children: [
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _ResolutionDonutChart(
-                  resolutionPct: resolutionPct,
-                  succeededNotResolvedPct: total > 0 ? (succeededNotResolved / total * 100) : 0.0,
-                  unresolvedPct: total > 0 ? ((total - succeeded) / total * 100).clamp(0.0, 100.0) : 100.0,
-                ),
-                const SizedBox(width: 28),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _LegendRow('Received', total, Colors.orange),
-                        _LegendRow('Succeeded', succeeded, Colors.purple),
-                        _LegendRow('Resolved', resolved, Colors.blue),
-                        _LegendRow('Unresolved', unresolved, Colors.grey),
-                      ],
-                    ),
-                  ),
-                ),
+                Text('Call Resolution', style: NeyvoTextStyles.heading),
+                const SizedBox(height: 4),
+                Text('Success rate by outcome', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCsatPanel() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text('Customer Satisfaction Score', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 4),
-            Text('CSAT · Based on post-call surveys', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: 160,
-              height: 90,
-              child: CustomPaint(
-                painter: _HalfDoughnutPainter(
-                  value: null,
-                  noDataColors: [
-                    Colors.green,
-                    Colors.green.shade700,
-                    Colors.yellow.shade700,
-                    Colors.red,
-                  ],
-                ),
-                child: Center(
+          ),
+          const SizedBox(height: 12),
+          _ResolutionBar(label: 'Calls Received', value: total, total: total, color: Colors.orange),
+          _ResolutionBar(label: 'Calls Succeeded', value: succeeded, total: total, color: Colors.purple),
+          _ResolutionBar(label: 'Resolution Count', value: resolved, total: total, color: Colors.blue),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ResolutionDonutChart(
+                resolutionPct: resolutionPct,
+                succeededNotResolvedPct: total > 0 ? (succeededNotResolved / total * 100) : 0.0,
+                unresolvedPct: total > 0 ? ((total - succeeded) / total * 100).clamp(0.0, 100.0) : 100.0,
+              ),
+              const SizedBox(width: 28),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('—', style: NeyvoTextStyles.title.copyWith(fontSize: 20)),
-                      Text('awaiting data', style: NeyvoTextStyles.micro),
+                      _LegendRow('Received', total, Colors.orange),
+                      _LegendRow('Succeeded', succeeded, Colors.purple),
+                      _LegendRow('Resolved', resolved, Colors.blue),
+                      _LegendRow('Unresolved', unresolved, Colors.grey),
                     ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                _CsatLegendItem('Satisfied (5★)', Colors.green),
-                _CsatLegendItem('Good (4★)', Colors.green.shade700),
-                _CsatLegendItem('Neutral (3★)', Colors.yellow.shade700),
-                _CsatLegendItem('Poor (1-2★)', Colors.red),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Connect post-call survey to populate CSAT', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
+      crossAxisAlignment: CrossAxisAlignment.center,
+    );
+  }
+
+  Widget _buildCsatPanel() {
+    return _buildTopPanel(
+      child: Column(
+        children: [
+          Text('Customer Satisfaction Score', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 4),
+          Text('CSAT · Based on post-call surveys', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 160,
+            height: 90,
+            child: CustomPaint(
+              painter: _HalfDoughnutPainter(
+                value: null,
+                noDataColors: [
+                  Colors.green,
+                  Colors.green.shade700,
+                  Colors.yellow.shade700,
+                  Colors.red,
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('—', style: NeyvoTextStyles.title.copyWith(fontSize: 20)),
+                    Text('awaiting data', style: NeyvoTextStyles.micro),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: [
+              _CsatLegendItem('Satisfied (5★)', Colors.green),
+              _CsatLegendItem('Good (4★)', Colors.green.shade700),
+              _CsatLegendItem('Neutral (3★)', Colors.yellow.shade700),
+              _CsatLegendItem('Poor (1-2★)', Colors.red),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Connect post-call survey to populate CSAT', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+        ],
+      ),
+      crossAxisAlignment: CrossAxisAlignment.center,
     );
   }
 
