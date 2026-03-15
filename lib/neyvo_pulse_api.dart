@@ -330,10 +330,8 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getKpiNpsBreakdown({String? from, String? to}) async =>
       _getKpiWithFallback('/api/pulse/kpi/nps-breakdown', '/api/kpi/nps-breakdown', from: from, to: to);
 
-  // Students / Contacts (education: financial fields, filters). Use limit for pagination (e.g. 5000 for campaign audience).
+  // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({
-    int? limit,
-    int? offset,
     bool? hasBalance,
     bool? isOverdue,
     double? balanceMin,
@@ -343,15 +341,13 @@ class NeyvoPulseApi {
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
-    if (limit != null) params['limit'] = limit;
-    if (offset != null && offset > 0) params['offset'] = offset;
     if (hasBalance != null) params['has_balance'] = hasBalance;
     if (isOverdue != null) params['is_overdue'] = isOverdue;
     if (balanceMin != null) params['balance_min'] = balanceMin;
     if (balanceMax != null) params['balance_max'] = balanceMax;
     if (dueBefore != null) params['due_before'] = dueBefore;
     if (dueAfter != null) params['due_after'] = dueAfter;
-    return _get('/api/pulse/students', params: params);
+    return _get('/api/pulse/students', params: params.isEmpty ? null : params);
   }
 
   static Future<Map<String, dynamic>> getStudent(String studentId) async =>
