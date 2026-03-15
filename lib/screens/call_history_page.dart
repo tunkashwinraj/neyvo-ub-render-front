@@ -45,6 +45,18 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   static const List<int> _fetchSizeOptions = [20, 50, 100, 200, 500];
   Timer? _autoRefreshTimer;
 
+  static const int _rowsPerPage = 20;
+  int _currentPage = 0;
+
+  List<dynamic> get _paginatedCalls {
+    final start = _currentPage * _rowsPerPage;
+    if (start >= _filteredCalls.length) return [];
+    return _filteredCalls.sublist(start, (start + _rowsPerPage).clamp(0, _filteredCalls.length));
+  }
+
+  int get _totalPages => (_filteredCalls.length / _rowsPerPage).ceil().clamp(1, 999);
+  int get _effectivePage => _currentPage.clamp(0, _totalPages - 1);
+
   @override
   void initState() {
     super.initState();
@@ -168,6 +180,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     // Search only in current page: filter by name/phone + date, direction, status, outcome.
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
+      _currentPage = 0;
       var list = _allCalls.where((c) {
         if (!_isInDateRange(c)) return false;
         if (_filterDirection != 'all') {
@@ -434,52 +447,77 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              // Search + inline filters (single row)
-              Container(
-            padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.md, vertical: NeyvoSpacing.sm),
-            decoration: BoxDecoration(
-              color: NeyvoTheme.bgSurface,
-              border: Border(bottom: BorderSide(color: NeyvoTheme.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search in current page (name or phone)',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 20),
-                                  onPressed: _clearSearch,
-                                )
-                              : null,
+        child: Column(
+          children: [
+            // Title + top-right actions (same format as Student section)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(NeyvoSpacing.lg, NeyvoSpacing.md, NeyvoSpacing.lg, NeyvoSpacing.sm),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Data Table', style: NeyvoType.headlineMedium.copyWith(fontWeight: FontWeight.w600)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _loading ? null : _load,
+                        tooltip: 'Refresh',
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _filteredCalls.isEmpty ? null : _exportCsv,
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Export'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: NeyvoColors.ubLightBlue,
+                          side: BorderSide(color: NeyvoColors.ubLightBlue.withOpacity(0.6)),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: NeyvoSpacing.md),
-                    IconButton(
-                      icon: const Icon(Icons.download),
-                      onPressed: _filteredCalls.isEmpty ? null : _exportCsv,
-                      tooltip: 'Export CSV',
-                    ),
-                  ],
+                      if (_selectionMode) ...[
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        FilledButton.icon(
+                          onPressed: _selectedCallIds.isEmpty ? null : _onDeleteSelected,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Delete selected'),
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
+                        ),
+                        TextButton(
+                          onPressed: _clearSelection,
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search in current page (name or phone)',
+                  filled: true,
+                  fillColor: NeyvoColors.bgOverlay,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: NeyvoColors.borderSubtle),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(icon: const Icon(Icons.clear, size: 20), onPressed: _clearSearch)
+                      : const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.search, color: NeyvoColors.textMuted)),
                 ),
-                const SizedBox(height: NeyvoSpacing.sm),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: IntrinsicHeight(
-                    child: Row(
+              ),
+            ),
+            const SizedBox(height: NeyvoSpacing.sm),
+            // Filter dropdowns
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg),
+              child: IntrinsicHeight(
+                child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(
@@ -600,354 +638,175 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                     ),
                   ),
                 ),
-              ],
             ),
-              ),
-              
-              // Calls List (single page scroll: list does not scroll independently)
-              if (_filteredCalls.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(NeyvoSpacing.xl),
+            const SizedBox(height: NeyvoSpacing.md),
+            // Table or empty state
+            if (_filteredCalls.isEmpty)
+              Expanded(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
+                      Icon(Icons.phone_outlined, size: 64, color: NeyvoColors.textMuted),
                       const SizedBox(height: NeyvoSpacing.md),
                       Text(
                         _allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
-                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+                        style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textMuted),
                         textAlign: TextAlign.center,
                       ),
                     ],
                   ),
-                )
-              else ...[
-                ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: NeyvoSpacing.sm,
-                    vertical: NeyvoSpacing.sm,
+                ),
+              )
+            else ...[
+              if (_selectionMode)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg),
+                  child: Row(
+                    children: [
+                      Text('${_selectedCallIds.length} selected', style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.textSecondary)),
+                      const SizedBox(width: NeyvoSpacing.md),
+                      TextButton(onPressed: _selectAllVisible, child: const Text('Select all')),
+                      TextButton(onPressed: _clearSelection, child: const Text('Clear')),
+                    ],
                   ),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
-                  itemBuilder: (context, i) {
-                        if (i == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: NeyvoSpacing.sm,
-                              vertical: NeyvoSpacing.sm,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Calls (${_filteredCalls.length})',
-                                  style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
-                                ),
-                                if (_filteredCalls.length != _allCalls.length)
-                                  TextButton(
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {
-                                        _filterStatus = 'all';
-                                        _filterOutcome = 'all';
-                                      });
-                                      _filterCalls();
-                                    },
-                                    child: const Text('Clear filters'),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }
-                        if (_selectionMode && i == 1) {
-                          final totalVisible = _filteredCalls.length;
-                          final selectedCount = _selectedCallIds.length;
-                          final allSelected = selectedCount > 0 && selectedCount >= totalVisible;
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, 0, NeyvoSpacing.md, NeyvoSpacing.sm),
-                            child: Row(
-                              children: [
-                                Text(
-                                  '$selectedCount selected',
-                                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-                                ),
-                                const Spacer(),
-                                if (selectedCount > 0)
-                                  FilledButton.icon(
-                                    onPressed: _onDeleteSelected,
-                                    icon: const Icon(Icons.delete_outline),
-                                    label: const Text('Delete'),
-                                  ),
-                                const SizedBox(width: NeyvoSpacing.sm),
-                                TextButton(
-                                  onPressed: allSelected ? _clearSelection : _selectAllVisible,
-                                  child: Text(allSelected ? 'Clear' : 'Select all'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        final idx = _selectionMode ? i - 2 : i - 1;
-                        final call = _filteredCalls[idx] as Map<String, dynamic>;
+                ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.vertical,
+                    child: DataTable(
+                      headingRowColor: MaterialStateProperty.all(NeyvoColors.ubLightBlue.withOpacity(0.2)),
+                      headingTextStyle: NeyvoType.labelMedium.copyWith(fontWeight: FontWeight.w600, color: NeyvoColors.textLightPrimary),
+                      columns: [
+                        if (_selectionMode)
+                          const DataColumn(label: SizedBox(width: 40, child: Text(''))),
+                        DataColumn(label: Text('Name', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Phone', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Outcome', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Date & time', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Status', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Duration', style: NeyvoType.labelMedium)),
+                        DataColumn(label: Text('Credits', style: NeyvoType.labelMedium)),
+                        const DataColumn(label: SizedBox(width: 56, child: Text('Actions'))),
+                      ],
+                      rows: _paginatedCalls.map<DataRow>((c) {
+                        final call = c as Map<String, dynamic>;
                         final callId = call['id']?.toString() ?? '';
                         final isSelected = callId.isNotEmpty && _selectedCallIds.contains(callId);
-                        final status = call['status']?.toString() ?? 'unknown';
-                        final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? 'Unknown').toString();
-                        final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '').toString();
-                        final agentName = (call['profile_name'] ?? call['agent_name'] ?? call['managed_profile_name'] ?? '').toString();
-                        final numberCalled = (call['number_called'] ?? call['from'] ?? call['phone_number_id'] ?? '').toString();
-                        final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '').toString();
+                        final status = call['status']?.toString() ?? '—';
+                        final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? '—').toString();
+                        final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '—').toString();
+                        final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '—').toString();
                         final dateRaw = call['started_at'] ?? call['created_at'] ?? call['timestamp'] ?? call['date'];
-                        final date = dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '';
+                        final date = dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '—';
                         final durationStr = formatDuration(call);
-                        final transcript = call['transcript']?.toString() ?? '';
-                        final recordingUrl = call['recording_url']?.toString();
-                        final statusColor = _getStatusColor(status);
-                        final successMetric = call['success_metric']?.toString();
-                        final attributedAmount = call['attributed_payment_amount']?.toString();
-                        final attributedAt = call['attributed_payment_at']?.toString();
-                        final outcomeType = call['outcome_type']?.toString();
                         final creditsUsed = (call['credits_used'] ?? call['credits_charged']) as num?;
-                        final voiceTier = (call['voice_tier'] as String?)?.toLowerCase() ?? '';
-                        final creditsStr = creditsUsed != null ? '${creditsUsed is int ? creditsUsed : creditsUsed.toInt()} cr' : null;
-                        final tooltipStr = creditsStr != null
-                            ? '$creditsStr · $durationStr${voiceTier.isNotEmpty ? ' · ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
-                            : null;
-                        final routedIntentRaw = (call['routed_intent'] ?? call['primary_intent'] ?? call['analysis']?['primaryIntent']);
-                        final routedIntent = routedIntentRaw == null
-                            ? ''
-                            : routedIntentRaw.toString().trim();
-                        
-                        final showNumberCalled = numberCalled.isNotEmpty && numberCalled != studentPhone;
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                          child: InkWell(
-                            onLongPress: () {
-                              if (!_selectionMode) {
-                                setState(() {
-                                  _selectionMode = true;
-                                  _selectedCallIds
-                                    ..clear()
-                                    ..add(callId);
-                                });
-                              }
-                            },
-                            onTap: _selectionMode
-                                ? () => _toggleSelectionForCall(call)
-                                : null,
-                            child: ExpansionTile(
-                              trailing: IconButton(
-                                icon: const Icon(Icons.open_in_new),
-                                tooltip: 'View full details',
+                        final creditsStr = creditsUsed != null ? '${creditsUsed is int ? creditsUsed : creditsUsed.toInt()} cr' : '—';
+                        return DataRow(
+                          selected: isSelected,
+                          onSelectChanged: _selectionMode
+                              ? (_) => _toggleSelectionForCall(call)
+                              : null,
+                          cells: [
+                            if (_selectionMode)
+                              DataCell(Checkbox(
+                                value: isSelected,
+                                onChanged: (_) => _toggleSelectionForCall(call),
+                                activeColor: NeyvoTheme.primary,
+                              )),
+                            DataCell(Text(studentName, style: NeyvoType.bodySmall)),
+                            DataCell(Text(studentPhone, style: NeyvoType.bodySmall)),
+                            DataCell(Text(outcome, style: NeyvoType.bodySmall)),
+                            DataCell(Text(date, style: NeyvoType.bodySmall)),
+                            DataCell(Text(status.toUpperCase(), style: NeyvoType.bodySmall)),
+                            DataCell(Text(durationStr, style: NeyvoType.bodySmall)),
+                            DataCell(Text(creditsStr, style: NeyvoType.bodySmall)),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(Icons.open_in_new, size: 20),
+                                color: NeyvoColors.ubLightBlue,
                                 onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
                                 ),
+                                tooltip: 'View details',
                               ),
-                              leading: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_selectionMode)
-                                    Checkbox(
-                                      value: isSelected,
-                                      onChanged: (_) => _toggleSelectionForCall(call),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+              // Pagination bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: NeyvoSpacing.sm),
+                decoration: BoxDecoration(
+                  color: NeyvoColors.bgOverlay,
+                  border: Border(top: BorderSide(color: NeyvoColors.borderSubtle)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: _effectivePage > 0 ? () => setState(() => _currentPage = _effectivePage - 1) : null,
+                    ),
+                    if (_totalPages <= 12)
+                      ...List.generate(_totalPages, (i) {
+                        final isCurrent = i == _effectivePage;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Material(
+                            color: isCurrent ? NeyvoColors.ubLightBlue : NeyvoColors.bgRaised,
+                            borderRadius: BorderRadius.circular(6),
+                            child: InkWell(
+                              onTap: () => setState(() => _currentPage = i),
+                              borderRadius: BorderRadius.circular(6),
+                              child: SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: Center(
+                                  child: Text(
+                                    '${i + 1}',
+                                    style: NeyvoType.labelSmall.copyWith(
+                                      color: isCurrent ? NeyvoColors.white : NeyvoColors.textPrimary,
+                                      fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
                                     ),
-                                  CircleAvatar(
-                                    backgroundColor: statusColor.withOpacity(0.1),
-                                    child: Icon(_getStatusIcon(status), color: statusColor),
                                   ),
-                                ],
+                                ),
                               ),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      studentName,
-                                      style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
-                                    ),
-                                  ),
-                                  if (successMetric == 'payment_received')
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: NeyvoTheme.success.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'Resolution achieved',
-                                        style: NeyvoType.labelSmall.copyWith(
-                                          color: NeyvoTheme.success,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (studentPhone.isNotEmpty)
-                                    Text('Phone: $studentPhone', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                  if (agentName.isNotEmpty)
-                                    Text('Operator: $agentName', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                  if (showNumberCalled)
-                                    Text('Number dialed: $numberCalled', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                  if (outcome.isNotEmpty && outcome != 'unknown')
-                                    Text('Outcome: $outcome', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                  if (date.isNotEmpty)
-                                    Text('Date: $date', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: statusColor.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          status.toUpperCase(),
-                                          style: NeyvoType.labelSmall.copyWith(
-                                            color: statusColor,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      if (routedIntent.isNotEmpty) ...[
-                                        const SizedBox(width: NeyvoSpacing.sm),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: NeyvoTheme.bgSurface,
-                                            borderRadius: BorderRadius.circular(999),
-                                            border: Border.all(color: NeyvoTheme.border),
-                                          ),
-                                          child: Text(
-                                            'Routed: ${routedIntent[0].toUpperCase()}${routedIntent.substring(1)}',
-                                            style: NeyvoType.bodySmall.copyWith(fontSize: 11, color: NeyvoTheme.textMuted),
-                                          ),
-                                        ),
-                                      ],
-                                      if (durationStr != '—') ...[
-                                        const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                      ],
-                                      if (creditsStr != null) ...[
-                                        const SizedBox(width: NeyvoSpacing.sm),
-                                        Tooltip(
-                                          message: tooltipStr ?? creditsStr,
-                                          child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
-                                        ),
-                                      ],
-                                      if (outcomeType != null && outcomeType.isNotEmpty) ...[
-                                        const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
-                                      ],
-                                    ],
-                                  ),
-                                  if (attributedAmount != null && attributedAmount.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        'Payment received: $attributedAmount${attributedAt != null && attributedAt.isNotEmpty ? " ($attributedAt)" : ""}',
-                                        style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.success, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              children: [
-                                if (recordingUrl != null && recordingUrl.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final uri = Uri.tryParse(recordingUrl);
-                                        if (uri != null && await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                      },
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
-                                          const SizedBox(width: NeyvoSpacing.sm),
-                                          Text(
-                                            'Listen to recording',
-                                            style: NeyvoType.bodyMedium.copyWith(
-                                              color: NeyvoTheme.teal,
-                                              decoration: TextDecoration.underline,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                if (transcript.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.all(NeyvoSpacing.sm),
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(NeyvoSpacing.sm),
-                                      decoration: BoxDecoration(
-                                        color: NeyvoTheme.bgHover,
-                                        borderRadius: BorderRadius.circular(NeyvoRadius.sm),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Transcript',
-                                            style: NeyvoType.labelLarge.copyWith(
-                                              color: NeyvoTheme.textSecondary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: NeyvoSpacing.sm),
-                                          SelectableText(
-                                            transcript,
-                                            style: NeyvoType.bodySmall.copyWith(
-                                              color: NeyvoTheme.textPrimary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.all(NeyvoSpacing.md),
-                                    child: Text(
-                                      'No transcript available',
-                                      style: NeyvoType.bodySmall.copyWith(
-                                        color: NeyvoTheme.textMuted,
-                                      ),
-                                    ),
-                                  ),
-                              ],
                             ),
                           ),
                         );
-                  },
+                      })
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Page ${_effectivePage + 1} of $_totalPages', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: _effectivePage < _totalPages - 1 ? () => setState(() => _currentPage = _effectivePage + 1) : null,
+                    ),
+                  ],
                 ),
-                if (_hasMore)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      left: NeyvoSpacing.md,
-                      right: NeyvoSpacing.md,
-                      bottom: NeyvoSpacing.lg,
-                    ),
-                    child: OutlinedButton(
-                      onPressed: _loadingMore ? null : _loadMore,
-                      child: _loadingMore
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Load more calls'),
-                    ),
-                  ),
-              ],
+              ),
             ],
-          ),
+            // Keep Load more below table when there are more calls from API
+            if (_hasMore && _filteredCalls.length >= _allCalls.length)
+              Padding(
+                padding: const EdgeInsets.only(left: NeyvoSpacing.lg, right: NeyvoSpacing.lg, bottom: NeyvoSpacing.md),
+                child: OutlinedButton(
+                  onPressed: _loadingMore ? null : _loadMore,
+                  child: _loadingMore
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Load more calls'),
+                ),
+              ),
+          ],
         ),
       ),
     );
