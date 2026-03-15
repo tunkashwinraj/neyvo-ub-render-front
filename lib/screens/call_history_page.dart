@@ -1,6 +1,7 @@
 // lib/screens/call_history_page.dart
 // Call logs – history with filters, date range, transcripts, export, recording link
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
@@ -42,6 +43,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   bool _hasMore = true;
   bool _loadingMore = false;
   static const List<int> _fetchSizeOptions = [20, 50, 100, 200, 500];
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -52,21 +54,29 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
     _searchController.addListener(_filterCalls);
     _load();
+    // Auto-refresh so recent and campaign calls appear without manual refresh
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (!mounted || _loading) return;
+      _load(showLoading: false);
+    });
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _selectionMode = false;
-      _selectedCallIds.clear();
-    });
+  Future<void> _load({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _selectionMode = false;
+        _selectedCallIds.clear();
+      });
+    }
     try {
       // Ensure account is set so backend returns calls for the correct org
       if (NeyvoPulseApi.defaultAccountId.isEmpty) {
@@ -96,8 +106,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       }
     } catch (e) {
       if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
+        if (showLoading) {
+          _error = e.toString();
+          _loading = false;
+        }
+        // background refresh: leave list and error as-is
       });
     }
   }
