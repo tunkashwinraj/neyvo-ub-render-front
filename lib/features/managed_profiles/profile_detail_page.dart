@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../api/spearia_api.dart';
@@ -45,6 +47,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _promptCtrl = TextEditingController();
   final _voicemailCtrl = TextEditingController();
   final _aiSuggestMessageCtrl = TextEditingController();
+  final _vapiJsonImportController = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
@@ -81,6 +84,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _promptCtrl.dispose();
     _voicemailCtrl.dispose();
     _aiSuggestMessageCtrl.dispose();
+    _vapiJsonImportController.dispose();
     super.dispose();
   }
 
@@ -1274,6 +1278,81 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     });
   }
 
+  /// Parse full VAPI assistant JSON and update this operator's system prompt and voicemail.
+  Future<void> _importFromVapiJson() async {
+    final raw = _vapiJsonImportController.text.trim();
+    if (raw.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Paste the full VAPI assistant JSON above, then tap Import.')),
+        );
+      }
+      return;
+    }
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>?;
+      if (data == null || data.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid JSON. Paste a valid VAPI assistant object.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+      String? customSystemPrompt;
+      final messages = data['model'] is Map ? (data['model'] as Map)['messages'] : null;
+      if (messages is List) {
+        for (final m in messages) {
+          if (m is Map && (m['role'] ?? '').toString().toLowerCase() == 'system') {
+            final content = m['content']?.toString() ?? '';
+            if (content.isNotEmpty) {
+              customSystemPrompt = content;
+              break;
+            }
+          }
+        }
+      }
+      final voicemailMessage = data['voicemailMessage']?.toString().trim();
+
+      if ((customSystemPrompt ?? '').isEmpty && (voicemailMessage ?? '').isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No system prompt or voicemail found in the JSON.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+
+      final body = <String, dynamic>{};
+      if ((customSystemPrompt ?? '').isNotEmpty) body['custom_system_prompt'] = customSystemPrompt;
+      if (voicemailMessage != null && voicemailMessage.isNotEmpty) body['voicemail_message'] = voicemailMessage;
+
+      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _saving = false;
+        _promptCtrl.text = (updated['custom_system_prompt'] ?? _promptCtrl.text).toString();
+        _voicemailCtrl.text = (updated['voicemail_message'] ?? _voicemailCtrl.text).toString();
+      });
+      _vapiJsonImportController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported ${body.length} field(s). Changes synced to this operator.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid JSON or failed to import: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _loadVariablePreview() async {
     final template = _voicemailCtrl.text.trim().isNotEmpty
         ? _voicemailCtrl.text.trim()
@@ -1662,6 +1741,51 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        NeyvoGlassPanel(
+          child: ExpansionTile(
+            title: Text('Import from VAPI JSON', style: NeyvoTextStyles.heading),
+            subtitle: Text(
+              'Paste the full assistant JSON from Vapi dashboard to update this operator\'s system prompt and voicemail.',
+              style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'We extract: system prompt (from model.messages) and voicemailMessage. Paste the full VAPI assistant JSON below.',
+                      style: NeyvoTextStyles.bodySmall.copyWith(color: NeyvoColors.textTertiary),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _vapiJsonImportController,
+                      maxLines: 12,
+                      decoration: const InputDecoration(
+                        hintText: '{"firstMessage": "...", "model": {"messages": [...]}, "voicemailMessage": "..."}',
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      style: NeyvoTextStyles.bodySmall.copyWith(color: NeyvoColors.textPrimary),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonal(
+                        onPressed: _saving ? null : _importFromVapiJson,
+                        child: _saving
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('Import and apply to this operator'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         _buildVariablesCard(),
         const SizedBox(height: 16),
         NeyvoGlassPanel(
