@@ -39,6 +39,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
   final TextEditingController _voicemailMessageController = TextEditingController();
   final TextEditingController _endCallPhrasesController = TextEditingController();
   final TextEditingController _advancedConfigController = TextEditingController();
+  final TextEditingController _vapiJsonImportController = TextEditingController();
   final TextEditingController _knowledgeQuestionController = TextEditingController();
   final TextEditingController _knowledgeAnswerController = TextEditingController();
   List<Map<String, dynamic>> _knowledgeItems = const [];
@@ -57,6 +58,7 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
     _voicemailMessageController.dispose();
     _endCallPhrasesController.dispose();
     _advancedConfigController.dispose();
+    _vapiJsonImportController.dispose();
     _knowledgeQuestionController.dispose();
     _knowledgeAnswerController.dispose();
     super.dispose();
@@ -263,6 +265,95 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Invalid JSON or failed to save: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Parse full VAPI assistant JSON (from Vapi dashboard) and update this operator.
+  /// Extracts: system prompt, firstMessage, voicemailMessage, endCallPhrases, voice, model, transcriber, analysisPlan, messagePlan, startSpeakingPlan, stopSpeakingPlan.
+  Future<void> _importFromVapiJson() async {
+    final raw = _vapiJsonImportController.text.trim();
+    if (raw.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Paste the full VAPI assistant JSON above, then tap Import.')),
+        );
+      }
+      return;
+    }
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>?;
+      if (data == null || data.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid JSON. Paste a valid VAPI assistant object.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+      final payload = <String, dynamic>{};
+
+      // System prompt from model.messages (first system message)
+      final messages = data['model'] is Map ? (data['model'] as Map)['messages'] : null;
+      if (messages is List) {
+        for (final m in messages) {
+          if (m is Map && (m['role'] ?? '').toString().toLowerCase() == 'system') {
+            final content = m['content']?.toString() ?? '';
+            if (content.isNotEmpty) {
+              payload['system_prompt'] = content;
+              break;
+            }
+          }
+        }
+      }
+
+      final firstMessage = data['firstMessage']?.toString().trim();
+      if (firstMessage != null && firstMessage.isNotEmpty) payload['opening_message'] = firstMessage;
+
+      final voicemailMessage = data['voicemailMessage']?.toString().trim();
+      if (voicemailMessage != null && voicemailMessage.isNotEmpty) payload['voicemail_message'] = voicemailMessage;
+
+      final endCallPhrases = data['endCallPhrases'];
+      if (endCallPhrases is List) {
+        payload['end_call_phrases'] = endCallPhrases.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      }
+
+      if (data['voice'] is Map) payload['voice_config'] = Map<String, dynamic>.from(data['voice'] as Map);
+      if (data['model'] is Map) payload['model_config'] = Map<String, dynamic>.from(data['model'] as Map);
+      if (data['transcriber'] is Map) payload['transcriber_config'] = Map<String, dynamic>.from(data['transcriber'] as Map);
+      if (data['analysisPlan'] is Map) payload['analysis_plan'] = Map<String, dynamic>.from(data['analysisPlan'] as Map);
+      if (data['messagePlan'] is Map) payload['message_plan'] = Map<String, dynamic>.from(data['messagePlan'] as Map);
+      if (data['startSpeakingPlan'] is Map) payload['start_speaking_plan'] = Map<String, dynamic>.from(data['startSpeakingPlan'] as Map);
+      if (data['stopSpeakingPlan'] is Map) payload['stop_speaking_plan'] = Map<String, dynamic>.from(data['stopSpeakingPlan'] as Map);
+
+      if (payload.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No supported fields found in the JSON.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+
+      await NeyvoPulseApi.updateAgent(widget.agentId, payload);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported ${payload.length} field(s). Reloading.')),
+        );
+        _vapiJsonImportController.clear();
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid JSON or failed to import: $e')),
         );
       }
     } finally {
@@ -1331,7 +1422,49 @@ class _AgentDetailPageState extends State<AgentDetailPage> {
             ),
           ],
           const SizedBox(height: NeyvoSpacing.lg),
-          const SizedBox(height: NeyvoSpacing.lg),
+          ExpansionTile(
+            title: Text('Import from VAPI JSON', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+            subtitle: Text(
+              'Paste the full assistant JSON from Vapi dashboard to update this operator\'s script and config.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            collapsedBackgroundColor: NeyvoTheme.bgCard,
+            backgroundColor: NeyvoTheme.bgCard,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Paste the full VAPI assistant JSON (from Vapi dashboard or API). We extract: system prompt, firstMessage, voicemailMessage, endCallPhrases, voice, model, transcriber, analysisPlan, messagePlan, and speaking plans.',
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textTertiary),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _vapiJsonImportController,
+                      maxLines: 14,
+                      decoration: const InputDecoration(
+                        hintText: '{"firstMessage": "...", "model": {"messages": [...]}, ...}',
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonal(
+                        onPressed: _saving ? null : _importFromVapiJson,
+                        child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Import and apply to this operator'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: NeyvoSpacing.md),
           ExpansionTile(
             title: Text('Advanced (Vapi parity)', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
             subtitle: Text(
