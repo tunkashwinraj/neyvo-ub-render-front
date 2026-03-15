@@ -187,9 +187,14 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
         email: email,
         password: password,
       );
+      // Ensure the very next API call sends this user so backend tenant check uses correct account.
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        SpeariaApi.setUserId(user.uid);
+      }
       // Immediately verify tenant/org membership so that cross-tenant
       // logins are rejected at the auth screen instead of inside the
-      // Pulse shell.
+      // Pulse shell. No dashboard data is ever loaded until this succeeds.
       try {
         await NeyvoPulseApi.getAccountInfo();
       } on ApiException catch (e) {
