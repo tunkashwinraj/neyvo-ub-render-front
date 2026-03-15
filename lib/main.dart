@@ -104,18 +104,25 @@ String get _kFallbackAccountId {
     );
 
     // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
-    // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
-    if (kIsWeb) {
-      await FirebaseAppCheck.instance.activate(
-        webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
-        androidProvider: AndroidProvider.debug,
-        appleProvider: AppleProvider.debug,
-      );
-    } else {
-      await FirebaseAppCheck.instance.activate(
-        androidProvider: AndroidProvider.debug,
-        appleProvider: AppleProvider.debug,
-      );
+    // On failure (e.g. 403, wrong key, domain not allowed) we continue so the app still loads.
+    try {
+      if (kIsWeb) {
+        await FirebaseAppCheck.instance.activate(
+          webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+          androidProvider: AndroidProvider.debug,
+          appleProvider: AppleProvider.debug,
+        );
+      } else {
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: AndroidProvider.debug,
+          appleProvider: AppleProvider.debug,
+        );
+      }
+    } catch (e, st) {
+      if (kIsWeb) {
+        debugPrint('Firebase App Check activation failed (app will continue): $e');
+        debugPrint('Stack trace: $st');
+      }
     }
 
     if (kIsWeb) {

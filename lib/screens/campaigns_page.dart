@@ -892,7 +892,19 @@ class _CampaignsPageState extends State<CampaignsPage> {
         _load();
       }
     } on ApiException catch (e) {
-      if (mounted) _showInsufficientCreditsSnackBar(e);
+      if (mounted) {
+        final payload = e.payload;
+        if (payload is Map && payload['error'] == 'insufficient_credits') {
+          _showInsufficientCreditsSnackBar(e);
+        } else {
+          final msg = payload is Map
+              ? (payload['message'] ?? payload['error'] ?? e.message)
+              : e.message;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg?.toString() ?? e.toString()), backgroundColor: NeyvoTheme.error),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1571,117 +1583,105 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 icon: const Icon(Icons.refresh),
                 onPressed: () => setState(() => _campaignDetailRefreshKey++),
               ),
-              Tooltip(
-                message: 'Download detailed campaign report (CSV)',
-                child: TextButton.icon(
-                  icon: const Icon(Icons.download_outlined, size: 20),
-                  label: const Text('Download report'),
-                  onPressed: () => _downloadCampaignReport(campaignId),
-                ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'More actions',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'download':
+                      _downloadCampaignReport(campaignId);
+                      break;
+                    case 'pause':
+                      NeyvoPulseApi.pauseCampaign(campaignId).then((_) {
+                        if (mounted) setState(() => _campaignDetailRefreshKey++);
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'resume':
+                      NeyvoPulseApi.resumeCampaign(campaignId).then((_) {
+                        if (mounted) setState(() => _campaignDetailRefreshKey++);
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'stop':
+                      NeyvoPulseApi.stopCampaign(campaignId).then((_) {
+                        if (mounted) {
+                          setState(() => _campaignDetailRefreshKey++);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign stopped. All calls ended.')));
+                        }
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'delete':
+                      _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign');
+                      break;
+                    case 'edit':
+                      _nameController.text = c['name']?.toString() ?? '';
+                      _selectedTemplateId = c['template_id']?.toString();
+                      _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
+                      _selectedStudentIds = {};
+                      final ids = c['student_ids'];
+                      if (ids is List) {
+                        _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                      }
+                      _scheduleNow = c['scheduled_at'] == null;
+                      _scheduledAt = null;
+                      if (c['scheduled_at'] != null) {
+                        _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                      }
+                      _filterType = 'all';
+                      setState(() {
+                        _editingCampaignId = campaignId;
+                        _editCampaignData = Map<String, dynamic>.from(c);
+                        _showCreateWizard = true;
+                        _selectedCampaignId = null;
+                        _wizardStep = 0;
+                      });
+                      break;
+                    case 'start':
+                      _startOrRerunCampaign(c);
+                      break;
+                    case 'start_subset':
+                      _startCampaignWithSubset(campaignId, audienceIds);
+                      break;
+                    case 'rerun':
+                      _startOrRerunCampaign(c);
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_outlined, size: 20), title: Text('Download report'), dense: true)),
+                  if (status == 'running')
+                    const PopupMenuItem(value: 'pause', child: ListTile(leading: Icon(Icons.pause_circle_outline, size: 20), title: Text('Pause'), dense: true)),
+                  if (status == 'paused')
+                    const PopupMenuItem(value: 'resume', child: ListTile(leading: Icon(Icons.play_circle_outline, size: 20), title: Text('Resume'), dense: true)),
+                  if (status == 'running' || status == 'paused')
+                    const PopupMenuItem(value: 'stop', child: ListTile(leading: Icon(Icons.stop_circle_outlined, size: 20), title: Text('Stop'), dense: true)),
+                  if (canDelete)
+                    const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, size: 20), title: Text('Delete'), dense: true)),
+                  if (canEdit)
+                    const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined, size: 20), title: Text('Edit'), dense: true)),
+                  if (canStart)
+                    const PopupMenuItem(value: 'start', child: ListTile(leading: Icon(Icons.play_arrow, size: 20), title: Text('Start campaign'), dense: true)),
+                  if (canStart && audienceIds.isNotEmpty)
+                    const PopupMenuItem(value: 'start_subset', child: ListTile(leading: Icon(Icons.playlist_add_check_circle_outlined, size: 20), title: Text('Start subset'), dense: true)),
+                  if (canRerun)
+                    const PopupMenuItem(value: 'rerun', child: ListTile(leading: Icon(Icons.replay, size: 20), title: Text('Rerun campaign'), dense: true)),
+                ],
               ),
-              if (status == 'running')
-                TextButton.icon(
-                  icon: const Icon(Icons.pause_circle_outline, size: 20),
-                  label: const Text('Pause'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.pauseCampaign(campaignId);
-                      if (mounted) setState(() => _campaignDetailRefreshKey++);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              if (status == 'paused')
-                TextButton.icon(
-                  icon: const Icon(Icons.play_circle_outline, size: 20),
-                  label: const Text('Resume'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.resumeCampaign(campaignId);
-                      if (mounted) setState(() => _campaignDetailRefreshKey++);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              if (status == 'running' || status == 'paused')
-                TextButton.icon(
-                  icon: const Icon(Icons.stop_circle_outlined, size: 20),
-                  label: const Text('Stop'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.stopCampaign(campaignId);
-                      if (mounted) {
-                        setState(() => _campaignDetailRefreshKey++);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign stopped. All calls ended.')));
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              TextButton.icon(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                label: const Text('Delete'),
-                onPressed: canDelete ? () => _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign') : null,
-              ),
-              if (canEdit)
-                TextButton.icon(
-                  icon: const Icon(Icons.edit_outlined, size: 20),
-                  label: const Text('Edit'),
-                  onPressed: () {
-                    _nameController.text = c['name']?.toString() ?? '';
-                    _selectedTemplateId = c['template_id']?.toString();
-                    _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
-                    _selectedStudentIds = {};
-                    final ids = c['student_ids'];
-                    if (ids is List) {
-                      _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
-                    }
-                    _scheduleNow = c['scheduled_at'] == null;
-                    _scheduledAt = null;
-                    if (c['scheduled_at'] != null) {
-                      _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
-                    }
-                    _filterType = 'all';
-                    setState(() {
-                      _editingCampaignId = campaignId;
-                      _editCampaignData = Map<String, dynamic>.from(c);
-                      _showCreateWizard = true;
-                      _selectedCampaignId = null;
-                      _wizardStep = 0;
-                    });
-                  },
-                ),
               if (canStart || canRerun)
                 Padding(
                   padding: const EdgeInsets.only(right: NeyvoSpacing.md),
                   child: _buildCallerIdDropdown(campaign: c),
-                ),
-              if (canStart)
-                TextButton.icon(
-                  icon: const Icon(Icons.play_arrow, size: 20),
-                  label: const Text('Start campaign'),
-                  onPressed: () => _startOrRerunCampaign(c),
-                ),
-              if (canStart && audienceIds.isNotEmpty)
-                TextButton.icon(
-                  icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 20),
-                  label: const Text('Start subset'),
-                  onPressed: () => _startCampaignWithSubset(campaignId, audienceIds),
-                ),
-              if (canRerun)
-                TextButton.icon(
-                  icon: const Icon(Icons.replay, size: 20),
-                  label: const Text('Rerun campaign'),
-                  onPressed: () => _startOrRerunCampaign(c),
                 ),
             ],
           ),

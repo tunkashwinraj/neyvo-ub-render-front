@@ -8,6 +8,9 @@ import 'package:http/http.dart' as http;
 
 import 'debug_session_log_stub.dart' if (dart.library.html) 'debug_session_log_web.dart' as _origin;
 
+/// Set to true only when the debug ingest service is running (e.g. on 127.0.0.1:7693).
+const bool _kEnableDebugIngest = false;
+
 const _sessionId = '7f92f3';
 const _endpoint = 'http://127.0.0.1:7693/ingest/4dbef325-696e-4a3f-ac76-bda8c8d2b735';
 
@@ -19,6 +22,7 @@ bool _isLocalOrigin(String? origin) {
 
 void debugSessionLog(String location, String message, Map<String, dynamic> data, String hypothesisId) {
   if (!kIsWeb) return;
+  if (!_kEnableDebugIngest) return;
   if (!_isLocalOrigin(_origin.currentWebOrigin)) return;
   final payload = <String, dynamic>{
     'sessionId': _sessionId,

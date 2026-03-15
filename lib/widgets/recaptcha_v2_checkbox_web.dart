@@ -27,7 +27,9 @@ void _registerViewFactory() {
       final div = html.DivElement()
         ..className = 'g-recaptcha'
         ..setAttribute('data-sitekey', _currentSiteKey)
-        ..setAttribute('data-callback', _kCallbackName);
+        ..setAttribute('data-callback', _kCallbackName)
+        ..style.height = '78px'
+        ..style.width = '304px';
       // Render after the element is in the DOM; reCAPTCHA script may load async.
       Future.microtask(() {
         _renderRecaptcha(div);
