@@ -1,5 +1,5 @@
 // lib/screens/call_history_page.dart
-// Call logs – history with filters, date range, transcripts, export, recording link
+// Call logs ? history with filters, date range, transcripts, export, recording link
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -60,6 +60,24 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     super.dispose();
   }
 
+  /// Build from/to date params for API (YYYY-MM-DD). Returns null for 'all'.
+  (String? fromStr, String? toStr) _dateRangeParams() {
+    if (_dateRange == 'all') return (null, null);
+    final now = DateTime.now();
+    final toStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    if (_dateRange == '7d') {
+      final from = now.subtract(const Duration(days: 7));
+      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
+      return (fromStr, toStr);
+    }
+    if (_dateRange == '30d') {
+      final from = now.subtract(const Duration(days: 30));
+      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
+      return (fromStr, toStr);
+    }
+    return (null, null);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -68,37 +86,36 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       _selectedCallIds.clear();
     });
     try {
-      // Ensure account is set so backend returns calls for the correct org
-      if (NeyvoPulseApi.defaultAccountId.isEmpty) {
-        final accountRes = await NeyvoPulseApi.getAccountInfo();
-        final accountId = (accountRes['account_id'] ?? accountRes['id'] ?? '').toString().trim();
-        if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
-      }
-      final now = DateTime.now();
-      String? fromDate;
-      String? toDate;
-      if (_dateRange == '7d') {
-        fromDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7)).toIso8601String().split('T').first;
-        toDate = now.toIso8601String().split('T').first;
-      } else if (_dateRange == '30d') {
-        fromDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30)).toIso8601String().split('T').first;
-        toDate = now.toIso8601String().split('T').first;
-      }
-      final list = (await NeyvoPulseApi.listCalls(limit: _fetchSize, offset: 0, from: fromDate, to: toDate))['calls'] as List? ?? [];
+      final (fromStr, toStr) = _dateRangeParams();
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _fetchSize,
+        offset: 0,
+        from: fromStr,
+        to: toStr,
+      );
+      if (!mounted) return;
+      final list = res['calls'];
+      final calls = list is List ? List<dynamic>.from(list) : <dynamic>[];
+      setState(() {
+        _allCalls = calls;
+        _hasMore = calls.length >= _fetchSize;
+        _loading = false;
+        if (res['ok'] != true && _error == null) {
+          _error = res['error']?.toString() ?? 'Failed to load call logs';
+        }
+      });
+      _filterCalls();
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _allCalls = list;
-          _filteredCalls = list;
-          _hasMore = list.length >= _fetchSize;
+          _allCalls = [];
+          _filteredCalls = [];
+          _hasMore = false;
           _loading = false;
+          _error = e.toString();
         });
         _filterCalls();
       }
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
     }
   }
 
@@ -127,7 +144,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       return r > 0 ? '${m}m ${r}s' : '${m}m';
     }
     final d = call['duration']?.toString();
-    return d?.isNotEmpty == true ? d! : '—';
+    return d?.isNotEmpty == true ? d! : '?';
   }
 
   static int _durationSeconds(dynamic c) {
@@ -284,46 +301,26 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
   Future<void> _loadMore() async {
     if (!_hasMore || _loadingMore) return;
-    final offset = _allCalls.length;
-    setState(() {
-      _loadingMore = true;
-    });
+    setState(() => _loadingMore = true);
     try {
-      final now = DateTime.now();
-      String? fromDate;
-      String? toDate;
-      if (_dateRange == '7d') {
-        fromDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7)).toIso8601String().split('T').first;
-        toDate = now.toIso8601String().split('T').first;
-      } else if (_dateRange == '30d') {
-        fromDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 30)).toIso8601String().split('T').first;
-        toDate = now.toIso8601String().split('T').first;
-      }
-      final list = (await NeyvoPulseApi.listCalls(limit: _fetchSize, offset: offset, from: fromDate, to: toDate))['calls'] as List? ?? [];
-      if (mounted) {
-        final existingIds = _allCalls
-            .map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '')
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final newCalls = list.where((c) {
-          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
-          return id.isNotEmpty && !existingIds.contains(id);
-        }).toList();
-        setState(() {
-          _allCalls = [..._allCalls, ...newCalls];
-          _filteredCalls = _allCalls;
-          _hasMore = list.length >= _fetchSize;
-          _loadingMore = false;
-        });
-        _filterCalls();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loadingMore = false;
-        });
-      }
+      final (fromStr, toStr) = _dateRangeParams();
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _fetchSize,
+        offset: _allCalls.length,
+        from: fromStr,
+        to: toStr,
+      );
+      if (!mounted) return;
+      final list = res['calls'];
+      final newCalls = list is List ? List<dynamic>.from(list) : <dynamic>[];
+      setState(() {
+        _allCalls = [..._allCalls, ...newCalls];
+        _hasMore = newCalls.length >= _fetchSize;
+        _loadingMore = false;
+      });
+      _filterCalls();
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -699,7 +696,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final voiceTier = (call['voice_tier'] as String?)?.toLowerCase() ?? '';
                         final creditsStr = creditsUsed != null ? '${creditsUsed is int ? creditsUsed : creditsUsed.toInt()} cr' : null;
                         final tooltipStr = creditsStr != null
-                            ? '$creditsStr · $durationStr${voiceTier.isNotEmpty ? ' · ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
+                            ? '$creditsStr ? $durationStr${voiceTier.isNotEmpty ? ' ? ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
                             : null;
                         final routedIntentRaw = (call['routed_intent'] ?? call['primary_intent'] ?? call['analysis']?['primaryIntent']);
                         final routedIntent = routedIntentRaw == null
@@ -815,20 +812,20 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                           ),
                                         ),
                                       ],
-                                      if (durationStr != '—') ...[
+                                      if (durationStr != '?') ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                        Text('? $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                       ],
                                       if (creditsStr != null) ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
                                         Tooltip(
                                           message: tooltipStr ?? creditsStr,
-                                          child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
+                                          child: Text('? $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
                                         ),
                                       ],
                                       if (outcomeType != null && outcomeType.isNotEmpty) ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                        Text('? ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                       ],
                                     ],
                                   ),

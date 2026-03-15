@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
@@ -86,7 +87,7 @@ class _DirectoryTab extends StatefulWidget {
   State<_DirectoryTab> createState() => _DirectoryTabState();
 }
 
-class _DirectoryTabState extends State<_DirectoryTab> {
+class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   bool _loading = true;
@@ -94,11 +95,29 @@ class _DirectoryTabState extends State<_DirectoryTab> {
   bool _isEducationOrg = false;
   final _searchController = TextEditingController();
   String _filterStatus = 'all';
+  late AnimationController _tableAnimationController;
+  late Animation<double> _tableFade;
+  late Animation<Offset> _tableSlide;
+  late Animation<double> _tableScale;
+  bool _tableAnimationStarted = false;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_filterStudents);
+    _tableAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _tableFade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _tableAnimationController, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
+    );
+    _tableSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
+      CurvedAnimation(parent: _tableAnimationController, curve: const Interval(0, 1, curve: Curves.easeOutCubic)),
+    );
+    _tableScale = Tween<double>(begin: 0.96, end: 1).animate(
+      CurvedAnimation(parent: _tableAnimationController, curve: const Interval(0, 1, curve: Curves.easeOutBack)),
+    );
     _load();
   }
 
@@ -307,7 +326,20 @@ class _DirectoryTabState extends State<_DirectoryTab> {
   @override
   void dispose() {
     _searchController.dispose();
+    _tableAnimationController.dispose();
     super.dispose();
+  }
+
+  void _runTableEntryAnimation() {
+    if (_filteredStudents.isEmpty) {
+      _tableAnimationStarted = false;
+      _tableAnimationController.reset();
+      return;
+    }
+    if (!_tableAnimationStarted) {
+      _tableAnimationStarted = true;
+      _tableAnimationController.forward();
+    }
   }
 
   static bool _isOverdue(Map<String, dynamic> s) {
@@ -369,6 +401,92 @@ class _DirectoryTabState extends State<_DirectoryTab> {
     });
   }
 
+  static String _studentDisplayName(Map<String, dynamic> s) {
+    final name = s['name']?.toString().trim();
+    if (name != null && name.isNotEmpty) return name;
+    final first = s['first_name']?.toString().trim() ?? '';
+    final last = s['last_name']?.toString().trim() ?? '';
+    return '$first $last'.trim().isEmpty ? '—' : '$first $last'.trim();
+  }
+
+  static String _lastCallStatusLabel(dynamic outcome) {
+    if (outcome == null) return 'Pending';
+    final o = outcome.toString().trim().toLowerCase();
+    if (o.contains('answer')) return 'Answered';
+    if (o.contains('voicemail')) return 'Voicemail';
+    if (o.contains('not') || o.contains('no_connect') || o.contains('failed')) return 'Not Connected';
+    if (o.isEmpty) return 'Pending';
+    return outcome.toString().trim();
+  }
+
+  static Color _lastCallStatusColor(String label) {
+    switch (label) {
+      case 'Answered':
+        return NeyvoColors.success;
+      case 'Voicemail':
+        return NeyvoTheme.warning;
+      case 'Not Connected':
+        return NeyvoColors.error;
+      default:
+        return NeyvoColors.textMuted;
+    }
+  }
+
+  static String _lastCallTimeLabel(dynamic dateVal) {
+    if (dateVal == null || dateVal.toString().trim().isEmpty) return 'Never';
+    try {
+      DateTime dt;
+      if (dateVal is DateTime) {
+        dt = dateVal;
+      } else {
+        final str = dateVal.toString().trim();
+        dt = DateTime.parse(str);
+      }
+      const months = 'JanFebMarAprMayJunJulAugSepOctNovDec';
+      final month = months.substring((dt.month - 1) * 3, dt.month * 3);
+      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      return '${month} ${dt.day}, $hour:${dt.minute.toString().padLeft(2, '0')} $ampm';
+    } catch (_) {
+      return dateVal.toString();
+    }
+  }
+
+  Future<void> _launchCall(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
+    final uri = Uri.parse('tel:$digits');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _confirmDeleteStudent(BuildContext context, String id, String name) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete student'),
+        content: Text('Delete "$name"? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    try {
+      await NeyvoPulseApi.deleteStudent(id);
+      if (mounted) _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -414,6 +532,9 @@ class _DirectoryTabState extends State<_DirectoryTab> {
           _loading = false;
         });
         _filterStudents();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _runTableEntryAnimation();
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -451,12 +572,16 @@ class _DirectoryTabState extends State<_DirectoryTab> {
       );
     }
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(NeyvoSpacing.md),
-          decoration: BoxDecoration(
-            color: NeyvoTheme.surface,
+    // Slightly larger text scale for the student section (zoomed-in view).
+    final mediaQuery = MediaQuery.of(context).copyWith(textScaleFactor: 1.15);
+    return MediaQuery(
+      data: mediaQuery,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(NeyvoSpacing.md),
+            decoration: BoxDecoration(
+              color: NeyvoTheme.surface,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -560,152 +685,114 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                       ],
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(NeyvoSpacing.md),
-                    itemCount: _filteredStudents.length,
-                    itemBuilder: (context, i) {
-                      final s = _filteredStudents[i];
-                      final id = s['id'] as String? ?? '';
-                      final name = s['name'] as String? ?? '—';
-                      final phone = s['phone'] as String? ?? '';
-                      final balance = s['balance'] as String? ?? '';
-                      final dueDate = s['due_date']?.toString() ?? '';
-                      final studentId =
-                          s['student_id']?.toString() ?? s['external_id']?.toString() ?? '—';
-                      final isOverdue = _isOverdue(s);
-                      final program = s['program']?.toString() ?? s['major']?.toString() ?? '—';
-                      final lastContact =
-                          s['last_call_date']?.toString() ?? '';
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => StudentDetailPage(
-                                  studentId: id,
-                                  onUpdated: _load,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(NeyvoSpacing.md),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor:
-                                      NeyvoTheme.primary.withOpacity(0.1),
-                                  child: Text(
-                                    name.isNotEmpty
-                                        ? name[0].toUpperCase()
-                                        : '?',
-                                    style: TextStyle(
-                                        color: NeyvoTheme.primary,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                                const SizedBox(width: NeyvoSpacing.md),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(name,
-                                          style: NeyvoType.titleMedium),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'ID: $studentId · $phone',
-                                        style: NeyvoType.bodySmall.copyWith(
-                                            color:
-                                                NeyvoColors.textSecondary),
+                : Builder(
+                    builder: (context) {
+                      // Ensure table entry animation runs when table is first shown
+                      if (_filteredStudents.isNotEmpty) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) => _runTableEntryAnimation());
+                      }
+                      return AnimatedBuilder(
+                        animation: _tableAnimationController,
+                        builder: (context, child) {
+                      return Opacity(
+                        opacity: _tableFade.value,
+                        child: Transform.translate(
+                          offset: Offset(0, _tableSlide.value.dy * 80),
+                          child: Transform.scale(
+                            scale: _tableScale.value,
+                            alignment: Alignment.topCenter,
+                            child: child,
+                          ),
+                        ),
+                      );
+                    },
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(NeyvoSpacing.md),
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                            headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
+                            dataRowMinHeight: 52,
+                            dataRowMaxHeight: 56,
+                            columns: [
+                              DataColumn(label: Text('Student Name', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('ID', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Department', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Phone Number', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Email', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Year of student', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Import List', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Last Call Status', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Last Call Time', style: NeyvoType.labelLarge)),
+                              DataColumn(label: Text('Actions', style: NeyvoType.labelLarge)),
+                            ],
+                            rows: _filteredStudents.map((s) {
+                              final id = s['id'] as String? ?? '';
+                              final name = _studentDisplayName(s);
+                              final studentId = s['student_id']?.toString() ?? s['external_id']?.toString() ?? '—';
+                              final department = (s['department'] as String?)?.trim();
+                              final phone = s['phone'] as String? ?? '';
+                              final email = (s['email'] as String?)?.trim();
+                              final yearOfStudy = (s['year_of_study'] as String?)?.trim();
+                              final importList = (s['import_name'] as String?)?.trim();
+                              final lastStatus = _lastCallStatusLabel(s['last_call_outcome']);
+                              final lastTime = _lastCallTimeLabel(s['last_call_date']);
+                              final statusColor = _lastCallStatusColor(lastStatus);
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(name, style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(studentId, style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(department?.isNotEmpty == true ? department! : '—', style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(phone, style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(email?.isNotEmpty == true ? email! : '—', style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(yearOfStudy?.isNotEmpty == true ? yearOfStudy! : '—', style: NeyvoType.bodyMedium)),
+                                  DataCell(Text(importList?.isNotEmpty == true ? importList! : '—', style: NeyvoType.bodyMedium)),
+                                  DataCell(
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: statusColor.withOpacity(0.4), width: 1),
                                       ),
-                                      if (program != '—')
-                                        Text(
-                                          'Program: $program',
-                                          style: NeyvoType.bodySmall
-                                              .copyWith(
-                                                  color:
-                                                      NeyvoColors.textMuted),
-                                        ),
-                                      if (isOverdue && _isEducationOrg)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                              top: 4),
-                                          child: Container(
-                                            padding: const EdgeInsets
-                                                .symmetric(
-                                                horizontal: 8,
-                                                vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: NeyvoColors.error
-                                                  .withOpacity(0.15),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'Overdue',
-                                              style: NeyvoType.labelSmall
-                                                  .copyWith(
-                                                      color: NeyvoColors
-                                                          .error,
-                                                      fontSize: 11),
-                                            ),
-                                          ),
-                                        ),
-                                      if (dueDate.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                              top: 4),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.calendar_today,
-                                                size: 12,
-                                                color: isOverdue
-                                                    ? NeyvoColors.error
-                                                    : NeyvoColors.textMuted,
+                                      child: Text(lastStatus, style: NeyvoType.bodyMedium.copyWith(color: statusColor, fontWeight: FontWeight.w600)),
+                                    ),
+                                  ),
+                                  DataCell(Text(lastTime, style: NeyvoType.bodyMedium)),
+                                  DataCell(Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.phone_outlined, size: 22),
+                                        tooltip: 'Call',
+                                        onPressed: phone.isEmpty ? null : () => _launchCall(phone),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 22),
+                                        tooltip: 'Edit',
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => StudentDetailPage(
+                                                studentId: id,
+                                                onUpdated: _load,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Due: $dueDate',
-                                                style: NeyvoType.bodySmall
-                                                    .copyWith(
-                                                      color: isOverdue
-                                                          ? NeyvoColors.error
-                                                          : NeyvoColors
-                                                              .textSecondary,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      if (lastContact.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                              top: 2),
-                                          child: Text(
-                                            'Last contact: $lastContact',
-                                            style: NeyvoType.bodySmall
-                                                .copyWith(
-                                                    color:
-                                                        NeyvoColors.textMuted,
-                                                    fontSize: 11),
-                                          ),
-                                        ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete_outline, size: 22, color: NeyvoColors.error),
+                                        tooltip: 'Delete',
+                                        onPressed: () => _confirmDeleteStudent(context, id, name),
+                                      ),
                                     ],
-                                  ),
-                                ),
-                                if (balance.isNotEmpty)
-                                  Text(
-                                    balance,
-                                    style: NeyvoType.titleMedium.copyWith(
-                                        color: NeyvoTheme.accent,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                              ],
+                                  )),
+                                ],
+                              );
+                            }).toList(),
                             ),
                           ),
                         ),
@@ -714,7 +801,8 @@ class _DirectoryTabState extends State<_DirectoryTab> {
                   ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -754,6 +842,7 @@ class _ImportTab extends StatefulWidget {
 class _ImportTabState extends State<_ImportTab> {
   int _step = 1;
   String _csvText = '';
+  String _importName = '';
   bool _loading = false;
   int? _imported;
   int? _updated;
@@ -975,7 +1064,10 @@ class _ImportTabState extends State<_ImportTab> {
   Future<void> _doImport() async {
     setState(() => _loading = true);
     try {
-      final res = await NeyvoPulseApi.postStudentsImportCsv(_csvText);
+      final res = await NeyvoPulseApi.postStudentsImportCsv(
+        _csvText,
+        importName: _importName.trim().isEmpty ? null : _importName.trim(),
+      );
       if (!mounted) return;
       final rawErrs = res['errors'];
       final errs = <String>[];
@@ -1162,6 +1254,17 @@ class _ImportTabState extends State<_ImportTab> {
                         ),
                         const SizedBox(height: NeyvoSpacing.lg),
                         if (_validRows.isNotEmpty) _buildPreviewTable(),
+                        const SizedBox(height: NeyvoSpacing.lg),
+                        Text('Import/List name (optional)', style: NeyvoType.labelSmall),
+                        const SizedBox(height: 4),
+                        TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. Spring 2026 Nursing Cohort',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => _importName = v),
+                        ),
                         if (_errorLines.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           ExpansionTile(

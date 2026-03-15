@@ -894,6 +894,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
           return displayName + ' | ' + get(r, ['phone', 'phone', 'mobile']);
         })
         .toList();
+    final importNameC = TextEditingController();
     final navigator = Navigator.of(context);
     final go = await showDialog<bool>(
       context: context,
@@ -911,6 +912,17 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 child: Text(p, style: NeyvoType.bodySmall),
               )),
               const SizedBox(height: NeyvoSpacing.md),
+              Text('Import/List name (optional)', style: NeyvoType.labelSmall),
+              const SizedBox(height: 4),
+              TextField(
+                controller: importNameC,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. Spring 2026 Nursing Cohort',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
               Text(
                 'Required columns: either name OR first_name (plus phone). Optional: last_name, email, balance, due_date, late_fee, notes.',
                 style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
@@ -924,34 +936,32 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         ],
       ),
     );
+    final importName = importNameC.text.trim();
+    importNameC.dispose();
     if (go != true || !mounted) return;
-    int created = 0;
-    for (final r in rows) {
-      final firstName = get(r, ['first_name', 'firstname']);
-      final legacyName = get(r, ['name']);
-      final name = firstName.isNotEmpty ? firstName : legacyName;
-      final phone = get(r, ['phone', 'mobile', 'cell']);
-      if (name.isEmpty || phone.isEmpty) continue;
-      try {
-        await NeyvoPulseApi.createStudent(
-          name: name,
-          phone: phone,
-          firstName: firstName.isNotEmpty ? firstName : null,
-          email: get(r, ['email']).isEmpty ? null : get(r, ['email']),
-          balance: get(r, ['balance']).isEmpty ? null : get(r, ['balance']),
-          dueDate: get(r, ['due_date', 'duedate', 'due date']).isEmpty ? null : get(r, ['due_date', 'duedate', 'due date']),
-          lateFee: get(r, ['late_fee', 'latefee']).isEmpty ? null : get(r, ['late_fee', 'latefee']),
-          studentId: get(r, ['student_id', 'student id']).isEmpty ? null : get(r, ['student_id', 'student id']),
-          notes: get(r, ['notes', 'note']).isEmpty ? null : get(r, ['notes', 'note']),
-        );
-        created++;
-      } catch (_) {}
-    }
-    if (mounted) {
-      _load();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported $created contact(s)')),
+    try {
+      final res = await NeyvoPulseApi.postStudentsImportCsv(
+        text,
+        importName: importName.isEmpty ? null : importName,
       );
+      if (!mounted) return;
+      _load();
+      final imported = res['imported'] as int? ?? 0;
+      final updated = res['updated'] as int? ?? 0;
+      final failed = res['failed'] as int? ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Imported $imported, updated $updated${failed > 0 ? ', $failed failed' : ''}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
     }
   }
 

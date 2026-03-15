@@ -433,9 +433,12 @@ class NeyvoPulseApi {
   static Future<String> getStudentsImportTemplate() async =>
       SpeariaApi.getText('/api/pulse/students/import/template', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
 
-  /// POST /api/pulse/students/import/csv — send CSV content. Backend may accept JSON { csv: "..." } or multipart. Returns {imported, updated, failed, errors}.
-  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent) async =>
-      _post('/api/pulse/students/import/csv', {'csv': csvContent});
+  /// POST /api/pulse/students/import/csv — send CSV content. Optional [importName] tags the batch (e.g. "Spring 2026 Nursing Cohort") for campaign targeting.
+  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent, {String? importName}) async {
+    final body = <String, dynamic>{'csv': csvContent};
+    if (importName != null && importName.trim().isNotEmpty) body['import_name'] = importName.trim();
+    return _post('/api/pulse/students/import/csv', body);
+  }
 
   // Payments
   static Future<Map<String, dynamic>> listPayments({String? studentId}) async =>
