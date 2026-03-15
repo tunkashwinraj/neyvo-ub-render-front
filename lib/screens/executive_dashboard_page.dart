@@ -827,11 +827,18 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text('Call Resolution', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 4),
-            Text('Success rate by outcome', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Call Resolution', style: NeyvoTextStyles.heading),
+                  const SizedBox(height: 4),
+                  Text('Success rate by outcome', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
-            _ResolutionBar(label: 'Calls Received', value: total, total: total, color: Colors.amber),
+            _ResolutionBar(label: 'Calls Received', value: total, total: total, color: Colors.orange),
             _ResolutionBar(label: 'Calls Succeeded', value: succeeded, total: total, color: Colors.purple),
             _ResolutionBar(label: 'Resolution Count', value: resolved, total: total, color: Colors.blue),
             const SizedBox(height: 12),
@@ -856,14 +863,18 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                                     PieChartSectionData(value: ((total - succeeded) / total * 100).clamp(0.0, 100.0), color: Colors.grey.shade300, showTitle: false),
                                   ]
                                 : [
-                                    PieChartSectionData(value: 25, color: Colors.amber, showTitle: false),
-                                    PieChartSectionData(value: 25, color: Colors.purple, showTitle: false),
-                                    PieChartSectionData(value: 25, color: Colors.blue, showTitle: false),
-                                    PieChartSectionData(value: 25, color: Colors.grey, showTitle: false),
+                                    PieChartSectionData(value: 100, color: Colors.grey.shade300, showTitle: false),
                                   ],
                           ),
                         ),
-                        Text('${resolutionPct.toStringAsFixed(1)}%', style: NeyvoTextStyles.title.copyWith(fontSize: 16)),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('${resolutionPct.toStringAsFixed(1)}%', style: NeyvoTextStyles.title.copyWith(fontSize: 16)),
+                            Text('resolved', style: NeyvoTextStyles.micro),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -876,7 +887,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                       crossAxisAlignment: CrossAxisAlignment.end,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _LegendRow('Received', total, Colors.amber),
+                        _LegendRow('Received', total, Colors.orange),
                         _LegendRow('Succeeded', succeeded, Colors.purple),
                         _LegendRow('Resolved', resolved, Colors.blue),
                         _LegendRow('Unresolved', unresolved, Colors.grey),
@@ -1349,26 +1360,31 @@ class _ResolutionBar extends StatelessWidget {
     final pct = total > 0 ? (value / total) : 0.0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(label, style: NeyvoTextStyles.micro),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 20,
-                  child: LinearProgressIndicator(
-                    value: pct.clamp(0.0, 1.0),
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
+          SizedBox(
+            width: 120,
+            child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: color)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 20,
+                child: LinearProgressIndicator(
+                  value: pct.clamp(0.0, 1.0),
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
                 ),
               ),
-              const SizedBox(width: 8),
-              Text('${NumberFormat('#,###').format(value)}${total > 0 ? ', ${(pct * 100).toStringAsFixed(1)}%' : ''}', style: NeyvoTextStyles.micro),
-            ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            NumberFormat('#,###').format(value),
+            style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1392,11 +1408,16 @@ class _LegendRow extends StatelessWidget {
           Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              '$label: $value',
-              style: NeyvoTextStyles.micro,
+            child: RichText(
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
+              text: TextSpan(
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textPrimary),
+                children: [
+                  TextSpan(text: '$label: '),
+                  TextSpan(text: '$value', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w700)),
+                ],
+              ),
             ),
           ),
         ],
