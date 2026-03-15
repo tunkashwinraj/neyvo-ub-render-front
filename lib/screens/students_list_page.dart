@@ -159,6 +159,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         final phone = (s['phone']?.toString() ?? '').toLowerCase();
         final email = (s['email']?.toString() ?? '').toLowerCase();
         final studentId = (s['student_id']?.toString() ?? '').toLowerCase();
+        final dept = (s['department']?.toString() ?? '').toLowerCase();
+        final year = (s['year_of_study']?.toString() ?? '').toLowerCase();
         final matchesSearch = query.isEmpty ||
             name.contains(query) ||
             first.contains(query) ||
@@ -166,7 +168,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
             combined.contains(query) ||
             phone.contains(query) ||
             email.contains(query) ||
-            studentId.contains(query);
+            studentId.contains(query) ||
+            dept.contains(query) ||
+            year.contains(query);
         if (!matchesSearch) return false;
 
         if (_filterStatus == 'all') return true;
@@ -210,16 +214,23 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
       return;
     }
     final sb = StringBuffer();
-    sb.writeln('Id,Name,Phone,Email,Balance,Due Date,Late Fee');
+    sb.writeln('Id,Name,Student ID,Department,Phone,Email,Year of Study,Balance,Due Date,Late Fee,Last Call');
     for (final s in list) {
       final id = s['id']?.toString() ?? '';
-      final name = (s['name']?.toString() ?? '').replaceAll(',', ';');
+      final first = (s['first_name']?.toString() ?? '').trim();
+      final last = (s['last_name']?.toString() ?? '').trim();
+      final legacyName = (s['name']?.toString() ?? '').trim();
+      final name = ((first.isNotEmpty || last.isNotEmpty) ? '$first $last'.trim() : legacyName).replaceAll(',', ';');
+      final studentId = (s['student_id']?.toString() ?? '').replaceAll(',', ';');
+      final department = (s['department']?.toString() ?? '').replaceAll(',', ';');
       final phone = s['phone']?.toString() ?? '';
       final email = (s['email']?.toString() ?? '').replaceAll(',', ';');
+      final yearOfStudy = (s['year_of_study']?.toString() ?? '').replaceAll(',', ';');
       final balance = s['balance']?.toString() ?? '';
       final dueDate = s['due_date']?.toString() ?? '';
       final lateFee = s['late_fee']?.toString() ?? '';
-      sb.writeln('"$id","$name","$phone","$email","$balance","$dueDate","$lateFee"');
+      final lastCall = s['last_call_date']?.toString() ?? '';
+      sb.writeln('"$id","$name","$studentId","$department","$phone","$email","$yearOfStudy","$balance","$dueDate","$lateFee","$lastCall"');
     }
     final filename = 'students_export_${DateTime.now().toIso8601String().split('T').first}.csv';
     await downloadCsv(filename, sb.toString(), context);
@@ -510,7 +521,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
             ),
           ),
           
-          // Students List
+          // Students list: table view with columns
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
@@ -536,163 +547,124 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(NeyvoSpacing.md),
-                      itemCount: _filteredStudents.length + 1,
-                      itemBuilder: (context, i) {
-                        if (i == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.all(NeyvoSpacing.md),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Contacts (${_filteredStudents.length})',
-                                  style: NeyvoType.headlineMedium,
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, NeyvoSpacing.sm, NeyvoSpacing.md, 0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Contacts (${_filteredStudents.length})',
+                                style: NeyvoType.headlineMedium,
+                              ),
+                              if (_filteredStudents.length != _allStudents.length)
+                                TextButton(
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _filterStatus = 'all');
+                                    _filterStudents();
+                                  },
+                                  child: const Text('Clear filters'),
                                 ),
-                                if (_filteredStudents.length != _allStudents.length)
-                                  TextButton(
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _filterStatus = 'all');
-                                      _filterStudents();
-                                    },
-                                    child: const Text('Clear filters'),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }
-                        final s = _filteredStudents[i - 1] as Map<String, dynamic>;
-                        final id = s['id'] as String? ?? '';
-                        final first = (s['first_name'] as String? ?? '').trim();
-                        final last = (s['last_name'] as String? ?? '').trim();
-                        final legacyName = (s['name'] as String? ?? '').trim();
-                        final displayName = (first.isNotEmpty || last.isNotEmpty)
-                            ? ('$first $last').trim()
-                            : (legacyName.isNotEmpty ? legacyName : '—');
-                        final phone = s['phone'] as String? ?? '';
-                        final balance = s['balance'] as String? ?? '';
-                        final dueDate = s['due_date']?.toString() ?? '';
-                        final isOverdue = _isOverdue(s);
-                        final lastCallDate = s['last_call_date']?.toString() ?? '';
-                        final lastCallOutcome = s['last_call_outcome']?.toString() ?? '';
-                        
-                        final selected = _selectedIds.contains(id);
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                          child: InkWell(
-                            onTap: () {
-                              if (_selectionMode) {
-                                _toggleSelection(id);
-                              } else {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => StudentDetailPage(studentId: id, onUpdated: _load),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(NeyvoSpacing.md),
-                              child: Row(
-                                children: [
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              child: DataTable(
+                                headingRowColor: MaterialStateProperty.all(NeyvoColors.bgRaised),
+                                columns: [
                                   if (_selectionMode)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: NeyvoSpacing.sm),
-                                      child: Checkbox(
-                                        value: selected,
-                                        onChanged: (_) => _toggleSelection(id),
-                                        activeColor: NeyvoTheme.primary,
-                                      ),
-                                    ),
-                                      CircleAvatar(
-                                    backgroundColor: NeyvoTheme.primary.withOpacity(0.1),
-                                    child: Text(
-                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                                      style: TextStyle(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-                                  const SizedBox(width: NeyvoSpacing.md),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(displayName, style: NeyvoType.titleMedium),
-                                        const SizedBox(height: 2),
-                                        Text(phone, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
-                                        if (isOverdue && _isEducationOrg)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: NeyvoColors.error.withOpacity(0.15),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                'Overdue',
-                                                style: NeyvoType.labelSmall.copyWith(
-                                                  color: NeyvoColors.error,
-                                                  fontSize: 11,
+                                    const DataColumn(label: SizedBox(width: 40, child: Text(''))),
+                                  DataColumn(label: Text('Name', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Student ID', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Department', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Phone', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Email', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Year', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Last call', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Balance', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Due date', style: NeyvoType.labelMedium)),
+                                  const DataColumn(label: SizedBox(width: 48, child: Text(''))),
+                                ],
+                                rows: _filteredStudents.map<DataRow>((s) {
+                                  final sMap = s as Map<String, dynamic>;
+                                  final id = sMap['id'] as String? ?? '';
+                                  final first = (sMap['first_name'] as String? ?? '').trim();
+                                  final last = (sMap['last_name'] as String? ?? '').trim();
+                                  final legacyName = (sMap['name'] as String? ?? '').trim();
+                                  final displayName = (first.isNotEmpty || last.isNotEmpty)
+                                      ? ('$first $last').trim()
+                                      : (legacyName.isNotEmpty ? legacyName : '—');
+                                  final studentId = sMap['student_id']?.toString() ?? '—';
+                                  final department = sMap['department']?.toString() ?? '—';
+                                  final phone = sMap['phone']?.toString() ?? '—';
+                                  final email = sMap['email']?.toString() ?? '—';
+                                  final yearOfStudy = sMap['year_of_study']?.toString() ?? '—';
+                                  final lastCallDate = sMap['last_call_date']?.toString() ?? '';
+                                  final lastCallOutcome = sMap['last_call_outcome']?.toString() ?? '';
+                                  final lastCall = lastCallDate.isEmpty
+                                      ? '—'
+                                      : (lastCallOutcome.isNotEmpty ? '$lastCallDate ($lastCallOutcome)' : lastCallDate);
+                                  final balance = sMap['balance']?.toString() ?? '—';
+                                  final dueDate = sMap['due_date']?.toString() ?? '—';
+                                  final selected = _selectedIds.contains(id);
+                                  return DataRow(
+                                    selected: selected,
+                                    onSelectChanged: _selectionMode
+                                        ? (_) => _toggleSelection(id)
+                                        : null,
+                                    cells: [
+                                      if (_selectionMode)
+                                        DataCell(Checkbox(
+                                          value: selected,
+                                          onChanged: (_) => _toggleSelection(id),
+                                          activeColor: NeyvoTheme.primary,
+                                        )),
+                                      DataCell(
+                                        GestureDetector(
+                                          onTap: () {
+                                            if (_selectionMode) {
+                                              _toggleSelection(id);
+                                            } else {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) => StudentDetailPage(studentId: id, onUpdated: _load),
                                                 ),
-                                              ),
-                                            ),
-                                          ),
-                                        if (dueDate.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.calendar_today, size: 12, color: isOverdue ? NeyvoColors.error : NeyvoColors.textMuted),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'Due: $dueDate',
-                                                  style: NeyvoType.bodySmall.copyWith(
-                                                    color: isOverdue ? NeyvoColors.error : NeyvoColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        if (lastCallDate.isNotEmpty && _isEducationOrg)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 2),
-                                            child: Text(
-                                              'Last call: $lastCallDate${lastCallOutcome.isNotEmpty ? ' ($lastCallOutcome)' : ''}',
-                                              style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted, fontSize: 11),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      if (balance.isNotEmpty)
-                                        Text(
-                                          balance,
-                                          style: NeyvoType.titleMedium.copyWith(
-                                            color: NeyvoTheme.accent,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                              );
+                                            }
+                                          },
+                                          child: Text(displayName, style: NeyvoType.bodyMedium),
                                         ),
-                                      const SizedBox(height: NeyvoSpacing.xs),
-                                      IconButton(
+                                      ),
+                                      DataCell(Text(studentId, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(department, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(phone, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(email, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(yearOfStudy, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(lastCall, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(balance, style: NeyvoType.bodySmall)),
+                                      DataCell(Text(dueDate, style: NeyvoType.bodySmall)),
+                                      DataCell(IconButton(
                                         icon: const Icon(Icons.phone, size: 20),
                                         color: NeyvoTheme.primary,
-                                        onPressed: () => _quickCall(s),
-                                        tooltip: 'Reach out to contact',
-                                      ),
+                                        onPressed: () => _quickCall(sMap),
+                                        tooltip: 'Call',
+                                      )),
                                     ],
-                                  ),
-                                ],
+                                  );
+                                }).toList(),
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
             ),
           ),
@@ -993,6 +965,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
     final studentIdC = TextEditingController();
+    final departmentC = TextEditingController();
+    final yearOfStudyC = TextEditingController();
     final notesC = TextEditingController();
     final navigator = Navigator.of(context);
 
@@ -1039,7 +1013,15 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)', hintText: 'Email address')),
               const SizedBox(height: NeyvoSpacing.md),
-              TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student / Contact ID (optional)', hintText: 'Internal ID or reference')),
+              TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student ID (optional)', hintText: 'Internal ID or reference')),
+              const SizedBox(height: NeyvoSpacing.md),
+              Row(
+                children: [
+                  Expanded(child: TextField(controller: departmentC, decoration: const InputDecoration(labelText: 'Department (optional)', hintText: 'e.g. Finance'))),
+                  const SizedBox(width: NeyvoSpacing.md),
+                  Expanded(child: TextField(controller: yearOfStudyC, decoration: const InputDecoration(labelText: 'Year of study (optional)', hintText: 'e.g. 2025'))),
+                ],
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: notesC, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)', hintText: 'Reason for call, follow-up notes...')),
               if (_isEducationOrg) ...[
@@ -1085,6 +1067,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                   lateFee: lateFeeC.text.trim().isEmpty ? null : lateFeeC.text.trim(),
                   studentId: studentIdC.text.trim().isEmpty ? null : studentIdC.text.trim(),
                   notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
+                  department: departmentC.text.trim().isEmpty ? null : departmentC.text.trim(),
+                  yearOfStudy: yearOfStudyC.text.trim().isEmpty ? null : yearOfStudyC.text.trim(),
                 );
                 if (context.mounted) {
                   navigator.pop();
@@ -1308,8 +1292,8 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Required columns: either name OR first_name (plus phone). The first non-comment row must be the header. Lines starting with # and blank rows are ignored.',
+              Text(
+                'Required: name or first_name, and phone. Optional: last_name, student_id, email, department, year_of_study, balance, due_date, late_fee, notes. Duplicates are detected by student_id, then phone, then email.',
                     style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted),
                     textAlign: TextAlign.center,
                   ),
