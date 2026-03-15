@@ -38,6 +38,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
   List<Map<String, dynamic>> _campaignItems = [];
   Map<String, dynamic>? _campaignMetrics;
 
+  Map<String, dynamic>? _successSummary;
   Map<String, dynamic>? _health;
   Map<String, dynamic>? _ubStatus;
   Map<String, dynamic>? _accountInfo;
@@ -178,7 +179,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       if (!mounted) return;
       final callsRes = results[1] as Map<String, dynamic>;
       final priorRes = results[2] as Map<String, dynamic>;
-      // ignore: unused_local_variable - keep API call for consistency
       final successRes = results[3] as Map<String, dynamic>;
       final recentRes = results[4] as Map<String, dynamic>;
       // ignore: unnecessary_cast - record type from Future.wait
@@ -197,6 +197,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         _calls = calls;
         _priorCalls = priorCalls;
         _recentCalls = recent;
+        _successSummary = successRes != null && successRes['ok'] == true ? Map<String, dynamic>.from(successRes) : null;
         _health = health != null ? Map<String, dynamic>.from(health) : null;
         _ubStatus = ubStatus != null ? Map<String, dynamic>.from(ubStatus) : null;
         _accountInfo = accountInfo != null ? Map<String, dynamic>.from(accountInfo) : null;
@@ -258,22 +259,50 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
 
   @override
   Widget build(BuildContext context) {
-    final contentChildren = _selectedTabIndex == 0
-        ? <Widget>[_buildDateFilterBar(), const SizedBox(height: 16), _buildMainContent()]
-        : <Widget>[_buildComingSoon()];
     return Scaffold(
       backgroundColor: NeyvoColors.bgBase,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildTabs(),
-            const SizedBox(height: 12),
-            ...contentChildren,
-          ],
-        ),
-      ),
+      body: _selectedTabIndex == 0
+          ? CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTabs(),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickyFilterBarDelegate(
+                    barHeight: _kFilterBarHeight,
+                    child: _buildDateFilterBar(),
+                    backgroundColor: NeyvoColors.bgBase,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    child: _buildMainContent(),
+                  ),
+                ),
+              ],
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTabs(),
+                  const SizedBox(height: 12),
+                  _buildComingSoon(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -313,6 +342,8 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
     );
   }
 
+  static const double _kFilterBarHeight = 52;
+
   Widget _buildDateFilterBar() {
     final labels = {
       _DateRange.today: 'Today',
@@ -323,6 +354,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       _DateRange.custom: 'Custom',
     };
     return Container(
+      height: _kFilterBarHeight,
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: NeyvoColors.bgRaised,
@@ -531,11 +563,28 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       trendTotal = d >= 0 ? '+$d' : '$d';
     }
     String trendAnswered = '';
-    if (priorKpi.answered >= 0 && priorKpi.total > 0) {
+    if (priorKpi.total > 0) {
       final pctNow = total > 0 ? (kpi.answered / total * 100) : 0.0;
       final pctPrev = priorKpi.answered / priorKpi.total * 100;
       final d = pctNow - pctPrev;
       trendAnswered = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAbandon = '';
+    if (priorKpi.total > 0 && total > 0) {
+      final pctNow = kpi.abandoned / total * 100;
+      final pctPrev = priorKpi.abandoned / priorKpi.total * 100;
+      final d = pctNow - pctPrev;
+      trendAbandon = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAsa = '';
+    if (kpi.asaSec != null && priorKpi.asaSec != null) {
+      final d = kpi.asaSec! - priorKpi.asaSec!;
+      trendAsa = d >= 0 ? '+${d}s' : '${d}s';
+    }
+    String trendAht = '';
+    if (kpi.ahtSec != null && priorKpi.ahtSec != null) {
+      final d = kpi.ahtSec! - priorKpi.ahtSec!;
+      trendAht = d >= 0 ? '+${d}s' : '${d}s';
     }
 
     const double kMinCardWidth = 160;
@@ -561,7 +610,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         title: 'ABANDON CALLS',
         value: total > 0 ? NumberFormat('#,###').format(kpi.abandoned) : '--',
         subtitle: total > 0 ? '${abandonRate.toStringAsFixed(1)}%' : null,
-        trend: '',
+        trend: trendAbandon,
         topBorderColor: Colors.red,
         icon: Icons.phone_disabled_outlined,
         iconColor: Colors.red,
@@ -569,7 +618,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       _KpiCard(
         title: 'ASA (Sec)',
         value: kpi.asaSec != null ? '${kpi.asaSec}' : '--',
-        trend: '',
+        trend: trendAsa,
         topBorderColor: Colors.orange,
         icon: Icons.timer_outlined,
         iconColor: Colors.orange,
@@ -578,7 +627,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       _KpiCard(
         title: 'AHT (Sec)',
         value: kpi.ahtSec != null ? '${kpi.ahtSec}' : '--',
-        trend: '',
+        trend: trendAht,
         topBorderColor: Colors.purple,
         icon: Icons.headset_outlined,
         iconColor: Colors.purple,
@@ -675,10 +724,17 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
       return o == 'answered' || o == 'completed' || o == 'goal_achieved' || o == 'success';
     }).length;
-    final resolved = _calls.where((c) {
-      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
-      return o == 'goal_achieved' || (c['success_metric'] ?? '').toString().toLowerCase() == 'payment_received';
-    }).length;
+    int resolved;
+    final summary = _successSummary?['success_summary'] as Map<String, dynamic>?;
+    if (summary != null && summary['calls_with_payment_received'] != null) {
+      final v = summary['calls_with_payment_received'];
+      resolved = (v is int ? v : int.tryParse(v.toString()) ?? 0).clamp(0, total);
+    } else {
+      resolved = _calls.where((c) {
+        final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+        return o == 'goal_achieved' || (c['success_metric'] ?? '').toString().toLowerCase() == 'payment_received';
+      }).length;
+    }
     final unresolved = total - resolved;
     final resolutionPct = total > 0 ? (resolved / total * 100) : 0.0;
     final succeededNotResolved = succeeded - resolved;
@@ -710,7 +766,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                       PieChart(
                         PieChartData(
                           sectionsSpace: 2,
-                          centerSpaceRadius: 30,
+                          centerSpaceRadius: 30.6,
                           sections: total > 0
                               ? [
                                   PieChartSectionData(value: resolutionPct, color: Colors.blue, showTitle: false),
@@ -792,7 +848,16 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
   }
 
   Widget _buildRecentCallLogsPanel() {
-    final list = _recentCalls.take(5).toList();
+    final sorted = List<Map<String, dynamic>>.from(_recentCalls)
+      ..sort((a, b) {
+        final da = _parseDate(a['created_at'] ?? a['date']);
+        final db = _parseDate(b['created_at'] ?? b['date']);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return db.compareTo(da);
+      });
+    final list = sorted.take(5).toList();
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
@@ -899,6 +964,36 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       ),
     );
   }
+}
+
+class _StickyFilterBarDelegate extends SliverPersistentHeaderDelegate {
+  final double barHeight;
+  final Widget child;
+  final Color backgroundColor;
+
+  _StickyFilterBarDelegate({
+    required this.barHeight,
+    required this.child,
+    required this.backgroundColor,
+  });
+
+  @override
+  double get minExtent => barHeight;
+
+  @override
+  double get maxExtent => barHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: backgroundColor,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _StickyFilterBarDelegate oldDelegate) =>
+      oldDelegate.barHeight != barHeight;
 }
 
 class _CustomDateRangeDialog extends StatefulWidget {
