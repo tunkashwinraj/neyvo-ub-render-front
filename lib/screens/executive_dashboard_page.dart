@@ -346,7 +346,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
 
   /// Fixed height for all three KPI cards (Live Call Activity, Call Resolution, CSAT)
   /// so they stay aligned and same size; content scrolls inside if needed.
-  static const double _kTopPanelHeight = 380;
+  static const double _kTopPanelHeight = 340;
 
   Widget _buildDateFilterBar() {
     final labels = {
@@ -421,7 +421,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
           side: BorderSide(color: NeyvoTheme.borderSubtle),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
           child: Column(
             crossAxisAlignment: crossAxisAlignment,
             mainAxisSize: MainAxisSize.max,
@@ -757,34 +757,46 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Live Call Activity', style: NeyvoTextStyles.heading),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
-              ),
-              if (_refreshing)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
-                      ),
-                      const SizedBox(width: 6),
-                      Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Live Call Activity', style: NeyvoTextStyles.heading),
+                    const SizedBox(height: 4),
+                    Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  ],
                 ),
-            ],
+                if (_refreshing)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Divider(height: 1, color: NeyvoTheme.borderSubtle),
