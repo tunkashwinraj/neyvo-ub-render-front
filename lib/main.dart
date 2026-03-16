@@ -27,14 +27,14 @@ import 'widgets/neyvo_loading_screen.dart';
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
   const String _kDefaultBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL',
-    defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
+    defaultValue: 'https://ub-neyvo-goodwin.onrender.com',
   );
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
   /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
   /// If not set, staging uses the same URL as prod (single Render service).
   const String _kStagingBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL_STAGING',
-    defaultValue: 'https://ub-neyvo-back-znhe.onrender.com',
+    defaultValue: 'https://ub-neyvo-goodwin.onrender.com',
   );
 
 /// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
@@ -92,13 +92,13 @@ String _resolveBaseUrlForTenant(String tenantId) {
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
 /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
-/// 2) Runtime: when backend is ub-neyvo-back-znhe.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
+/// 2) Runtime: when backend is ub-neyvo-goodwin.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
 String get _kFallbackAccountId {
-    const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
-    if (fromEnv.isNotEmpty) return fromEnv;
-  if (SpeariaApi.baseUrl.contains('ub-neyvo-back-znhe.onrender.com')) return '870065';
-    return '';
-  }
+  const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
+  if (fromEnv.isNotEmpty) return fromEnv;
+  if (SpeariaApi.baseUrl.contains('ub-neyvo-goodwin.onrender.com')) return '870065';
+  return '';
+}
 
   Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
