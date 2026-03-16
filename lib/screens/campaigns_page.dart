@@ -882,10 +882,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
-    // Ensure immutable audience snapshot exists and validation has passed before starting.
-    final ready = await _ensureCampaignSnapshotReady(id);
-    if (!ready || !mounted) return;
     final isRerun = c['status'] == 'completed' || c['status'] == 'running';
+    // For first-time start, ensure snapshot and validation are ready. For rerun, skip (snapshot already existed).
+    if (!isRerun) {
+      final ready = await _ensureCampaignSnapshotReady(id);
+      if (!ready || !mounted) return;
+    }
     try {
       final res = await NeyvoPulseApi.startCampaign(id, phoneNumberId: _selectedStartPhoneNumberId);
       if (mounted) {
