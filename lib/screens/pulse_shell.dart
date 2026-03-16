@@ -489,28 +489,17 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         final isGoodwin = tenantId == 'goodwin';
                         final isUb = tenantId == 'ub' || tenant == null;
                         if (isGoodwin) {
-                          final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
-                          if (logoUrl != null && logoUrl.isNotEmpty) {
-                            final lower = logoUrl.toLowerCase();
-                            if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-                              return Image.network(
-                                logoUrl,
-                                fit: BoxFit.contain,
-                                height: 46,
-                                errorBuilder: (_, __, ___) => Text(
-                                  (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
-                                  style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            }
-                          }
-                          return Text(
-                            (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
-                            style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          // Goodwin sidebar: use local white logo asset for reliability.
+                          return Image.asset(
+                            'assets/goodwin_logo/goodwin_horiz_white.png',
+                            fit: BoxFit.contain,
+                            height: 46,
+                            errorBuilder: (_, __, ___) => Text(
+                              (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
+                              style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           );
                         }
                         if (isUb) {

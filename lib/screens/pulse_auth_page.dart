@@ -468,26 +468,16 @@ class _GoodwinLogoWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final tenant = TenantScope.of(context)?.config;
     final primary = TenantBrand.primary(context);
-    final url = tenant?.logoHorizontalColorUrl ?? tenant?.logoHorizontalWhiteUrl;
-    if (url != null && url.isNotEmpty) {
-      final lower = url.toLowerCase();
-      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-        return Image.network(
-          url,
-          fit: BoxFit.contain,
-          height: height,
-          errorBuilder: (_, __, ___) => Text(
-            (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
-            style: NeyvoType.headlineMediumLight.copyWith(color: primary),
-            textAlign: TextAlign.center,
-          ),
-        );
-      }
-    }
-    return Text(
-      (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
-      style: NeyvoType.headlineMediumLight.copyWith(color: primary),
-      textAlign: TextAlign.center,
+    // Goodwin auth page: always use local branded asset for reliability.
+    return Image.asset(
+      'assets/goodwin_logo/goodwin_horiz_rgb.png',
+      fit: BoxFit.contain,
+      height: height,
+      errorBuilder: (_, __, ___) => Text(
+        (tenant?.schoolName ?? 'Goodwin').trim().isEmpty ? 'Goodwin' : (tenant?.schoolName ?? 'Goodwin'),
+        style: NeyvoType.headlineMediumLight.copyWith(color: primary),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 }
