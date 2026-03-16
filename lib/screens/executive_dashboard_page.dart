@@ -276,14 +276,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                     ),
                   ),
                 ),
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _StickyFilterBarDelegate(
-                    barHeight: _kFilterBarHeight,
-                    child: _buildDateFilterBar(),
-                    backgroundColor: NeyvoColors.bgBase,
-                  ),
-                ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
