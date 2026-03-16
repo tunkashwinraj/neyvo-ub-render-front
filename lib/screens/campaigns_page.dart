@@ -45,9 +45,14 @@ class _CampaignsPageState extends State<CampaignsPage> {
   String? _selectedCampaignId;
   int _campaignDetailRefreshKey = 0;
   String? _selectedActionsTabVapiCallId;
+  /// On-demand action items per vapi_call_id (from GET .../calls/<id>/actionable).
+  final Map<String, List<dynamic>> _actionItemsCache = {};
+  String? _loadingActionItemsVapiId;
   Timer? _detailRefreshTimer;
   // Cache last successful detail payload so auto-refresh doesn't blank the UI.
   final Map<String, Map<String, dynamic>> _campaignDetailCache = {};
+  /// When set, builder uses cache for this campaign (report was refetched after actionable 404).
+  String? _campaignReportRefetchedForActionItems;
   String _detailStatusFilter = 'all'; // all|queued|in_progress|completed|failed|retry_wait
   String? _editingCampaignId;
   Map<String, dynamic>? _editCampaignData;
@@ -1437,7 +1442,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
           _campaignDetailCache[campaignId] = Map<String, dynamic>.from(snapshot.data!);
         }
         final cached = _campaignDetailCache[campaignId];
-        final data = snapshot.data ?? cached;
+        final preferRefetchedReport = _campaignReportRefetchedForActionItems == campaignId && cached != null;
+        final data = preferRefetchedReport ? cached : (snapshot.data ?? cached);
 
         // First load only: show full-screen loader.
         if (data == null) {
@@ -1451,6 +1457,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onPressed: () => setState(() {
                   _selectedCampaignId = null;
                   _selectedActionsTabVapiCallId = null;
+                  _campaignReportRefetchedForActionItems = null;
                   _stopDetailAutoRefresh();
                 }),
               ),
@@ -2155,7 +2162,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         outcomeSummary: outcomeSummary,
                         operatorGoal: operatorGoal,
                         selectedVapiCallId: _selectedActionsTabVapiCallId,
-                        onSelectVapiCallId: (id) => setState(() => _selectedActionsTabVapiCallId = id),
+                        onSelectVapiCallId: (id) => setState(() {
+                          _selectedActionsTabVapiCallId = id;
+                          _loadingActionItemsVapiId = null;
+                        }),
+                        actionItemsCache: _actionItemsCache,
+                        loadingActionItemsVapiId: _loadingActionItemsVapiId,
+                        onFetchActionItems: (vapiId) => _fetchActionItemsForCall(campaignId, vapiId),
                       ),
                     ],
                   ),
@@ -2166,6 +2179,44 @@ class _CampaignsPageState extends State<CampaignsPage> {
         );
       },
     );
+  }
+
+  Future<void> _fetchActionItemsForCall(String campaignId, String vapiCallId) async {
+    if (vapiCallId.isEmpty) return;
+    setState(() => _loadingActionItemsVapiId = vapiCallId);
+    try {
+      final res = await NeyvoPulseApi.getCallActionable(campaignId, vapiCallId);
+      if (!mounted) return;
+      final list = res['action_items'];
+      setState(() {
+        _actionItemsCache[vapiCallId] = list is List ? List<dynamic>.from(list) : <dynamic>[];
+        _loadingActionItemsVapiId = null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingActionItemsVapiId = null);
+      if (e.statusCode == 404 || e.statusCode == null) {
+        _actionItemsCache[vapiCallId] = [];
+        _refetchCampaignReportForActionItems(campaignId);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingActionItemsVapiId = null);
+    }
+  }
+
+  /// On 404 from actionable endpoint: refetch campaign report so call_details may include action_items.
+  Future<void> _refetchCampaignReportForActionItems(String campaignId) async {
+    try {
+      final reportRes = await NeyvoPulseApi.getCampaignReport(campaignId);
+      if (!mounted || reportRes['ok'] != true) return;
+      final cached = _campaignDetailCache[campaignId];
+      if (cached != null) {
+        final updated = Map<String, dynamic>.from(cached);
+        updated['report'] = reportRes;
+        _campaignDetailCache[campaignId] = updated;
+        setState(() => _campaignReportRefetchedForActionItems = campaignId);
+      }
+    } catch (_) {}
   }
 
   Widget _buildCampaignDetailActionsTab({
@@ -2183,6 +2234,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
     required String operatorGoal,
     required String? selectedVapiCallId,
     required void Function(String?) onSelectVapiCallId,
+    required Map<String, List<dynamic>> actionItemsCache,
+    required String? loadingActionItemsVapiId,
+    required void Function(String) onFetchActionItems,
   }) {
     return Padding(
       padding: const EdgeInsets.all(NeyvoSpacing.xl),
@@ -2413,6 +2467,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     selectedVapiCallId: selectedVapiCallId,
                     items: items,
                     callDetails: callDetails,
+                    actionItemsCache: actionItemsCache,
+                    loadingActionItemsVapiId: loadingActionItemsVapiId,
+                    onFetchActionItems: onFetchActionItems,
                   ),
                 ),
               ],
@@ -2443,6 +2500,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
     required String? selectedVapiCallId,
     required List<Map<String, dynamic>> items,
     required Map<String, Map<String, dynamic>> callDetails,
+    required Map<String, List<dynamic>> actionItemsCache,
+    required String? loadingActionItemsVapiId,
+    required void Function(String) onFetchActionItems,
   }) {
     Map<String, dynamic>? selectedItem;
     String? vapiIdForDetail;
@@ -2485,6 +2545,16 @@ class _CampaignsPageState extends State<CampaignsPage> {
     List<dynamic>? actionItems = actionable?['action_items'] as List<dynamic>?;
     if ((actionItems == null || actionItems.isEmpty) && detail != null) {
       actionItems = _deriveActionItemsFromDetail(detail, actionable);
+    }
+    if ((actionItems == null || actionItems.isEmpty) && vapiIdForDetail != null) {
+      final cached = actionItemsCache[vapiIdForDetail];
+      if (cached != null && cached.isNotEmpty) actionItems = cached;
+    }
+    final isLoading = vapiIdForDetail != null && loadingActionItemsVapiId == vapiIdForDetail;
+    if (vapiIdForDetail != null && (actionItems == null || actionItems.isEmpty) && !isLoading && actionItemsCache[vapiIdForDetail] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) onFetchActionItems(vapiIdForDetail!);
+      });
     }
     final outcomeType = (detail?['outcome_type'] ?? '').toString();
     String displayOutcome = outcomeType.isNotEmpty ? outcomeType : '—';
@@ -2535,7 +2605,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
               style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textSecondary),
             ),
             const SizedBox(height: NeyvoSpacing.sm),
-            if (actionItems != null && actionItems!.isNotEmpty) ...[
+            if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: NeyvoSpacing.lg),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (actionItems != null && actionItems!.isNotEmpty) ...[
               ...() {
                 final items = actionItems!;
                 return List.generate(items.length, (i) {
