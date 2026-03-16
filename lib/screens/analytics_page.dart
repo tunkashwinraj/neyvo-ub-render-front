@@ -35,6 +35,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Map<String, dynamic>? _transactionsRes;
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _campaigns = [];
+  String _campaignFilter = 'all'; // all | running | draft | done | stopped
+  int _campaignPage = 1;
   List<Map<String, dynamic>> _agents = [];
   List<Map<String, dynamic>> _numbers = [];
   List<Map<String, dynamic>> _callsForKpi = [];
@@ -804,6 +806,35 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final draft = _campaigns.where((c) => (c['status'] ?? '').toString().toLowerCase() == 'draft').length;
     final completed = _campaigns.where((c) => (c['status'] ?? '').toString().toLowerCase() == 'completed').length;
 
+    // Filter + pagination
+    List<Map<String, dynamic>> _filteredCampaigns() {
+      return _campaigns.where((c) {
+        final status = (c['status'] ?? '').toString().toLowerCase();
+        switch (_campaignFilter) {
+          case 'running':
+            return status == 'running';
+          case 'draft':
+            return status == 'draft';
+          case 'done':
+            return status == 'completed';
+          case 'stopped':
+            return status == 'stopped';
+          case 'all':
+          default:
+            return true;
+        }
+      }).toList();
+    }
+
+    final filtered = _filteredCampaigns();
+    const pageSize = 8;
+    final total = filtered.length;
+    final totalPages = total == 0 ? 1 : ((total + pageSize - 1) / pageSize).ceil();
+    final currentPage = _campaignPage.clamp(1, totalPages);
+    final startIndex = total == 0 ? 0 : (currentPage - 1) * pageSize;
+    final endIndex = total == 0 ? 0 : (startIndex + pageSize).clamp(0, total);
+    final pageItems = total == 0 ? <Map<String, dynamic>>[] : filtered.sublist(startIndex, endIndex);
+
     return _InsightsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -836,7 +867,122 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          _CampaignTable(campaigns: _campaigns),
+          // Status filter chips + page size selector
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final entry in const [
+                    ('all', 'All'),
+                    ('running', 'Running'),
+                    ('draft', 'Draft'),
+                    ('done', 'Done'),
+                    ('stopped', 'Stopped'),
+                  ])
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _campaignFilter = entry.$1;
+                          _campaignPage = 1;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _campaignFilter == entry.$1 ? NeyvoColors.ubLightBlue.withValues(alpha: 0.08) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _campaignFilter == entry.$1 ? NeyvoColors.ubLightBlue : NeyvoColors.borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          entry.$2,
+                          style: NeyvoTextStyles.micro.copyWith(
+                            color: _campaignFilter == entry.$1 ? NeyvoColors.ubLightBlue : NeyvoColors.textMuted,
+                            fontWeight: _campaignFilter == entry.$1 ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: NeyvoColors.borderSubtle),
+                  color: Colors.white,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('8 / page', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: NeyvoColors.textMuted),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _CampaignTable(campaigns: pageItems),
+          const SizedBox(height: 12),
+          // Pagination row
+          if (total > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Showing ${startIndex + 1}-${endIndex} of $total',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                ),
+                Row(
+                  children: [
+                    for (var i = 1; i <= totalPages; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _campaignPage = i;
+                            });
+                          },
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor: i == currentPage ? NeyvoColors.ubLightBlue : Colors.white,
+                            foregroundColor: i == currentPage ? Colors.white : NeyvoColors.textPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              side: BorderSide(
+                                color: i == currentPage ? NeyvoColors.ubLightBlue : NeyvoColors.borderSubtle,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            '$i',
+                            style: NeyvoTextStyles.micro.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: i == currentPage ? Colors.white : NeyvoColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          if (total == 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'No campaigns yet.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+              ),
+            ),
           const SizedBox(height: 12),
           TextButton.icon(
             onPressed: () {
