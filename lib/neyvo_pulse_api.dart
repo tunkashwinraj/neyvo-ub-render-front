@@ -992,6 +992,10 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCallActionable(String campaignId, String vapiCallId) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls/${Uri.encodeComponent(vapiCallId)}/actionable');
 
+  /// Full campaign export: name, student id, phone, status, outcome, action insights (OpenAI). May take 5–10+ seconds.
+  static Future<Map<String, dynamic>> getCampaignExport(String campaignId) async =>
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export');
+
   /// List calls placed for a campaign (full call docs including transcript, outcome_type). Use [limit] to fetch more (e.g. 500 for "all").
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls', params: {'limit': limit});

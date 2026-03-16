@@ -623,6 +623,51 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   String _escapeCsv(String s) => s.replaceAll('"', '""');
 
+  /// Full campaign export (name, id, phone, status, outcome, action insights). Shows loading dialog; may take 5–10+ seconds.
+  Future<void> _exportCampaignFull(String campaignId) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Building export'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: NeyvoSpacing.lg),
+            Text(
+              'Generating spreadsheet with action insights for all contacts. This may take 5–10 seconds or longer for large campaigns.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+    try {
+      final res = await NeyvoPulseApi.getCampaignExport(campaignId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['error']?.toString() ?? 'Export failed'), backgroundColor: NeyvoTheme.error),
+        );
+        return;
+      }
+      final filename = res['filename']?.toString() ?? 'campaign_export.csv';
+      final csvContent = res['csv_content']?.toString() ?? '';
+      await downloadCsv(filename, '\uFEFF$csvContent', context);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
+
   List<Map<String, dynamic>> get _filteredStudents {
     var list = List<Map<String, dynamic>>.from(_students);
     // When using the "Search by excel and selection" audience mode, restrict the
@@ -1597,6 +1642,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     case 'download':
                       _downloadCampaignReport(campaignId);
                       break;
+                    case 'export':
+                      _exportCampaignFull(campaignId);
+                      break;
                     case 'pause':
                       NeyvoPulseApi.pauseCampaign(campaignId).then((_) {
                         if (mounted) setState(() => _campaignDetailRefreshKey++);
@@ -1667,6 +1715,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_outlined, size: 20), title: Text('Download report'), dense: true)),
+                  const PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.table_chart_outlined, size: 20), title: Text('Export campaign (with action insights)'), dense: true)),
                   if (status == 'running')
                     const PopupMenuItem(value: 'pause', child: ListTile(leading: Icon(Icons.pause_circle_outline, size: 20), title: Text('Pause'), dense: true)),
                   if (status == 'paused')
@@ -2337,6 +2386,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onPressed: () => _downloadCampaignReport(campaignId),
                 icon: const Icon(Icons.download_outlined, size: 20),
                 label: const Text('Download report'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _exportCampaignFull(campaignId),
+                icon: const Icon(Icons.table_chart_outlined, size: 20),
+                label: const Text('Export campaign'),
               ),
               if (canEdit)
                 OutlinedButton.icon(
