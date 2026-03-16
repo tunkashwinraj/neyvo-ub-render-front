@@ -537,7 +537,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       try {
         final first = DateFormat.MMMd().format(DateTime.parse((trendData.first['date'] ?? '').toString().substring(0, 10)));
         final last = DateFormat.MMMd().format(DateTime.parse((trendData.last['date'] ?? '').toString().substring(0, 10)));
-        dateRangeLabel = '$first - $last, $year';
+        dateRangeLabel = 'Current week: $first – $last, $year';
       } catch (_) {}
     }
 
@@ -2090,12 +2090,15 @@ class _PerformanceTrendChart extends StatelessWidget {
       final t = (d['total'] as num?)?.toInt() ?? 0;
       return t > m ? t : m;
     });
+    // Y-axis always starts at 0 so bars are shown from 0 (bottom), not from any higher value.
     const yCallsMin = 0;
-    final yCallsMax = maxCalls < 2 ? 2 : (maxCalls <= 6 ? 6 : (maxCalls + 2));
+    final yCallsMax = maxCalls < 1 ? 1 : (maxCalls <= 6 ? 6 : (maxCalls + 2));
     final callsScale = (yCallsMax - yCallsMin) > 0 ? _chartAreaHeight / (yCallsMax - yCallsMin) : 1.0;
     final showBars = tab == 'calls' || tab == 'both';
     final showLine = tab == 'rate' || tab == 'both';
-    final gridValuesCalls = [yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0].toSet().toList()..sort((a, b) => b.compareTo(a));
+    // Grid ticks always include 0 at bottom so the baseline is clear.
+    final gridSet = {yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0};
+    final gridValuesCalls = gridSet.toList()..sort((a, b) => b.compareTo(a));
     final gridYPositions = gridValuesCalls.map((v) => _callsToY(v.toDouble(), yCallsMin, yCallsMax)).toList();
 
     return Row(
@@ -2185,20 +2188,20 @@ class _PerformanceTrendChart extends StatelessWidget {
                           return Expanded(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: total > 0
+                                  child: total > 0
                                   ? Container(
-                                      height: ((total - yCallsMin) * callsScale).clamp(4.0, _chartAreaHeight),
+                                      // Bar height from 0 (baseline) so bar always starts at 0 on y-axis.
+                                      height: ((total - yCallsMin) * callsScale).clamp(2.0, _chartAreaHeight),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFF3B82F6),
                                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                                       ),
                                     )
                                   : Container(
-                                      height: 3,
-                                      margin: const EdgeInsets.only(top: 2),
+                                      height: 1,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF94A3B8).withValues(alpha: 0.35),
-                                        borderRadius: BorderRadius.circular(2),
+                                        color: const Color(0xFF94A3B8).withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(1),
                                       ),
                                     ),
                             ),
@@ -2228,7 +2231,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              // X-axis date labels (every day when <=7 points, else every ~5th + last)
+              // X-axis: show every date (datewise) for current week (<=7 days)
               SizedBox(
                 height: 18,
                 child: Row(
