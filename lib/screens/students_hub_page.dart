@@ -768,6 +768,15 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       final minTableWidth = constraints.maxWidth > 0 ? constraints.maxWidth : 900.0;
+                                      final headerStyle = NeyvoType.labelSmall.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      );
+                                      final cellStyle = NeyvoType.bodySmall.copyWith(fontSize: 14);
+                                      final nameCellStyle = NeyvoType.bodySmall.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      );
                                       return NeyvoCard(
                                         padding: EdgeInsets.zero,
                                         child: SingleChildScrollView(
@@ -777,21 +786,21 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                             child: DataTable(
                                               showCheckboxColumn: false,
                                               headingRowColor: MaterialStateProperty.all(NeyvoColors.bgOverlay),
-                                              dataRowMinHeight: 48,
-                                              dataRowMaxHeight: 52,
+                                              dataRowMinHeight: 52,
+                                              dataRowMaxHeight: 56,
                                               columnSpacing: NeyvoSpacing.md,
                                               columns: [
-                                                DataColumn(label: Text('First name', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Last name', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('ID', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Department', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Phone Number', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Email', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Year of student', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Import List', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Last Call Status', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Last Call', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
-                                                DataColumn(label: Text('Actions', style: NeyvoType.labelSmall.copyWith(fontWeight: FontWeight.w600))),
+                                                DataColumn(label: Text('First name', style: headerStyle)),
+                                                DataColumn(label: Text('Last name', style: headerStyle)),
+                                                DataColumn(label: Text('ID', style: headerStyle)),
+                                                DataColumn(label: Text('Department', style: headerStyle)),
+                                                DataColumn(label: Text('Phone Number', style: headerStyle)),
+                                                DataColumn(label: Text('Email', style: headerStyle)),
+                                                DataColumn(label: Text('Year of student', style: headerStyle)),
+                                                DataColumn(label: Text('Import List', style: headerStyle)),
+                                                DataColumn(label: Text('Last Call Status', style: headerStyle)),
+                                                DataColumn(label: Text('Last Call', style: headerStyle)),
+                                                DataColumn(label: Text('Actions', style: headerStyle)),
                                               ],
                                               rows: _filteredStudents.asMap().entries.map((entry) {
                                                 final rowIndex = entry.key;
@@ -840,11 +849,15 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                                 backgroundColor: NeyvoTheme.primary.withOpacity(0.12),
                                                                 child: Text(
                                                                   firstName != '—' ? firstName[0].toUpperCase() : (name.isNotEmpty && name != '—' ? name[0].toUpperCase() : '?'),
-                                                                  style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.primary, fontWeight: FontWeight.w600),
+                                                                  style: NeyvoType.labelSmall.copyWith(
+                                                                    color: NeyvoTheme.primary,
+                                                                    fontWeight: FontWeight.w700,
+                                                                    fontSize: 13,
+                                                                  ),
                                                                 ),
                                                               ),
                                                               const SizedBox(width: 10),
-                                                              Text(firstName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+                                                              Text(firstName, style: nameCellStyle),
                                                             ],
                                                           ),
                                                         ),
@@ -855,16 +868,16 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                         opacity: rowOpacity,
                                                         child: Padding(
                                                           padding: const EdgeInsets.symmetric(vertical: 8),
-                                                          child: Text(lastName, style: NeyvoType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+                                                          child: Text(lastName, style: nameCellStyle),
                                                         ),
                                                       ),
                                                     ),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(studentId, style: NeyvoType.bodySmall))),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(department?.isNotEmpty == true ? department! : '—', style: NeyvoType.bodySmall))),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(phone, style: NeyvoType.bodySmall))),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(email?.isNotEmpty == true ? email! : '—', style: NeyvoType.bodySmall))),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(yearOfStudy?.isNotEmpty == true ? yearOfStudy! : '—', style: NeyvoType.bodySmall))),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(importList?.isNotEmpty == true ? importList! : '—', style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(studentId, style: cellStyle))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(department?.isNotEmpty == true ? department! : '—', style: cellStyle))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(phone, style: cellStyle))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(email?.isNotEmpty == true ? email! : '—', style: cellStyle))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(yearOfStudy?.isNotEmpty == true ? yearOfStudy! : '—', style: cellStyle))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(importList?.isNotEmpty == true ? importList! : '—', style: cellStyle))),
                                                     DataCell(
                                                       Opacity(
                                                         opacity: rowOpacity,
@@ -877,7 +890,7 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                           ),
                                                           child: Text(
                                                             lastStatus,
-                                                            style: NeyvoType.bodySmall.copyWith(
+                                                            style: cellStyle.copyWith(
                                                               color: statusColor,
                                                               fontWeight: FontWeight.w600,
                                                             ),
@@ -885,7 +898,7 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                         ),
                                                       ),
                                                     ),
-                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(lastTime, style: NeyvoType.bodySmall))),
+                                                    DataCell(Opacity(opacity: rowOpacity, child: Text(lastTime, style: cellStyle))),
                                                     DataCell(
                                                       PopupMenuButton<String>(
                                                         icon: const Icon(Icons.more_vert, size: 22),

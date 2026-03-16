@@ -646,7 +646,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             : (dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '');
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
-                        final recordingUrl = (call['recording_url'] ?? call['recordingUrl'] ?? '').toString().trim();
                         final statusColor = _getStatusColor(status);
                         final successMetric = call['success_metric']?.toString();
                         final attributedAmount = call['attributed_payment_amount']?.toString();
@@ -677,29 +676,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
                                 : null,
                             child: ExpansionTile(
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.audiotrack,
-                                      color: recordingUrl.isNotEmpty
-                                          ? TenantBrand.primary(context)
-                                          : NeyvoTheme.textMuted,
-                                    ),
-                                    onPressed: recordingUrl.isNotEmpty
-                                        ? () async {
-                                            final uri = Uri.tryParse(recordingUrl);
-                                            if (uri != null && await canLaunchUrl(uri)) {
-                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                            }
-                                          }
-                                        : null,
-                                    tooltip: recordingUrl.isNotEmpty ? 'Listen to recording' : 'No recording available',
-                                  ),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
                               leading: CircleAvatar(
                                 backgroundColor: statusColor.withOpacity(0.1),
                                 child: Icon(_getStatusIcon(status), color: statusColor),
@@ -801,41 +777,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ],
                               ),
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
-                                  child: recordingUrl.isNotEmpty
-                                      ? InkWell(
-                                          onTap: () async {
-                                            final uri = Uri.tryParse(recordingUrl);
-                                            if (uri != null && await canLaunchUrl(uri)) {
-                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                            }
-                                          },
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.audiotrack, size: 20, color: TenantBrand.primary(context)),
-                                              const SizedBox(width: NeyvoSpacing.sm),
-                                              Text(
-                                                'Listen to recording',
-                                                style: NeyvoType.bodyMedium.copyWith(
-                                                  color: TenantBrand.primary(context),
-                                                  decoration: TextDecoration.underline,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : Row(
-                                          children: [
-                                            Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.textMuted),
-                                            const SizedBox(width: NeyvoSpacing.sm),
-                                            Text(
-                                              'No recording available',
-                                              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
-                                            ),
-                                          ],
-                                        ),
-                                ),
                                 if (transcript.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.all(NeyvoSpacing.sm),
@@ -849,11 +790,26 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            'Transcript',
-                                            style: NeyvoType.labelLarge.copyWith(
-                                              color: NeyvoTheme.textSecondary,
-                                            ),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Transcript',
+                                                style: NeyvoType.labelLarge.copyWith(
+                                                  color: NeyvoTheme.textSecondary,
+                                                ),
+                                              ),
+                                              TextButton.icon(
+                                                onPressed: () async {
+                                                  final safeName = studentName.isNotEmpty ? studentName.replaceAll(RegExp(r'[^a-zA-Z0-9_\- ]'), '_') : 'call';
+                                                  final fileDate = date.isNotEmpty ? date.replaceAll(RegExp(r'[^0-9\-T:]'), '_') : DateTime.now().toIso8601String();
+                                                  final filename = 'transcript_${safeName}_$fileDate.txt';
+                                                  await downloadCsv(filename, transcript, context);
+                                                },
+                                                icon: const Icon(Icons.download, size: 18),
+                                                label: const Text('Download'),
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(height: NeyvoSpacing.sm),
                                           SelectableText(
