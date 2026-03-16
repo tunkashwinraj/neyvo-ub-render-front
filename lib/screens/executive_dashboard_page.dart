@@ -489,13 +489,11 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: _kTopPanelHeight,
-                        child: _buildQuickActionsPanel(),
-                      ),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: _buildQuickActionsPanel(),
                     ),
                     const SizedBox(width: 16),
                     Expanded(child: _buildLiveCallActivityPanel()),
@@ -1051,21 +1049,21 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text('Quick Actions', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            Expanded(
-              child: GridView.count(
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 2.4,
-                children: [
+            const SizedBox(height: 10),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 2.6,
+              children: [
                 _QuickActionButton(icon: Icons.person_add_outlined, label: 'Add Operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents)),
                 _QuickActionButton(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.campaigns)),
                 _QuickActionButton(icon: Icons.psychology_outlined, label: 'Goodwin Model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
@@ -1073,7 +1071,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                 _QuickActionButton(icon: Icons.call_outlined, label: 'Start Outbound', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls)),
                 _QuickActionButton(icon: Icons.add_card_outlined, label: 'Add Credits', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.wallet)),
               ],
-            ),
             ),
           ],
         ),
