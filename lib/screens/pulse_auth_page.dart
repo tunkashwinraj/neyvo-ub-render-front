@@ -15,6 +15,13 @@ import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../widgets/recaptcha_v2_checkbox.dart';
 
+// reCAPTCHA v2 site key for visible checkbox on web login.
+// Set via: flutter build web --dart-define=RECAPTCHA_V2_SITE_KEY=your_site_key
+const String _kRecaptchaV2SiteKey = String.fromEnvironment(
+  'RECAPTCHA_V2_SITE_KEY',
+  defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+);
+
 class PulseAuthPage extends StatefulWidget {
   const PulseAuthPage({super.key});
 
@@ -400,7 +407,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             if (kIsWeb) ...[
                               const SizedBox(height: NeyvoSpacing.lg),
                               buildRecaptchaV2Checkbox(
-                                siteKey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+                                siteKey: _kRecaptchaV2SiteKey,
                                 onVerified: (token) {
                                   if (mounted) setState(() => _recaptchaVerified = true);
                                 },
