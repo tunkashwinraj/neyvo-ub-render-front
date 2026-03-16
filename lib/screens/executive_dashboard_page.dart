@@ -1042,27 +1042,23 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
   Widget _tableHeader(String t) => Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4), child: Text(t, style: NeyvoTextStyles.label));
 
   Widget _buildQuickActionsPanel() {
-    final voiceOk = _health != null && (_health!['ok'] == true || _health!['status'] == 'ok');
-    final ubStatus = (_ubStatus?['status'] as String?)?.toLowerCase() ?? 'missing';
-    final credits = _accountInfo?['wallet_credits'];
-    final creditsStr = credits != null ? NumberFormat('#,###').format(credits is int ? credits : int.tryParse(credits.toString()) ?? 0) : '—';
-
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text('Quick Actions', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: 2,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
               childAspectRatio: 1.8,
               children: [
                 _QuickActionButton(icon: Icons.person_add_outlined, label: 'Add Operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents)),
@@ -1073,13 +1069,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                 _QuickActionButton(icon: Icons.add_card_outlined, label: 'Add Credits', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.wallet)),
               ],
             ),
-            const SizedBox(height: 16),
-            Text('System status', style: NeyvoTextStyles.label),
-            const SizedBox(height: 8),
-            _StatusRow('Voice OS', voiceOk ? 'Healthy' : 'Error', voiceOk ? Colors.green : Colors.red),
-            _StatusRow('UB Model', ubStatus == 'ready' ? 'Ready' : ubStatus == 'building' ? 'Building' : 'Error', ubStatus == 'ready' ? Colors.green : ubStatus == 'building' ? Colors.orange : Colors.red),
-            _StatusRow('Coverage', '$_activeOperatorsCount / 6 depts', NeyvoTheme.textSecondary),
-            _StatusRow('Credits', creditsStr, NeyvoColors.ubPurple),
           ],
         ),
       ),
@@ -1666,28 +1655,6 @@ class _QuickActionButton extends StatelessWidget {
           Icon(icon, size: 20),
           const SizedBox(width: 8),
           Flexible(child: Text(label, style: NeyvoTextStyles.micro, overflow: TextOverflow.ellipsis)),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  const _StatusRow(this.label, this.value, this.valueColor);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: NeyvoTextStyles.micro),
-          Text(value, style: NeyvoTextStyles.micro.copyWith(color: valueColor, fontWeight: FontWeight.w600)),
         ],
       ),
     );
