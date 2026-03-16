@@ -817,41 +817,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ],
                               ),
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
-                                  child: recordingUrl.isNotEmpty
-                                      ? InkWell(
-                                          onTap: () async {
-                                            final uri = Uri.tryParse(recordingUrl);
-                                            if (uri != null && await canLaunchUrl(uri)) {
-                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                            }
-                                          },
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.audiotrack, size: 20, color: TenantBrand.primary(context)),
-                                              const SizedBox(width: NeyvoSpacing.sm),
-                                              Text(
-                                                'Listen to recording',
-                                                style: NeyvoType.bodyMedium.copyWith(
-                                                  color: TenantBrand.primary(context),
-                                                  decoration: TextDecoration.underline,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : Row(
-                                          children: [
-                                            Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.textMuted),
-                                            const SizedBox(width: NeyvoSpacing.sm),
-                                            Text(
-                                              'No recording available',
-                                              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
-                                            ),
-                                          ],
-                                        ),
-                                ),
                                 if (transcript.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.all(NeyvoSpacing.sm),
@@ -865,11 +830,26 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            'Transcript',
-                                            style: NeyvoType.labelLarge.copyWith(
-                                              color: NeyvoTheme.textSecondary,
-                                            ),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Transcript',
+                                                style: NeyvoType.labelLarge.copyWith(
+                                                  color: NeyvoTheme.textSecondary,
+                                                ),
+                                              ),
+                                              TextButton.icon(
+                                                onPressed: () async {
+                                                  final safeName = studentName.isNotEmpty ? studentName.replaceAll(RegExp(r'[^a-zA-Z0-9_\- ]'), '_') : 'call';
+                                                  final fileDate = date.isNotEmpty ? date.replaceAll(RegExp(r'[^0-9\-T:]'), '_') : DateTime.now().toIso8601String();
+                                                  final filename = 'transcript_${safeName}_$fileDate.txt';
+                                                  await downloadCsv(filename, transcript, context);
+                                                },
+                                                icon: const Icon(Icons.download, size: 18),
+                                                label: const Text('Download'),
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(height: NeyvoSpacing.sm),
                                           SelectableText(
