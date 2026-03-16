@@ -1,10 +1,11 @@
 // lib/screens/call_history_page.dart
-// Call logs – history with filters, date range, transcripts, export, recording link
+// Call logs ? history with filters, date range, transcripts, export, recording link
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../neyvo_pulse_api.dart';
 import '../services/user_timezone_service.dart';
+import '../tenant/tenant_brand.dart';
 import '../utils/export_csv.dart';
 import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
@@ -32,21 +33,21 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   final _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, completed, failed, pending
   String _filterOutcome = 'all'; // all, callback, booked, handoff, missed, completed
-  String _filterDirection = 'outbound'; // all, inbound, outbound (default to outbound)
+  String _filterDirection = 'all'; // all, inbound, outbound (default to all)
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
-  final Set<String> _selectedCallIds = <String>{};
-  bool _selectionMode = false;
-  static const int _pageSize = 20;
+  /// User-selectable number of call logs to fetch per page (20, 50, 100, 200, 500).
+  int _fetchSize = 50;
   bool _hasMore = true;
   bool _loadingMore = false;
+  static const List<int> _fetchSizeOptions = [20, 50, 100, 200, 500];
 
   @override
   void initState() {
     super.initState();
     _filterDirection = (widget.initialDirection).toLowerCase().trim();
     if (_filterDirection != 'inbound' && _filterDirection != 'outbound' && _filterDirection != 'all') {
-      _filterDirection = 'outbound';
+      _filterDirection = 'all';
     }
     _searchController.addListener(_filterCalls);
     _load();
@@ -58,36 +59,66 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     super.dispose();
   }
 
+  /// Build from/to date params for API (YYYY-MM-DD). Returns null for 'all'.
+  (String? fromStr, String? toStr) _dateRangeParams() {
+    if (_dateRange == 'all') return (null, null);
+    final now = DateTime.now();
+    final toStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    if (_dateRange == '7d') {
+      final from = now.subtract(const Duration(days: 7));
+      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
+      return (fromStr, toStr);
+    }
+    if (_dateRange == '30d') {
+      final from = now.subtract(const Duration(days: 30));
+      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
+      return (fromStr, toStr);
+    }
+    return (null, null);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
-      _selectionMode = false;
-      _selectedCallIds.clear();
     });
     try {
-      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: 0);
-      final list = res['calls'] as List? ?? [];
+      final (fromStr, toStr) = _dateRangeParams();
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _fetchSize,
+        offset: 0,
+        from: fromStr,
+        to: toStr,
+      );
+      if (!mounted) return;
+      final list = res['calls'];
+      final calls = list is List ? List<dynamic>.from(list) : <dynamic>[];
+      setState(() {
+        _allCalls = calls;
+        _hasMore = calls.length >= _fetchSize;
+        _loading = false;
+        if (res['ok'] != true && _error == null) {
+          _error = res['error']?.toString() ?? 'Failed to load call logs';
+        }
+      });
+      _filterCalls();
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _allCalls = list;
-          _filteredCalls = list;
-          _hasMore = list.length >= _pageSize;
+          _allCalls = [];
+          _filteredCalls = [];
+          _hasMore = false;
           _loading = false;
+          _error = e.toString();
         });
         _filterCalls();
       }
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
     }
   }
 
   bool _isInDateRange(dynamic call) {
     if (_dateRange == 'all') return true;
-    final created = call['created_at'] ?? call['date'] ?? call['timestamp'];
+    final created = call['started_at'] ?? call['created_at'] ?? call['date'] ?? call['timestamp'];
     if (created == null) return true;
     DateTime? dt;
     if (created is String) dt = DateTime.tryParse(created);
@@ -110,7 +141,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       return r > 0 ? '${m}m ${r}s' : '${m}m';
     }
     final d = call['duration']?.toString();
-    return d?.isNotEmpty == true ? d! : '—';
+    return d?.isNotEmpty == true ? d! : '?';
   }
 
   static int _durationSeconds(dynamic c) {
@@ -120,16 +151,43 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     return 0;
   }
 
-  static DateTime? _callDate(dynamic c) {
-    final created = c['created_at'] ?? c['date'] ?? c['timestamp'];
-    if (created == null) return null;
-    if (created is String) return DateTime.tryParse(created);
-    if (created is int) return DateTime.fromMillisecondsSinceEpoch(created);
+  /// Date used for display/fallback.
+  static DateTime? _parseDate(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return DateTime.tryParse(raw);
+    if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
     return null;
   }
 
+  /// Date used for sorting and filtering; prefer same source as display.
+  static DateTime? _callDate(dynamic c) {
+    final raw = c['started_at'] ?? c['created_at'] ?? c['date'] ?? c['timestamp'];
+    return _parseDate(raw);
+  }
+
+  /// Latest activity time (max of started/created/ended/updated) so "Date (newest)" shows recently ended calls first.
+  static DateTime _callDateForSort(dynamic c) {
+    final dates = [
+      _parseDate(c['ended_at']),
+      _parseDate(c['updated_at']),
+      _parseDate(c['started_at']),
+      _parseDate(c['created_at']),
+      _parseDate(c['date']),
+      _parseDate(c['timestamp']),
+    ].whereType<DateTime>().toList();
+    if (dates.isEmpty) return DateTime(0);
+    return dates.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {});
+    _filterCalls();
+  }
+
   void _filterCalls() {
-    final query = _searchController.text.toLowerCase();
+    // Search only in current page: filter by name/phone + date, direction, status, outcome.
+    final query = _searchController.text.trim().toLowerCase();
     setState(() {
       var list = _allCalls.where((c) {
         if (!_isInDateRange(c)) return false;
@@ -137,12 +195,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
           final dir = (c['direction'] as String?)?.toLowerCase();
           if (dir != _filterDirection) return false;
         }
-        final contactName = (c['student_name'] ?? c['contact_name'] ?? c['agent_name'] ?? '').toString().toLowerCase();
+        final contactName = (c['student_name'] ?? c['contact_name'] ?? c['customer_name'] ?? c['agent_name'] ?? '').toString().toLowerCase();
         final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString().toLowerCase();
-        final matchesSearch = query.isEmpty ||
-            contactName.contains(query) ||
-            phone.contains(query);
-        if (!matchesSearch) return false;
+        if (query.isNotEmpty && !contactName.contains(query) && !phone.contains(query)) return false;
         if (_filterStatus != 'all') {
           final status = (c['status']?.toString() ?? '').toLowerCase();
           if (status != _filterStatus) return false;
@@ -158,12 +213,12 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       list.sort((a, b) {
         switch (_sortBy) {
           case _CallSort.dateNewest:
-            final da = _callDate(a) ?? DateTime(0);
-            final db = _callDate(b) ?? DateTime(0);
+            final da = _callDateForSort(a);
+            final db = _callDateForSort(b);
             return db.compareTo(da);
           case _CallSort.dateOldest:
-            final da = _callDate(a) ?? DateTime(0);
-            final db = _callDate(b) ?? DateTime(0);
+            final da = _callDateForSort(a);
+            final db = _callDateForSort(b);
             return da.compareTo(db);
           case _CallSort.durationLongest:
             return _durationSeconds(b).compareTo(_durationSeconds(a));
@@ -175,125 +230,28 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     });
   }
 
-  void _clearSelection() {
-    setState(() {
-      _selectedCallIds.clear();
-      _selectionMode = false;
-    });
-  }
-
-  void _toggleSelectionForCall(Map<String, dynamic> call) {
-    final id = call['id']?.toString() ?? '';
-    if (id.isEmpty) return;
-    setState(() {
-      if (_selectedCallIds.contains(id)) {
-        _selectedCallIds.remove(id);
-      } else {
-        _selectedCallIds.add(id);
-      }
-      _selectionMode = _selectedCallIds.isNotEmpty;
-    });
-  }
-
-  void _selectAllVisible() {
-    setState(() {
-      _selectedCallIds
-        ..clear()
-        ..addAll(_filteredCalls.map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '').where((id) => id.isNotEmpty));
-      _selectionMode = _selectedCallIds.isNotEmpty;
-    });
-  }
-
-  Future<void> _onDeleteSelected() async {
-    if (_selectedCallIds.isEmpty) return;
-    final count = _selectedCallIds.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Delete calls'),
-          content: Text('Are you sure you want to delete $count selected call${count == 1 ? '' : 's'}? This action cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true) return;
-    try {
-      final ids = _selectedCallIds.toList();
-      final res = await NeyvoPulseApi.deleteCalls(ids);
-      if (res['ok'] != true) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(res['error']?.toString() ?? 'Failed to delete calls')),
-          );
-        }
-        return;
-      }
-      setState(() {
-        _allCalls = _allCalls.where((c) {
-          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
-          return !_selectedCallIds.contains(id);
-        }).toList();
-        _selectedCallIds.clear();
-        _selectionMode = false;
-        _filterCalls();
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted $count call${count == 1 ? '' : 's'}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete calls: $e')),
-        );
-      }
-    }
-  }
-
   Future<void> _loadMore() async {
     if (!_hasMore || _loadingMore) return;
-    final offset = _allCalls.length;
-    setState(() {
-      _loadingMore = true;
-    });
+    setState(() => _loadingMore = true);
     try {
-      final res = await NeyvoPulseApi.listCalls(limit: _pageSize, offset: offset);
-      final list = res['calls'] as List? ?? [];
-      if (mounted) {
-        final existingIds = _allCalls
-            .map<String>((c) => (c as Map<String, dynamic>)['id']?.toString() ?? '')
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final newCalls = list.where((c) {
-          final id = (c as Map<String, dynamic>)['id']?.toString() ?? '';
-          return id.isNotEmpty && !existingIds.contains(id);
-        }).toList();
-        setState(() {
-          _allCalls = [..._allCalls, ...newCalls];
-          _filteredCalls = _allCalls;
-          _hasMore = list.length >= _pageSize;
-          _loadingMore = false;
-        });
-        _filterCalls();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loadingMore = false;
-        });
-      }
+      final (fromStr, toStr) = _dateRangeParams();
+      final res = await NeyvoPulseApi.listCalls(
+        limit: _fetchSize,
+        offset: _allCalls.length,
+        from: fromStr,
+        to: toStr,
+      );
+      if (!mounted) return;
+      final list = res['calls'];
+      final newCalls = list is List ? List<dynamic>.from(list) : <dynamic>[];
+      setState(() {
+        _allCalls = [..._allCalls, ...newCalls];
+        _hasMore = newCalls.length >= _fetchSize;
+        _loadingMore = false;
+      });
+      _filterCalls();
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -352,6 +310,62 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
   }
 
+  /// Show delete confirmation for a single call log (Goodwin: hold to delete).
+  static Future<void> _showDeleteCallLogDialog(
+    BuildContext context,
+    String callId,
+    String studentName,
+    String date,
+    VoidCallback onDeleted,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete call log?'),
+        content: Text(
+          'This will permanently remove this call log from history.\n\n'
+          '${studentName.isNotEmpty ? studentName : "Call"}${date.isNotEmpty ? " · $date" : ""}',
+          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final res = await NeyvoPulseApi.deleteCalls([callId]);
+      if (!context.mounted) return;
+      if (res['ok'] == true) {
+        onDeleted();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Call log deleted'), backgroundColor: NeyvoTheme.success),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message']?.toString() ?? res['error']?.toString() ?? 'Failed to delete call log'),
+            backgroundColor: NeyvoTheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -385,7 +399,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : _load,
-            tooltip: 'Refresh (load latest 20 calls)',
+            tooltip: 'Refresh (load latest $_fetchSize calls)',
           ),
         ],
       ),
@@ -411,17 +425,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                       child: TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: 'Search by phone number',
+                          hintText: 'Search in current page (name or phone)',
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           prefixIcon: const Icon(Icons.search, size: 20),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 20),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _filterCalls();
-                                  },
+                                  onPressed: _clearSearch,
                                 )
                               : null,
                         ),
@@ -476,7 +487,22 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               DropdownMenuItem(value: '7d', child: Text('Last 7 days', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: '30d', child: Text('Last 30 days', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _dateRange = v ?? 'all'; _filterCalls(); }); },
+                            onChanged: (v) { setState(() { _dateRange = v ?? 'all'; }); _load(); },
+                          ),
+                        ),
+                        const SizedBox(width: NeyvoSpacing.sm),
+                        SizedBox(
+                          width: 140,
+                          child: DropdownButtonFormField<int>(
+                            value: _fetchSize,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              labelText: 'Show',
+                            ),
+                            items: _fetchSizeOptions.map((n) => DropdownMenuItem(value: n, child: Text('$n calls', overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: (v) { if (v != null) { setState(() { _fetchSize = v; }); _load(); } },
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
@@ -574,7 +600,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                   ),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _filteredCalls.length + 1 + (_selectionMode ? 1 : 0),
+                  itemCount: _filteredCalls.length + 1,
                   itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
@@ -605,49 +631,29 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             ),
                           );
                         }
-                        if (_selectionMode && i == 1) {
-                          final totalVisible = _filteredCalls.length;
-                          final selectedCount = _selectedCallIds.length;
-                          final allSelected = selectedCount > 0 && selectedCount >= totalVisible;
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(NeyvoSpacing.md, 0, NeyvoSpacing.md, NeyvoSpacing.sm),
-                            child: Row(
-                              children: [
-                                Text(
-                                  '$selectedCount selected',
-                                  style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
-                                ),
-                                const Spacer(),
-                                if (selectedCount > 0)
-                                  FilledButton.icon(
-                                    onPressed: _onDeleteSelected,
-                                    icon: const Icon(Icons.delete_outline),
-                                    label: const Text('Delete'),
-                                  ),
-                                const SizedBox(width: NeyvoSpacing.sm),
-                                TextButton(
-                                  onPressed: allSelected ? _clearSelection : _selectAllVisible,
-                                  child: Text(allSelected ? 'Clear' : 'Select all'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        final idx = _selectionMode ? i - 2 : i - 1;
+                        final idx = i - 1;
                         final call = _filteredCalls[idx] as Map<String, dynamic>;
-                        final callId = call['id']?.toString() ?? '';
-                        final isSelected = callId.isNotEmpty && _selectedCallIds.contains(callId);
                         final status = call['status']?.toString() ?? 'unknown';
                         final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? 'Unknown').toString();
                         final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '').toString();
                         final agentName = (call['profile_name'] ?? call['agent_name'] ?? call['managed_profile_name'] ?? '').toString();
                         final numberCalled = (call['number_called'] ?? call['from'] ?? call['phone_number_id'] ?? '').toString();
                         final outcome = (call['outcome'] ?? call['outcome_type'] ?? call['status'] ?? '').toString();
+                        final dateDisplay = (call['created_at_display'] ?? '').toString().trim();
                         final dateRaw = call['started_at'] ?? call['created_at'] ?? call['timestamp'] ?? call['date'];
-                        final date = dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '';
+                        final date = dateDisplay.isNotEmpty
+                            ? dateDisplay
+                            : (dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '');
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
-                        final recordingUrl = call['recording_url']?.toString();
+                        // Prefer mono recording_url, but fall back to stereo if only that exists.
+                        final recordingUrl = (
+                          call['recording_url'] ??
+                          call['recordingUrl'] ??
+                          call['stereo_recording_url'] ??
+                          call['stereoRecordingUrl'] ??
+                          ''
+                        ).toString().trim();
                         final statusColor = _getStatusColor(status);
                         final successMetric = call['success_metric']?.toString();
                         final attributedAmount = call['attributed_payment_amount']?.toString();
@@ -657,7 +663,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final voiceTier = (call['voice_tier'] as String?)?.toLowerCase() ?? '';
                         final creditsStr = creditsUsed != null ? '${creditsUsed is int ? creditsUsed : creditsUsed.toInt()} cr' : null;
                         final tooltipStr = creditsStr != null
-                            ? '$creditsStr · $durationStr${voiceTier.isNotEmpty ? ' · ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
+                            ? '$creditsStr ? $durationStr${voiceTier.isNotEmpty ? ' ? ${voiceTier == 'neutral' ? 'Neutral' : voiceTier == 'natural' ? 'Natural' : voiceTier == 'ultra' ? 'Ultra' : voiceTier}' : ''}'
                             : null;
                         final routedIntentRaw = (call['routed_intent'] ?? call['primary_intent'] ?? call['analysis']?['primaryIntent']);
                         final routedIntent = routedIntentRaw == null
@@ -665,44 +671,54 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             : routedIntentRaw.toString().trim();
                         
                         final showNumberCalled = numberCalled.isNotEmpty && numberCalled != studentPhone;
+                        final callId = (call['id'] ?? call['call_id'] ?? '').toString().trim();
+                        final canDelete = TenantBrand.isGoodwin(context) && callId.isNotEmpty;
+
+                        void _openCallDetail() {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                          );
+                        }
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                           child: InkWell(
-                            onLongPress: () {
-                              if (!_selectionMode) {
-                                setState(() {
-                                  _selectionMode = true;
-                                  _selectedCallIds
-                                    ..clear()
-                                    ..add(callId);
-                                });
-                              }
-                            },
-                            onTap: _selectionMode
-                                ? () => _toggleSelectionForCall(call)
+                            onTap: _openCallDetail,
+                            onLongPress: canDelete
+                                ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
                                 : null,
                             child: ExpansionTile(
-                              trailing: IconButton(
-                                icon: const Icon(Icons.open_in_new),
-                                tooltip: 'View full details',
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
-                                ),
-                              ),
-                              leading: Row(
+                              onExpansionChanged: (expanded) {
+                                if (expanded) {
+                                  _openCallDetail();
+                                }
+                              },
+                              trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (_selectionMode)
-                                    Checkbox(
-                                      value: isSelected,
-                                      onChanged: (_) => _toggleSelectionForCall(call),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.audiotrack,
+                                      color: recordingUrl.isNotEmpty
+                                          ? TenantBrand.primary(context)
+                                          : NeyvoTheme.textMuted,
                                     ),
-                                  CircleAvatar(
-                                    backgroundColor: statusColor.withOpacity(0.1),
-                                    child: Icon(_getStatusIcon(status), color: statusColor),
+                                    onPressed: recordingUrl.isNotEmpty
+                                        ? () async {
+                                            final uri = Uri.tryParse(recordingUrl);
+                                            if (uri != null && await canLaunchUrl(uri)) {
+                                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            }
+                                          }
+                                        : null,
+                                    tooltip: recordingUrl.isNotEmpty ? 'Listen to recording' : 'No recording available',
                                   ),
+                                  const Icon(Icons.chevron_right),
                                 ],
+                              ),
+                              leading: CircleAvatar(
+                                backgroundColor: statusColor.withOpacity(0.1),
+                                child: Icon(_getStatusIcon(status), color: statusColor),
                               ),
                               title: Row(
                                 children: [
@@ -773,20 +789,20 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                           ),
                                         ),
                                       ],
-                                      if (durationStr != '—') ...[
+                                      if (durationStr != '?') ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                        Text('? $durationStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                       ],
                                       if (creditsStr != null) ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
                                         Tooltip(
                                           message: tooltipStr ?? creditsStr,
-                                          child: Text('• $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
+                                          child: Text('? $creditsStr', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.teal)),
                                         ),
                                       ],
                                       if (outcomeType != null && outcomeType.isNotEmpty) ...[
                                         const SizedBox(width: NeyvoSpacing.sm),
-                                        Text('• ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+                                        Text('? ${outcomeType.replaceAll('_', ' ')}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                                       ],
                                     ],
                                   ),
@@ -801,31 +817,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                 ],
                               ),
                               children: [
-                                if (recordingUrl != null && recordingUrl.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(NeyvoSpacing.sm, NeyvoSpacing.sm, NeyvoSpacing.sm, 0),
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final uri = Uri.tryParse(recordingUrl);
-                                        if (uri != null && await canLaunchUrl(uri)) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                      },
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.audiotrack, size: 20, color: NeyvoTheme.teal),
-                                          const SizedBox(width: NeyvoSpacing.sm),
-                                          Text(
-                                            'Listen to recording',
-                                            style: NeyvoType.bodyMedium.copyWith(
-                                              color: NeyvoTheme.teal,
-                                              decoration: TextDecoration.underline,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
                                 if (transcript.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.all(NeyvoSpacing.sm),
@@ -839,11 +830,26 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            'Transcript',
-                                            style: NeyvoType.labelLarge.copyWith(
-                                              color: NeyvoTheme.textSecondary,
-                                            ),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Transcript',
+                                                style: NeyvoType.labelLarge.copyWith(
+                                                  color: NeyvoTheme.textSecondary,
+                                                ),
+                                              ),
+                                              TextButton.icon(
+                                                onPressed: () async {
+                                                  final safeName = studentName.isNotEmpty ? studentName.replaceAll(RegExp(r'[^a-zA-Z0-9_\- ]'), '_') : 'call';
+                                                  final fileDate = date.isNotEmpty ? date.replaceAll(RegExp(r'[^0-9\-T:]'), '_') : DateTime.now().toIso8601String();
+                                                  final filename = 'transcript_${safeName}_$fileDate.txt';
+                                                  await downloadCsv(filename, transcript, context);
+                                                },
+                                                icon: const Icon(Icons.download, size: 18),
+                                                label: const Text('Download'),
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(height: NeyvoSpacing.sm),
                                           SelectableText(

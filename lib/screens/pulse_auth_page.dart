@@ -15,6 +15,13 @@ import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../widgets/recaptcha_v2_checkbox.dart';
 
+// reCAPTCHA v2 site key for visible checkbox on web login.
+// Set via: flutter build web --dart-define=RECAPTCHA_V2_SITE_KEY=your_site_key
+const String _kRecaptchaV2SiteKey = String.fromEnvironment(
+  'RECAPTCHA_V2_SITE_KEY',
+  defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+);
+
 class PulseAuthPage extends StatefulWidget {
   const PulseAuthPage({super.key});
 
@@ -187,29 +194,30 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
         email: email,
         password: password,
       );
+      // Ensure the very next API call sends this user so backend tenant check uses correct account.
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        SpeariaApi.setUserId(user.uid);
+      }
       // Immediately verify tenant/org membership so that cross-tenant
       // logins are rejected at the auth screen instead of inside the
-      // Pulse shell.
+      // Pulse shell. No dashboard data is ever loaded until this succeeds.
       try {
         await NeyvoPulseApi.getAccountInfo();
       } on ApiException catch (e) {
-        final payload = e.payload;
-        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
-        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
-        if (isTenantMismatch) {
-          // Wrong school for this portal: sign out and show a login error
-          // without ever transitioning into the Pulse shell.
+        // Any 403 on account = wrong portal (same as main.dart gate).
+        if (e.statusCode == 403) {
+          NeyvoPulseApi.clearAccountInfoCache();
           await FirebaseAuth.instance.signOut();
           NeyvoPulseApi.setDefaultAccountId(null);
           if (!mounted) return;
           setState(() {
-            _error = 'These credentials are not valid for this portal.';
+            _error = 'These credentials are not valid for this portal. Please sign in at the correct school site (ub.neyvo.ai or goodwin.neyvo.ai).';
             _loading = false;
           });
           return;
         }
-        // For other API errors, fall through and let the post-auth gate
-        // handle them; just stop the loading spinner here.
+        // For other API errors, fall through and let the post-auth gate handle them.
       }
       if (!mounted) return;
       setState(() {
@@ -220,9 +228,14 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
         _error = e.message ?? e.code;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, _) {
+      final msg = e.toString().toLowerCase();
+      final isAppCheckOrThrottle = msg.contains('appcheck') || msg.contains('app check') ||
+          msg.contains('throttl') || msg.contains('403');
       setState(() {
-        _error = e.toString();
+        _error = isAppCheckOrThrottle
+            ? 'Sign-in is temporarily unavailable. Please use the correct portal (ub.neyvo.ai or goodwin.neyvo.ai) or try again later.'
+            : (e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString());
         _loading = false;
       });
     }
@@ -390,7 +403,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                             if (kIsWeb) ...[
                               const SizedBox(height: NeyvoSpacing.lg),
                               buildRecaptchaV2Checkbox(
-                                siteKey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+                                siteKey: _kRecaptchaV2SiteKey,
                                 onVerified: (token) {
                                   if (mounted) setState(() => _recaptchaVerified = true);
                                 },

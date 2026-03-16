@@ -3,7 +3,7 @@
   import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
-  import 'package:flutter/foundation.dart' show kIsWeb;
+  import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
   import 'package:flutter/material.dart';
   import 'package:shared_preferences/shared_preferences.dart';
   import 'package:timezone/data/latest.dart' as tz;
@@ -72,8 +72,12 @@ String _resolveTenantId() {
   return '';
 }
 
+/// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
+const bool _kForceStaging = bool.fromEnvironment('FORCE_STAGING', defaultValue: false);
+
 /// True when the app is running on the Firebase staging host (e.g. ub-neyvo-staging.web.app).
 bool get _isStagingHost {
+  if (_kForceStaging && kIsWeb) return true;
   if (!kIsWeb) return false;
   final host = Uri.base.host.toLowerCase();
   return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');
@@ -104,18 +108,32 @@ String get _kFallbackAccountId {
     );
 
     // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
-    // Required for both UB and Goodwin login. See: https://firebase.google.com/docs/app-check/web/recaptcha-provider
-    if (kIsWeb) {
-      await FirebaseAppCheck.instance.activate(
-        webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
-        androidProvider: AndroidProvider.debug,
-        appleProvider: AppleProvider.debug,
-      );
-    } else {
-      await FirebaseAppCheck.instance.activate(
-        androidProvider: AndroidProvider.debug,
-        appleProvider: AppleProvider.debug,
-      );
+    // In debug mode on web we skip activation so login works without 403/throttling from
+    // App Check (e.g. when domain isn't registered or reCAPTCHA key is test key).
+    // In release, activate so production domains get tokens once configured in Firebase Console.
+    try {
+      final shouldActivateAppCheck = !(kIsWeb && kDebugMode);
+      if (shouldActivateAppCheck) {
+        if (kIsWeb) {
+          await FirebaseAppCheck.instance.activate(
+            webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
+            androidProvider: AndroidProvider.debug,
+            appleProvider: AppleProvider.debug,
+          );
+        } else {
+          await FirebaseAppCheck.instance.activate(
+            androidProvider: AndroidProvider.debug,
+            appleProvider: AppleProvider.debug,
+          );
+        }
+      } else {
+        debugPrint('Firebase App Check skipped (web debug mode) so sign-in can succeed.');
+      }
+    } catch (e, st) {
+      if (kIsWeb) {
+        debugPrint('Firebase App Check activation failed (app will continue): $e');
+        debugPrint('Stack trace: $st');
+      }
     }
 
     if (kIsWeb) {
@@ -185,7 +203,7 @@ String get _kFallbackAccountId {
           }
           if (snapshot.hasData && snapshot.data != null) {
             return const InactivityDetector(
-              timeout: Duration(minutes: 3),
+              timeout: const Duration(hours: 1),
               child: _PostAuthGate(),
             );
           }
@@ -288,12 +306,12 @@ String get _kFallbackAccountId {
           });
         }
       } on ApiException catch (e) {
-        // Handle tenant mismatch (user logging into the wrong school domain).
-        final payload = e.payload;
-        final errorCode = payload is Map ? '${payload['error'] ?? ''}'.trim() : '';
-        final isTenantMismatch = e.statusCode == 403 && errorCode == 'tenant_mismatch';
-        if (isTenantMismatch) {
+        // Any 403 on account endpoint = wrong portal (tenant mismatch). Stop at auth:
+        // show message, sign out, clear account — user must use the correct domain.
+        if (e.statusCode == 403) {
           if (!mounted) return;
+          NeyvoPulseApi.clearAccountInfoCache();
+          NeyvoPulseApi.setDefaultAccountId(null);
           final tenant = TenantScope.of(context)?.config;
           final tenantId = tenant?.tenantId ?? 'ub';
           final otherDomain = tenantId == 'goodwin' ? 'ub.neyvo.ai' : 'goodwin.neyvo.ai';
@@ -317,13 +335,10 @@ String get _kFallbackAccountId {
             ),
           );
           await FirebaseAuth.instance.signOut();
-          NeyvoPulseApi.setDefaultAccountId(null);
-          // Do not mark this gate as "loaded"; authStateChanges will
-          // rebuild the app back to PulseAuthPage after sign-out so
-          // the user never reaches PulseShell on a mismatched tenant.
+          // Do not set _loaded; authStateChanges will rebuild to PulseAuthPage.
           return;
         }
-        // For all other API errors, fall back to the legacy behavior.
+        // For other API errors: only allow UB fallback on UB tenant; never show wrong tenant data.
         final tenant = TenantScope.of(context)?.config;
         final isUbTenant = tenant == null || tenant.tenantId == 'ub';
         if (isUbTenant && _kFallbackAccountId.isNotEmpty) {

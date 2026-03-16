@@ -21,7 +21,9 @@ import 'analytics_page.dart';
 import 'executive_dashboard_page.dart';
 import 'callbacks_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
+import '../features/managed_profiles/raw_assistant_detail_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
+import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../api/spearia_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
@@ -158,7 +160,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
         if (settings.name == _managedProfileDetailRoute) {
           final profileId = settings.arguments as String? ?? '';
           return MaterialPageRoute<void>(
-            builder: (_) => ManagedProfileDetailPage(profileId: profileId, embedded: false),
+            builder: (_) => _ProfileDetailRouter(profileId: profileId),
           );
         }
         // '/' = list
@@ -179,7 +181,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       },
     );
   }
-
   @override
   void initState() {
     super.initState();
@@ -481,6 +482,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                     alignment: Alignment.centerLeft,
                     child: Builder(
                       builder: (context) {
+                        
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
                         final tenantId = (tenant?.tenantId ?? '').toLowerCase();
@@ -596,7 +598,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                           });
                           if (kIsWeb) url_helper.updateBrowserUrl(item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
-                          if (item.label == 'Numbers') _loadNumbersSummary();
+                          if (item.label == 'Lines') _loadNumbersSummary();
                         },
                       );
                     },
@@ -685,14 +687,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                if (_walletCredits != null && _walletCredits! < 500 && _walletCredits! >= 0)
+                // Low-credits banner disabled: min credits = 0 (only show if credits < 0, which never happens)
+                if (_walletCredits != null && _walletCredits! < 0)
                   Material(
-                    color: (_walletCredits! < 200 ? NeyvoColors.error : NeyvoColors.warning).withOpacity(0.15),
+                    color: NeyvoColors.warning.withOpacity(0.15),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: _walletCredits! < 200 ? NeyvoColors.error : NeyvoColors.warning, size: 22),
+                          Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning, size: 22),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -760,12 +763,12 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               margin: const EdgeInsets.only(right: 12),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: _walletCredits! < 500
+                                color: _walletCredits! < 0
                                     ? NeyvoColors.error.withOpacity(0.1)
                                     : brandPrimary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(100),
                                 border: Border.all(
-                                  color: _walletCredits! < 500
+                                  color: _walletCredits! < 0
                                       ? NeyvoColors.error.withOpacity(0.2)
                                       : brandPrimary.withOpacity(0.2),
                                 ),
@@ -773,7 +776,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               child: Text(
                                 '${_walletCredits!.toString().replaceAllMapped(RegExp(r'(\\d{1,3})(?=(\\d{3})+(?!\\d))'), (m) => '${m[1]},')} credits',
                                 style: NeyvoTextStyles.label.copyWith(
-                                  color: _walletCredits! < 500 ? NeyvoColors.error : brandPrimary,
+                                  color: _walletCredits! < 0 ? NeyvoColors.error : brandPrimary,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                 ),
@@ -1155,4 +1158,42 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     );
   }
 }
+
+/// Decide whether to show the wizard-based or raw Vapi detail page for a profile.
+class _ProfileDetailRouter extends StatelessWidget {
+  const _ProfileDetailRouter({required this.profileId});
+
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: ManagedProfileApiService.getProfile(profileId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Scaffold(
+            body: Center(
+              child: Text(
+                'Failed to load operator.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error),
+              ),
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        final isRaw = data['raw_vapi'] == true || data['schema_version'] == 3;
+        if (isRaw) {
+          return RawAssistantDetailPage(profileId: profileId, embedded: false);
+        }
+        return ManagedProfileDetailPage(profileId: profileId, embedded: false);
+      },
+    );
+  }
+}
+
 

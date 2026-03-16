@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../api/spearia_api.dart';
@@ -45,6 +47,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _promptCtrl = TextEditingController();
   final _voicemailCtrl = TextEditingController();
   final _aiSuggestMessageCtrl = TextEditingController();
+  final _vapiJsonImportController = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
@@ -81,6 +84,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _promptCtrl.dispose();
     _voicemailCtrl.dispose();
     _aiSuggestMessageCtrl.dispose();
+    _vapiJsonImportController.dispose();
     super.dispose();
   }
 
@@ -191,14 +195,14 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     try {
       final body = <String, dynamic>{
         'profile_name': _nameCtrl.text.trim(),
-        'goal': _goalCtrl.text.trim(),
+        'goal': _promptCtrl.text.trim(),
         'conversation_profile': {'tone': _tone},
         'behavior': {'interrupt_enabled': _interruptEnabled},
         'guardrails': {'handoff_enabled': _handoffEnabled},
       };
       if (_isUbOperator) {
         body['custom_system_prompt'] = _promptCtrl.text.trim();
-        body['work_goals'] = _goalCtrl.text.trim();
+        body['work_goals'] = _promptCtrl.text.trim();
         body['voicemail_message'] = _voicemailCtrl.text.trim();
         body['prompt_variables'] = _promptVariables;
         final defaults = Map<String, String>.from(_variableDefaults);
@@ -567,6 +571,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                             spacing: 10,
                             runSpacing: 10,
                             children: [
+                              _metric('Operator ID', widget.profileId),
+                              _metric('VAPI Assistant ID', (_profile['vapi_assistant_id'] ?? '—').toString()),
                               _metric('Status', _isLive ? 'Live' : 'Not attached'),
                               _metric('Numbers attached', _isLive ? '1' : '0'),
                               _metric('Last call', '—'),
@@ -638,6 +644,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
   Widget _tabPersonality() {
     final department = (_profile['department'] ?? '').toString().trim();
+    final firstMessage = (_profile['first_message'] ?? _profile['firstMessage'] ?? '').toString().trim();
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -666,23 +673,47 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 ],
                 onChanged: (v) => setState(() => _tone = (v ?? 'warm_friendly')),
               ),
+              if (firstMessage.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('First message', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                const SizedBox(height: 6),
+                Text(firstMessage, style: NeyvoTextStyles.bodyPrimary),
+              ],
               const SizedBox(height: 12),
-              Text(_isUbOperator ? 'Work goals' : 'Goal', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+              Text('System prompt', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
               const SizedBox(height: 6),
+              Text(
+                'The exact prompt synced to VAPI. Edit here and save to update the assistant.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+              ),
+              const SizedBox(height: 4),
               TextField(
-                controller: _goalCtrl,
-                maxLines: 6,
-                maxLength: 2500,
+                controller: _promptCtrl,
+                maxLines: 18,
+                maxLength: 50000,
                 decoration: const InputDecoration(
-                  hintText: 'What is this operator trying to accomplish?',
+                  hintText: 'Full voice script and behavior instructions (synced to VAPI).',
+                  alignLabelWithHint: true,
                   counterText: '',
                 ),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 2),
               Text(
-                '${_goalCtrl.text.length} / 2500',
+                '${_promptCtrl.text.length} characters',
                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              Text('Voicemail message', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _voicemailCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'What the assistant says when leaving a voicemail.',
+                  alignLabelWithHint: true,
+                ),
+                onChanged: (_) => setState(() {}),
               ),
             ],
           ),
@@ -1274,6 +1305,113 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     });
   }
 
+  /// Deep-copy a value for JSON export (maps and lists recursively, keys as string).
+  static dynamic _dynamicDeepCopy(dynamic v) {
+    if (v is Map) {
+      return (v as Map).map((k, v) => MapEntry(k.toString(), _dynamicDeepCopy(v)));
+    }
+    if (v is List) {
+      return (v as List).map(_dynamicDeepCopy).toList();
+    }
+    return v;
+  }
+
+  /// Full model object from VAPI JSON for override (includes toolIds, messages, etc.).
+  static Map<String, dynamic> _deepCopyModelMap(Map model) {
+    final result = <String, dynamic>{};
+    for (final e in model.entries) {
+      result[e.key.toString()] = _dynamicDeepCopy(e.value);
+    }
+    return result;
+  }
+
+  /// Deep copy of full assistant JSON for vapi_assistant_import (full-replace mode).
+  static Map<String, dynamic> _deepCopyJsonMap(Map data) {
+    final result = <String, dynamic>{};
+    for (final e in data.entries) {
+      result[e.key.toString()] = _dynamicDeepCopy(e.value);
+    }
+    return result;
+  }
+
+  /// Parse full VAPI assistant JSON and update this operator's system prompt and voicemail.
+  /// Import overrides all operator config from the JSON except the operator name (profile name).
+  Future<void> _importFromVapiJson() async {
+    final raw = _vapiJsonImportController.text.trim();
+    if (raw.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Paste the full VAPI assistant JSON above, then tap Import.')),
+        );
+      }
+      return;
+    }
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>?;
+      if (data == null || data.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid JSON. Paste a valid VAPI assistant object.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+      String? customSystemPrompt;
+      final messages = data['model'] is Map ? (data['model'] as Map)['messages'] : null;
+      if (messages is List) {
+        for (final m in messages) {
+          if (m is Map && (m['role'] ?? '').toString().toLowerCase() == 'system') {
+            final content = m['content']?.toString() ?? '';
+            if (content.isNotEmpty) {
+              customSystemPrompt = content;
+              break;
+            }
+          }
+        }
+      }
+      final voicemailMessage = data['voicemailMessage']?.toString().trim();
+
+      if ((customSystemPrompt ?? '').isEmpty && (voicemailMessage ?? '').isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No system prompt or voicemail found in the JSON.')),
+          );
+        }
+        setState(() => _saving = false);
+        return;
+      }
+
+      // Full-replace mode: send the entire pasted JSON so the backend uses it as the assistant config
+      // (no compose, no tier overlay). Only the operator name is kept; everything else comes from the JSON.
+      final body = <String, dynamic>{
+        'vapi_assistant_import': _deepCopyJsonMap(data),
+      };
+
+      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, body);
+      if (!mounted) return;
+      setState(() {
+        _profile = updated;
+        _saving = false;
+        _promptCtrl.text = (updated['custom_system_prompt'] ?? _promptCtrl.text).toString();
+        _voicemailCtrl.text = (updated['voicemail_message'] ?? _voicemailCtrl.text).toString();
+      });
+      _vapiJsonImportController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Full config imported. Assistant replaced with your JSON and synced to VAPI.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid JSON or failed to import: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _loadVariablePreview() async {
     final template = _voicemailCtrl.text.trim().isNotEmpty
         ? _voicemailCtrl.text.trim()
@@ -1541,8 +1679,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   }
 
   Widget _tabVoice() {
-    final sub = (_wallet?['subscription_tier'] ?? '').toString().toLowerCase();
-    final tier = _effectiveTier;
     final voiceId = _currentVoiceId;
     final currentName = _currentVoiceName;
     return ListView(
@@ -1555,12 +1691,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               Text('Voice', style: NeyvoTextStyles.heading),
               const SizedBox(height: 8),
               Text(
-                'Current tier: ${_tierDisplay(tier)}${sub.isNotEmpty ? ' · Plan: ${sub[0].toUpperCase()}${sub.substring(1)}' : ''}',
-                style: NeyvoTextStyles.bodyPrimary,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Currently using: ${voiceId.isEmpty ? 'Default (Sarah) for ${_tierDisplay(tier)}' : (currentName ?? 'Custom voice')}',
+                'Currently using: ${voiceId.isEmpty ? 'Default' : (currentName ?? 'Custom voice')}',
                 style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
               ),
               const SizedBox(height: 12),
@@ -1601,50 +1732,43 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                     final name = (v['name'] ?? '').toString().isNotEmpty
                         ? (v['name'] ?? '').toString()
                         : vid;
-                    final vtier = (v['tier'] ?? tier).toString();
                     final isSelected = voiceId.isNotEmpty && voiceId == vid;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? NeyvoColors.bgRaised.withOpacity(0.75) : NeyvoColors.bgRaised,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected ? TenantBrand.primary(context) : NeyvoColors.borderSubtle,
-                        ),
-                      ),
-                      child: ListTile(
-                        leading: Icon(
-                          isSelected ? Icons.check_circle : Icons.record_voice_over_outlined,
-                          color: isSelected ? TenantBrand.primary(context) : NeyvoColors.textSecondary,
-                        ),
-                        title: Text(
-                          name,
-                          style: NeyvoTextStyles.bodyPrimary,
-                        ),
-                        subtitle: Text(
-                          _tierDisplay(vtier),
-                          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-                        ),
-                        trailing: Wrap(
-                          spacing: 8,
-                          children: [
-                            IconButton(
-                              icon: _playingVoiceId == vid
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.play_circle_outline),
-                              tooltip: 'Play sample',
-                              onPressed: () => _playVoiceSample(v),
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: NeyvoTextStyles.bodyPrimary.copyWith(
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              ),
                             ),
-                            FilledButton.tonal(
-                              onPressed: _saving ? null : () => _selectVoice(v),
-                              child: Text(isSelected ? 'Selected' : 'Select'),
+                          ),
+                          IconButton(
+                            icon: _playingVoiceId == vid
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.play_circle_outline, size: 22),
+                            tooltip: 'Play sample',
+                            onPressed: () => _playVoiceSample(v),
+                            style: IconButton.styleFrom(
+                              foregroundColor: TenantBrand.primary(context),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 4),
+                          FilledButton.tonal(
+                            onPressed: _saving ? null : () => _selectVoice(v),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(72, 36),
+                              backgroundColor: isSelected ? TenantBrand.primary(context).withOpacity(0.2) : null,
+                            ),
+                            child: Text(isSelected ? 'Selected' : 'Select'),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -1722,8 +1846,46 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           ),
         ),
         const SizedBox(height: 24),
+        _buildImportJsonCard(),
+        const SizedBox(height: 24),
         _buildDangerZone(),
       ],
+    );
+  }
+
+  Widget _buildImportJsonCard() {
+    return NeyvoGlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Import from VAPI JSON', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 8),
+          Text(
+            'Paste the full assistant JSON from the VAPI dashboard to replace this operator\'s config (voice, prompt, first message, analysis, plans, hooks, etc.). Operator name is kept.',
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _vapiJsonImportController,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              hintText: '{"firstMessage": "...", "model": {"messages": [...]}, "voicemailMessage": "...", "voice": {...}}',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonal(
+              onPressed: _saving ? null : _importFromVapiJson,
+              child: _saving
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Import and apply to this operator'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

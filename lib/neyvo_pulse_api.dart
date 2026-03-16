@@ -22,12 +22,17 @@ class NeyvoPulseApi {
 
   static String get defaultAccountId => _defaultAccountId;
 
+  /// Clear account info cache (e.g. after 403 tenant mismatch so next load is fresh).
+  static void clearAccountInfoCache() {
+    _cachedAccountInfo = null;
+    _cachedAccountInfoAt = null;
+  }
+
   /// Set the account id from API (e.g. getAccountInfo). When empty, requests omit account_id and backend uses its default.
   static void setDefaultAccountId(String? id) {
     _defaultAccountId = (id == null || id.trim().isEmpty) ? '' : id.trim();
     // When switching accounts, clear cached per-account data.
-    _cachedAccountInfo = null;
-    _cachedAccountInfoAt = null;
+    clearAccountInfoCache();
     _cachedBillingWallet = null;
     _cachedBillingWalletAt = null;
     _cachedNumbers = null;
@@ -335,6 +340,7 @@ class NeyvoPulseApi {
     String? dueAfter,
   }) async {
     final params = <String, dynamic>{};
+    if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
     if (hasBalance != null) params['has_balance'] = hasBalance;
     if (isOverdue != null) params['is_overdue'] = isOverdue;
     if (balanceMin != null) params['balance_min'] = balanceMin;
@@ -362,6 +368,8 @@ class NeyvoPulseApi {
     String? notes,
     String? firstName,
     String? lastName,
+    String? department,
+    String? yearOfStudy,
   }) async =>
       _post('/api/pulse/students', {
         'name': name,
@@ -374,6 +382,8 @@ class NeyvoPulseApi {
         if (notes != null) 'notes': notes,
         if (firstName != null) 'first_name': firstName,
         if (lastName != null) 'last_name': lastName,
+        if (department != null) 'department': department,
+        if (yearOfStudy != null) 'year_of_study': yearOfStudy,
       });
 
   static Future<Map<String, dynamic>> updateStudent(
@@ -389,6 +399,8 @@ class NeyvoPulseApi {
     Map<String, dynamic>? customFields,
     String? firstName,
     String? lastName,
+    String? department,
+    String? yearOfStudy,
   }) async =>
       _patch('/api/pulse/students/$studentId', {
         if (name != null) 'name': name,
@@ -402,6 +414,8 @@ class NeyvoPulseApi {
         if (customFields != null) 'custom_fields': customFields,
         if (firstName != null) 'first_name': firstName,
         if (lastName != null) 'last_name': lastName,
+        if (department != null) 'department': department,
+        if (yearOfStudy != null) 'year_of_study': yearOfStudy,
       });
 
   static Future<void> deleteStudent(String studentId) async {
@@ -419,9 +433,12 @@ class NeyvoPulseApi {
   static Future<String> getStudentsImportTemplate() async =>
       SpeariaApi.getText('/api/pulse/students/import/template', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
 
-  /// POST /api/pulse/students/import/csv — send CSV content. Backend may accept JSON { csv: "..." } or multipart. Returns {imported, updated, failed, errors}.
-  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent) async =>
-      _post('/api/pulse/students/import/csv', {'csv': csvContent});
+  /// POST /api/pulse/students/import/csv — send CSV content. Optional [importName] tags the batch (e.g. "Spring 2026 Nursing Cohort") for campaign targeting.
+  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent, {String? importName}) async {
+    final body = <String, dynamic>{'csv': csvContent};
+    if (importName != null && importName.trim().isNotEmpty) body['import_name'] = importName.trim();
+    return _post('/api/pulse/students/import/csv', body);
+  }
 
   // Payments
   static Future<Map<String, dynamic>> listPayments({String? studentId}) async =>
@@ -491,20 +508,26 @@ class NeyvoPulseApi {
     );
   }
 
-  // Calls (offset = pagination: 0 = first page, then 20, 40, ... for next 20)
+  // Calls (offset = pagination). Use q to search entire call log by name or phone (substring/letter match).
   static Future<Map<String, dynamic>> listCalls({
     String? studentId,
     String? from,
     String? to,
     int? limit,
     int? offset,
+    String? q,
+    bool syncFromVapi = true,
   }) async {
     final params = <String, dynamic>{};
+    if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
     if (studentId != null) params['student_id'] = studentId;
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    if (limit != null) params['limit'] = limit.clamp(1, 500);
+    if (limit != null) params['limit'] = q != null && q.trim().isNotEmpty ? limit.clamp(1, 2000) : limit.clamp(1, 500);
     if (offset != null && offset > 0) params['offset'] = offset;
+    if (syncFromVapi) params['sync_initiated'] = '1';
+    final search = (q ?? '').trim();
+    if (search.isNotEmpty) params['q'] = search;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
   }
 
@@ -948,10 +971,10 @@ class NeyvoPulseApi {
   // Campaigns (bulk outbound calls by filters, snapshot-based execution)
   // -------------------------------------------------------------------------
 
-  /// List campaigns for the school.
-  static Future<Map<String, dynamic>> listCampaigns() async {
+  /// List campaigns for the school. Pass [limit] to control how many are returned (default 100).
+  static Future<Map<String, dynamic>> listCampaigns({int limit = 100}) async {
     try {
-      return await _get('/api/pulse/campaigns');
+      return await _get('/api/pulse/campaigns', params: {'limit': limit});
     } catch (_) {
       return {'campaigns': []};
     }
@@ -965,9 +988,17 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCampaignReport(String campaignId) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/report');
 
-  /// List calls placed for a campaign.
+  /// On-demand action items for a campaign call (OpenAI from transcript + operator goal). Returns { ok, action_items: [...] }.
+  static Future<Map<String, dynamic>> getCallActionable(String campaignId, String vapiCallId) async =>
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls/${Uri.encodeComponent(vapiCallId)}/actionable');
+
+  /// Full campaign export: name, student id, phone, status, outcome, action insights (OpenAI). May take 5–10+ seconds.
+  static Future<Map<String, dynamic>> getCampaignExport(String campaignId) async =>
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export');
+
+  /// List calls placed for a campaign (full call docs including transcript, outcome_type). Use [limit] to fetch more (e.g. 500 for "all").
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
-      _get('/api/pulse/campaigns/$campaignId/calls', params: {'limit': limit});
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls', params: {'limit': limit});
 
   /// Real-time campaign runner metrics (pool status + counters).
   static Future<Map<String, dynamic>> getCampaignMetrics(String campaignId) async =>
@@ -1192,6 +1223,24 @@ class NeyvoPulseApi {
       maxConcurrent: maxConcurrent,
       maxAttempts: maxAttempts,
       phoneNumberId: phoneNumberId,
+    );
+  }
+
+  /// Retry calls for specific students in the same campaign (e.g. voicemail / not connected).
+  /// Does not create a new campaign.
+  static Future<Map<String, dynamic>> retryCampaignCalls(
+    String campaignId,
+    List<String> studentIds, {
+    String? phoneNumberId,
+  }) async {
+    final body = <String, dynamic>{
+      'student_ids': studentIds,
+      if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
+    };
+    return SpeariaApi.postJsonMap(
+      '/api/pulse/campaigns/$campaignId/retry',
+      body: body,
+      timeout: const Duration(seconds: 60),
     );
   }
 

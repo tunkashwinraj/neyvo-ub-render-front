@@ -1,13 +1,18 @@
-// Executive Dashboard – call center KPIs (exact layout per reference image).
-// ASA = Average Speed of Answer, AHT = Average Handle Time (seconds).
-// Data from getKpiOverview / getKpiDepartmentSummary (Firestore via backend).
+// Executive Dashboard – rebuild per spec: tabs, date filter, KPIs from listCalls,
+// Live Call Activity, Call Resolution, CSAT, Recent Call Logs, Quick Actions.
+// Data from NeyvoPulseApi; 5s auto-refresh. Call Resolution donut is custom-painted.
 
+import 'dart:async';
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
 import '../neyvo_pulse_api.dart';
+import '../pulse_route_names.dart';
 import '../theme/neyvo_theme.dart';
+import 'pulse_shell.dart';
+
+enum _DateRange { today, yesterday, thisWeek, thisMonth, thisYear, custom }
 
 class ExecutiveDashboardPage extends StatefulWidget {
   const ExecutiveDashboardPage({super.key});
@@ -16,108 +21,296 @@ class ExecutiveDashboardPage extends StatefulWidget {
   State<ExecutiveDashboardPage> createState() => _ExecutiveDashboardPageState();
 }
 
-class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
+class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with SingleTickerProviderStateMixin {
+  int _selectedTabIndex = 0;
+  _DateRange _dateRange = _DateRange.thisWeek;
+  DateTime? _customFrom;
+  DateTime? _customTo;
   bool _loading = true;
+  bool _refreshing = false;
   String? _error;
-  Map<String, dynamic>? _overview;
-  List<Map<String, dynamic>> _departments = [];
-  int _selectedYear = DateTime.now().year;
-  List<int> _selectedMonths = [DateTime.now().month];
-  List<String> _selectedDepartments = [];
+
+  List<Map<String, dynamic>> _calls = [];
+  List<Map<String, dynamic>> _priorCalls = [];
+  List<Map<String, dynamic>> _recentCalls = [];
+
+  String? _runningCampaignId;
+  List<Map<String, dynamic>> _campaignItems = [];
+  Map<String, dynamic>? _campaignMetrics;
+
+  Map<String, dynamic>? _successSummary;
+  Map<String, dynamic>? _health;
+  Map<String, dynamic>? _ubStatus;
+  Map<String, dynamic>? _accountInfo;
+  int _activeOperatorsCount = 0;
+
+  Timer? _refreshTimer;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
     _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
   }
 
-  String get _fromDate {
-    if (_selectedMonths.isEmpty) return '';
-    final m = _selectedMonths.reduce((a, b) => a < b ? a : b);
-    return '$_selectedYear-${m.toString().padLeft(2, '0')}-01';
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _pulseController.dispose();
+    super.dispose();
   }
 
-  String get _toDate {
-    if (_selectedMonths.isEmpty) return '';
-    final m = _selectedMonths.reduce((a, b) => a > b ? a : b);
-    final lastDay = DateTime(_selectedYear, m + 1, 0).day;
-    return '$_selectedYear-${m.toString().padLeft(2, '0')}-${lastDay.toString().padLeft(2, '0')}';
+  String get _fromIso {
+    final now = DateTime.now();
+    switch (_dateRange) {
+      case _DateRange.today:
+        return _dayStartEnd(now).start;
+      case _DateRange.yesterday:
+        final y = now.subtract(const Duration(days: 1));
+        return _dayStartEnd(y).start;
+      case _DateRange.thisWeek:
+        final monday = now.subtract(Duration(days: now.weekday - 1));
+        return _dayStartEnd(monday).start;
+      case _DateRange.thisMonth:
+        return _dayStartEnd(DateTime(now.year, now.month, 1)).start;
+      case _DateRange.thisYear:
+        return _dayStartEnd(DateTime(now.year, 1, 1)).start;
+      case _DateRange.custom:
+        if (_customFrom != null) return _toIsoDate(_customFrom!);
+        return _dayStartEnd(now).start;
+    }
+  }
+
+  String get _toIso {
+    final now = DateTime.now();
+    switch (_dateRange) {
+      case _DateRange.today:
+        return _dayStartEnd(now).end;
+      case _DateRange.yesterday:
+        final y = now.subtract(const Duration(days: 1));
+        return _dayStartEnd(y).end;
+      case _DateRange.thisWeek:
+      case _DateRange.thisMonth:
+      case _DateRange.thisYear:
+        return _dayStartEnd(now).end;
+      case _DateRange.custom:
+        if (_customTo != null) return _toIsoDateEndOfDay(_customTo!);
+        return _dayStartEnd(now).end;
+    }
+  }
+
+  ({String start, String end}) _dayStartEnd(DateTime d) {
+    final start = DateTime(d.year, d.month, d.day, 0, 0, 0);
+    final end = DateTime(d.year, d.month, d.day, 23, 59, 59);
+    return (start: start.toIso8601String(), end: end.toIso8601String());
+  }
+
+  String _toIsoDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T00:00:00';
+  String _toIsoDateEndOfDay(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T23:59:59';
+
+  ({String from, String to}) _priorRange() {
+    final now = DateTime.now();
+    switch (_dateRange) {
+      case _DateRange.today:
+        final y = now.subtract(const Duration(days: 1));
+        final p = _dayStartEnd(y);
+        return (from: p.start, to: p.end);
+      case _DateRange.yesterday:
+        final y = now.subtract(const Duration(days: 2));
+        final p = _dayStartEnd(y);
+        return (from: p.start, to: p.end);
+      case _DateRange.thisWeek:
+        final monday = now.subtract(Duration(days: now.weekday - 1));
+        final prevMonday = monday.subtract(const Duration(days: 7));
+        return (from: _dayStartEnd(prevMonday).start, to: _dayStartEnd(prevMonday.add(const Duration(days: 6))).end);
+      case _DateRange.thisMonth:
+        final prev = DateTime(now.year, now.month - 1, 1);
+        final lastPrev = DateTime(now.year, now.month, 0);
+        return (from: _dayStartEnd(prev).start, to: _dayStartEnd(lastPrev).end);
+      case _DateRange.thisYear:
+        return (from: _dayStartEnd(DateTime(now.year - 1, 1, 1)).start, to: _dayStartEnd(DateTime(now.year - 1, 12, 31)).end);
+      case _DateRange.custom:
+        return (from: _fromIso, to: _toIso);
+    }
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    await _fetchAll();
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _refresh() async {
+    if (_loading || _selectedTabIndex != 0) return;
+    if (!mounted) return;
+    setState(() => _refreshing = true);
+    await _fetchAll();
+    if (mounted) setState(() => _refreshing = false);
+  }
+
+  Future<void> _fetchAll() async {
+    final from = _fromIso;
+    final to = _toIso;
+    final prior = _priorRange();
     try {
-      final from = _fromDate;
-      final to = _toDate;
       final results = await Future.wait([
-        NeyvoPulseApi.getKpiOverview(from: from.isEmpty ? null : from, to: to.isEmpty ? null : to),
-        NeyvoPulseApi.getKpiDepartmentSummary(from: from.isEmpty ? null : from, to: to.isEmpty ? null : to),
+        NeyvoPulseApi.getAnalyticsComms(from: from, to: to),
+        NeyvoPulseApi.listCalls(from: from, to: to, limit: 500),
+        NeyvoPulseApi.listCalls(from: prior.from, to: prior.to, limit: 500),
+        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to),
+        NeyvoPulseApi.listCalls(limit: 5),
+        _loadCampaignData(),
+        NeyvoPulseApi.health(),
+        NeyvoPulseApi.getUbStatus(),
+        NeyvoPulseApi.getAccountInfo(),
+        _loadOperatorsCount(),
       ]);
       if (!mounted) return;
-      final ov = results[0] as Map<String, dynamic>;
-      final deptRes = results[1] as Map<String, dynamic>;
+      final callsRes = results[1] as Map<String, dynamic>;
+      final priorRes = results[2] as Map<String, dynamic>;
+      final successRes = results[3] as Map<String, dynamic>;
+      final recentRes = results[4] as Map<String, dynamic>;
+      // ignore: unnecessary_cast - record type from Future.wait
+      final campaignData = results[5] as ({String? id, List<Map<String, dynamic>> items, Map<String, dynamic>? metrics});
+      final health = results[6] as Map<String, dynamic>?;
+      final ubStatus = results[7] as Map<String, dynamic>?;
+      final accountInfo = results[8] as Map<String, dynamic>?;
+      final operatorsCount = results[9] as int;
+
+      final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final priorCalls = (priorRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final recent = (recentRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+
       setState(() {
-        _overview = ov['ok'] == true ? ov : null;
-        _departments = (deptRes['departments'] as List<dynamic>?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList() ?? [];
-        _loading = false;
-        _error = ov['ok'] != true ? (ov['error'] ?? 'Failed to load') : null;
+        _error = null;
+        _calls = calls;
+        _priorCalls = priorCalls;
+        _recentCalls = recent;
+        _successSummary = successRes != null && successRes['ok'] == true ? Map<String, dynamic>.from(successRes) : null;
+        _health = health != null ? Map<String, dynamic>.from(health) : null;
+        _ubStatus = ubStatus != null ? Map<String, dynamic>.from(ubStatus) : null;
+        _accountInfo = accountInfo != null ? Map<String, dynamic>.from(accountInfo) : null;
+        _runningCampaignId = campaignData.id;
+        _campaignItems = campaignData.items;
+        _campaignMetrics = campaignData.metrics;
+        _activeOperatorsCount = operatorsCount;
       });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() => _error = e.toString());
     }
+  }
+
+  Future<({String? id, List<Map<String, dynamic>> items, Map<String, dynamic>? metrics})> _loadCampaignData() async {
+    try {
+      final res = await NeyvoPulseApi.listCampaigns();
+      final campaigns = (res['campaigns'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final running = campaigns.cast<Map<String, dynamic>?>().where((c) {
+        final s = (c!['status'] as String?)?.toLowerCase() ?? '';
+        return s == 'running' || s == 'active';
+      }).toList();
+      if (running.isEmpty) return (id: null, items: <Map<String, dynamic>>[], metrics: null);
+      final c = running.first as Map<String, dynamic>;
+      final id = c['id'] as String?;
+      if (id == null) return (id: null, items: <Map<String, dynamic>>[], metrics: null);
+      final itemsRes = await NeyvoPulseApi.getCampaignCallItems(id, limit: 500);
+      final metricsRes = await NeyvoPulseApi.getCampaignMetrics(id);
+      final items = (itemsRes['items'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final metrics = metricsRes['metrics'] as Map<String, dynamic>?;
+      return (id: id, items: items, metrics: metrics != null ? Map<String, dynamic>.from(metrics) : null);
+    } catch (_) {
+      return (id: null, items: <Map<String, dynamic>>[], metrics: null);
+    }
+  }
+
+  Future<int> _loadOperatorsCount() async {
+    try {
+      final res = await NeyvoPulseApi.listAgents();
+      final list = (res['agents'] as List?) ?? [];
+      int n = 0;
+      for (final a in list) {
+        final m = a is Map ? Map<String, dynamic>.from(a as Map) : null;
+        if (m != null && ((m['status'] as String?) ?? '').toLowerCase() == 'active') n++;
+      }
+      return n;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  void _applyCustomRange(DateTime from, DateTime to) {
+    setState(() {
+      _customFrom = from;
+      _customTo = to;
+      _dateRange = _DateRange.custom;
+      _load();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NeyvoColors.bgBase,
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
+      body: _selectedTabIndex == 0
+          ? CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTabs(),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    child: _buildMainContent(),
+                  ),
+                ),
+              ],
+            )
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildTabs(),
-                  const SizedBox(height: 20),
-                  if (_loading)
-                    const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()))
-                  else if (_error != null)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(_error!, style: TextStyle(color: NeyvoTheme.error)),
-                      ),
-                    )
-                  else
-                    _buildContent(),
+                  const SizedBox(height: 12),
+                  _buildComingSoon(),
                 ],
               ),
             ),
-          ),
-          _buildFiltersPanel(),
-        ],
-      ),
     );
   }
 
   Widget _buildTabs() {
-    const tabs = ['Executive Dashboard', 'Department Performance', 'Team Performance', 'Weekly Performance'];
+    const tabs = ['Executive Dashboard', 'Department Performance', 'Weekly Performance'];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: List.generate(tabs.length, (i) {
-          final active = i == 0;
+          final active = _selectedTabIndex == i;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {},
+                onTap: () => setState(() => _selectedTabIndex = i),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -141,322 +334,650 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
     );
   }
 
-  Widget _buildFiltersPanel() {
-    final deptNames = _departments
-        .map((d) => d['department_name'] as String? ?? '')
-        .where((s) => s.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    if (deptNames.isEmpty) {
-      deptNames.addAll(['Air Conditioner', 'Fridge', 'Microwave Oven', 'Television', 'Toaster', 'Washing Machine']);
-    }
+  static const double _kFilterBarHeight = 52;
+
+  /// Fixed height for all three KPI cards (Live Call Activity, Call Resolution, CSAT)
+  /// so they stay aligned and same size; content scrolls inside if needed.
+  static const double _kTopPanelHeight = 340;
+
+  Widget _buildDateFilterBar() {
+    final labels = {
+      _DateRange.today: 'Today',
+      _DateRange.yesterday: 'Yesterday',
+      _DateRange.thisWeek: 'This Week',
+      _DateRange.thisMonth: 'This Month',
+      _DateRange.thisYear: 'This Year',
+      _DateRange.custom: 'Custom',
+    };
     return Container(
-      width: 260,
+      height: _kFilterBarHeight,
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: NeyvoColors.bgRaised,
-        border: Border(left: BorderSide(color: NeyvoTheme.borderSubtle)),
+        border: Border(bottom: BorderSide(color: NeyvoTheme.borderSubtle)),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Filters', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 16),
-            Text('Year', style: NeyvoTextStyles.label),
-            const SizedBox(height: 4),
-            DropdownButton<int>(
-              value: _selectedYear,
-              isExpanded: true,
-              items: [
-                for (int y = DateTime.now().year; y >= DateTime.now().year - 5; y--)
-                  DropdownMenuItem(value: y, child: Text('$y')),
-              ],
-              onChanged: (v) => setState(() { _selectedYear = v ?? DateTime.now().year; _load(); }),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final e in _DateRange.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: TextButton(
+                        onPressed: e == _DateRange.custom
+                            ? () async {
+                                final from = _customFrom ?? DateTime.now();
+                                final to = _customTo ?? DateTime.now();
+                                final picked = await showDialog<({DateTime from, DateTime to})>(
+                                  context: context,
+                                  builder: (ctx) => _CustomDateRangeDialog(initialFrom: from, initialTo: to),
+                                );
+                                if (picked != null && mounted) _applyCustomRange(picked.from, picked.to);
+                              }
+                            : () => setState(() {
+                                  _dateRange = e;
+                                  _load();
+                                }),
+                        style: TextButton.styleFrom(
+                          foregroundColor: _dateRange == e ? NeyvoColors.ubLightBlue : NeyvoTheme.textSecondary,
+                        ),
+                        child: Text(labels[e]!),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Text('Month Name', style: NeyvoTextStyles.label),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: List.generate(12, (i) {
-                final m = i + 1;
-                final selected = _selectedMonths.contains(m);
-                final label = DateFormat('MMM-yy').format(DateTime(_selectedYear, m));
-                return FilterChip(
-                  label: Text(label, style: const TextStyle(fontSize: 11)),
-                  selected: selected,
-                  onSelected: (v) {
-                    setState(() {
-                      if (v) _selectedMonths = [..._selectedMonths, m]..sort();
-                      else _selectedMonths = _selectedMonths.where((x) => x != m).toList();
-                      _load();
-                    });
-                  },
-                );
-              }),
-            ),
-            const SizedBox(height: 16),
-            Text('Department', style: NeyvoTextStyles.label),
-            const SizedBox(height: 8),
-            ...deptNames.take(20).map((name) {
-              final selected = _selectedDepartments.isEmpty || _selectedDepartments.contains(name);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: CheckboxListTile(
-                  value: selected,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  title: Text(name, style: NeyvoTextStyles.micro),
-                  onChanged: (v) {
-                    setState(() {
-                      if (v == true) _selectedDepartments = [..._selectedDepartments, name];
-                      else _selectedDepartments = _selectedDepartments.where((x) => x != name).toList();
-                      _load();
-                    });
-                  },
+          ),
+          if (_refreshing)
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: 12),
+          _LiveBadge(pulse: _pulseController),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopPanel({
+    required Widget child,
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+  }) {
+    return SizedBox(
+      height: _kTopPanelHeight,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: NeyvoTheme.borderSubtle),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+          child: Column(
+            crossAxisAlignment: crossAxisAlignment,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: child,
                 ),
-              );
-            }),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildContent() {
-    final o = _overview ?? {};
-    final totalCalls = (o['total_calls'] as num?)?.toInt() ?? 0;
-    final callsAnswered = (o['calls_answered'] as num?)?.toInt() ?? 0;
-    final abandonRate = (o['abandon_rate_pct'] as num?)?.toDouble() ?? 0.0;
-    final asaSec = (o['asa_sec'] as num?)?.toInt() ?? 0;
-    final ahtSec = (o['aht_sec'] as num?)?.toInt() ?? 0;
-    final callsResolved = (o['calls_resolved'] as num?)?.toInt() ?? 0;
-    final resolutionPct = (o['resolution_rate_pct'] as num?)?.toDouble() ?? 0.0;
-    final npsScore = (o['nps_score'] as num?)?.toDouble() ?? 0.0;
-    final avgCsat = (o['avg_csat'] as num?)?.toDouble() ?? 0.0;
-    final pctPromoters = (o['pct_promoters'] as num?)?.toDouble() ?? 0.0;
-    final pctDetractors = (o['pct_detractors'] as num?)?.toDouble() ?? 0.0;
-    final pctPassives = (o['pct_passives'] as num?)?.toDouble() ?? 0.0;
+  Widget _buildMainContent() {
+    if (_loading) {
+      return const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
+    }
+    if (_error != null) {
+      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: TextStyle(color: NeyvoTheme.error))));
+    }
+    return _buildExecutiveContent();
+  }
 
+  Widget _buildComingSoon() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(48),
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+            child: Text('Coming soon', style: NeyvoTextStyles.heading.copyWith(color: NeyvoTheme.textMuted)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExecutiveContent() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildKpiRow(
-          totalCalls: totalCalls,
-          callsAnswered: callsAnswered,
-          abandonRate: abandonRate,
-          asaSec: asaSec,
-          ahtSec: ahtSec,
+        // Two rows, two columns: [Quick Actions | Live Call Activity], [Call Resolution | CSAT]
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 800;
+            if (narrow) {
+              return Column(
+                children: [
+                  _buildQuickActionsPanel(),
+                  const SizedBox(height: 16),
+                  _buildLiveCallActivityPanel(),
+                  const SizedBox(height: 16),
+                  _buildCallResolutionPanel(),
+                  const SizedBox(height: 16),
+                  _buildCsatPanel(),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildQuickActionsPanel()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildLiveCallActivityPanel()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildCallResolutionPanel()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildCsatPanel()),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildNpsSection(npsScore, pctPromoters, pctPassives, pctDetractors)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildCallResolutions(totalCalls, callsAnswered, callsResolved, resolutionPct)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildCsatSection(avgCsat)),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildNpsByDept()),
-            const SizedBox(width: 16),
-            Expanded(child: _buildCallsHandledResolutionByDept()),
-            const SizedBox(width: 16),
-            Expanded(child: _buildAbandonRateByDept()),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 700;
+            if (narrow) {
+              return Column(
+                children: [
+                  _buildRecentCallLogsPanel(),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildRecentCallLogsPanel()),
+              ],
+            );
+          },
         ),
       ],
     );
   }
 
+  ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) _computeKpis(List<Map<String, dynamic>> calls) {
+    int total = calls.length;
+    final answeredList = calls.where((c) {
+      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+      return o == 'answered' || o == 'completed' || o == 'goal_achieved' || o == 'success';
+    }).toList();
+    int answered = answeredList.length;
+    int abandoned = calls.where((c) {
+      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+      return o == 'dropped' || o == 'no_answer';
+    }).length;
+
+    int? asaSec;
+    int? ahtSec;
+    int asaSum = 0;
+    int ahtSum = 0;
+    int asaCount = 0;
+    for (final c in answeredList) {
+      final start = _parseDate(c['created_at'] ?? c['start_time'] ?? c['date']);
+      final answer = _parseDate(c['answered_at'] ?? c['answer_time']);
+      if (start != null && answer != null) {
+        asaSum += answer.difference(start).inSeconds;
+        asaCount++;
+      }
+      final dur = c['duration_seconds'] ?? c['duration_sec'];
+      if (dur != null) {
+        final s = dur is int ? dur : int.tryParse(dur.toString());
+        if (s != null) ahtSum += s;
+      }
+    }
+    if (asaCount > 0) asaSec = (asaSum / asaCount).round();
+    if (answeredList.isNotEmpty && ahtSum > 0) ahtSec = (ahtSum / answeredList.length).round();
+
+    return (total: total, answered: answered, abandoned: abandoned, asaSec: asaSec, ahtSec: ahtSec);
+  }
+
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    return null;
+  }
+
+  static String _formatDuration(dynamic call) {
+    final sec = call['duration_seconds'] ?? call['duration_sec'];
+    if (sec != null) {
+      final s = sec is int ? sec : int.tryParse(sec.toString()) ?? 0;
+      if (s < 60) return '${s}s';
+      final m = s ~/ 60;
+      final r = s % 60;
+      return r > 0 ? '${m}m ${r}s' : '${m}m';
+    }
+    final d = call['duration']?.toString();
+    return d?.isNotEmpty == true ? d! : '—';
+  }
+
   Widget _buildKpiRow({
-    required int totalCalls,
-    required int callsAnswered,
-    required double abandonRate,
-    required int asaSec,
-    required int ahtSec,
+    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) kpi,
+    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) priorKpi,
   }) {
-    const double kMinCardWidth = 160;
+    final total = kpi.total;
+    final answerRate = total > 0 ? (kpi.answered / total * 100) : 0.0;
+    final abandonRate = total > 0 ? (kpi.abandoned / total * 100) : 0.0;
+
+    String trendTotal = '';
+    if (priorKpi.total > 0) {
+      final d = kpi.total - priorKpi.total;
+      trendTotal = d >= 0 ? '+$d' : '$d';
+    }
+    String trendAnswered = '';
+    if (priorKpi.total > 0) {
+      final pctNow = total > 0 ? (kpi.answered / total * 100) : 0.0;
+      final pctPrev = priorKpi.answered / priorKpi.total * 100;
+      final d = pctNow - pctPrev;
+      trendAnswered = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAbandon = '';
+    if (priorKpi.total > 0 && total > 0) {
+      final pctNow = kpi.abandoned / total * 100;
+      final pctPrev = priorKpi.abandoned / priorKpi.total * 100;
+      final d = pctNow - pctPrev;
+      trendAbandon = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
+    }
+    String trendAsa = '';
+    if (kpi.asaSec != null && priorKpi.asaSec != null) {
+      final d = kpi.asaSec! - priorKpi.asaSec!;
+      trendAsa = d >= 0 ? '+${d}s' : '${d}s';
+    }
+    String trendAht = '';
+    if (kpi.ahtSec != null && priorKpi.ahtSec != null) {
+      final d = kpi.ahtSec! - priorKpi.ahtSec!;
+      trendAht = d >= 0 ? '+${d}s' : '${d}s';
+    }
+
     final cards = [
-      _KpiCard(title: 'Total Calls', value: NumberFormat('#,###').format(totalCalls), icon: Icons.phone_outlined, color: const Color(0xFFE6A800)),
-      _KpiCard(title: 'Calls Answered', value: NumberFormat('#,###').format(callsAnswered), icon: Icons.person_outline, color: const Color(0xFF7B4FA8)),
-      _KpiCard(title: 'Abandon Rate', value: '${abandonRate.toStringAsFixed(1)}%', icon: Icons.phone_disabled_outlined, color: const Color(0xFFE91E8C)),
+      _KpiCard(
+        title: 'TOTAL CALLS',
+        value: total > 0 ? NumberFormat('#,###').format(total) : '--',
+        trend: trendTotal,
+        topBorderColor: Colors.blue,
+        icon: Icons.phone_outlined,
+        iconColor: Colors.blue,
+      ),
+      _KpiCard(
+        title: 'CALLS ANSWERED',
+        value: total > 0 ? NumberFormat('#,###').format(kpi.answered) : '--',
+        subtitle: total > 0 ? '${answerRate.toStringAsFixed(1)}%' : null,
+        trend: trendAnswered,
+        topBorderColor: Colors.green,
+        icon: Icons.check_circle_outline,
+        iconColor: Colors.green,
+      ),
+      _KpiCard(
+        title: 'ABANDON CALLS',
+        value: total > 0 ? NumberFormat('#,###').format(kpi.abandoned) : '--',
+        subtitle: total > 0 ? '${abandonRate.toStringAsFixed(1)}%' : null,
+        trend: trendAbandon,
+        topBorderColor: Colors.red,
+        icon: Icons.phone_disabled_outlined,
+        iconColor: Colors.red,
+      ),
       _KpiCard(
         title: 'ASA (Sec)',
-        value: '$asaSec',
+        value: kpi.asaSec != null ? '${kpi.asaSec}' : '--',
+        trend: trendAsa,
+        topBorderColor: Colors.orange,
         icon: Icons.timer_outlined,
-        color: const Color(0xFF4CAF50),
-        subtitle: 'Average Speed to Answer',
+        iconColor: Colors.orange,
+        tooltip: 'Average Speed of Answer',
       ),
       _KpiCard(
         title: 'AHT (Sec)',
-        value: '$ahtSec',
-        icon: Icons.schedule_outlined,
-        color: const Color(0xFFFF9800),
-        subtitle: 'Average Handle Time',
+        value: kpi.ahtSec != null ? '${kpi.ahtSec}' : '--',
+        trend: trendAht,
+        topBorderColor: Colors.purple,
+        icon: Icons.headset_outlined,
+        iconColor: Colors.purple,
+        tooltip: 'Average Handle Time',
       ),
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return IntrinsicHeight(
       child: Row(
-        children: cards.map((c) => SizedBox(
-          width: kMinCardWidth,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: c,
+        children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[1]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[2]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[3]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[4]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveCallActivityPanel() {
+    final total = _campaignMetrics?['total_planned'] != null
+        ? (_campaignMetrics!['total_planned'] is int ? _campaignMetrics!['total_planned'] as int : int.tryParse(_campaignMetrics!['total_planned'].toString()) ?? _campaignItems.length)
+        : _campaignItems.isEmpty ? 0 : _campaignItems.length;
+    final queue = _campaignItems.where((e) => ((e['status'] as String?) ?? '').toLowerCase() == 'queued').length;
+    final ongoing = _campaignItems.where((e) {
+      final s = ((e['status'] as String?) ?? '').toLowerCase();
+      return s == 'in_progress' || s == 'dialing';
+    }).length;
+    final unanswered = _campaignItems.where((e) {
+      final o = ((e['outcome'] as String?) ?? '').toLowerCase();
+      return o == 'no_answer' || o == 'voicemail';
+    }).length;
+    final scheduled = _campaignItems.where((e) {
+      final s = ((e['status'] as String?) ?? '').toLowerCase();
+      return s == 'scheduled' || s.contains('callback');
+    }).length;
+    final failed = _campaignItems.where((e) {
+      final s = ((e['status'] as String?) ?? '').toLowerCase();
+      final o = ((e['outcome'] as String?) ?? '').toLowerCase();
+      return s == 'failed' || o == 'failed';
+    }).length;
+
+    final totalForBars = total > 0 ? total : 1;
+    final completion = total > 0 ? ((total - queue - ongoing) / total * 100) : 0.0;
+    String estimatedRemaining = '—';
+    if (_campaignMetrics != null && total > 0 && (queue + ongoing) > 0) {
+      final throughput = (_campaignMetrics!['throughput_per_minute'] as num?)?.toDouble();
+      if (throughput != null && throughput > 0) {
+        final remaining = (queue + ongoing).toDouble() / throughput;
+        estimatedRemaining = '~${remaining.round()} min';
+      }
+    }
+
+    final hasRunningCampaign = _runningCampaignId != null || _campaignItems.isNotEmpty;
+    final semanticColors = [
+      Colors.indigo,
+      Colors.amber,
+      Colors.green,
+      Colors.red,
+      Colors.purple,
+      Colors.grey.shade700,
+    ];
+    const rainbowColors = [
+      Color(0xFFE53935),
+      Color(0xFFFB8C00),
+      Color(0xFFFDD835),
+      Color(0xFF43A047),
+      Color(0xFF1E88E5),
+      Color(0xFF8E24AA),
+    ];
+    final rowColors = hasRunningCampaign ? semanticColors : rainbowColors;
+
+    final rows = [
+      ('Total Contacts', total, rowColors[0]),
+      ('In Queue', queue, rowColors[1]),
+      ('On-going / Talking', ongoing, rowColors[2]),
+      ('Unanswered / VM', unanswered, rowColors[3]),
+      ('Scheduled / Callback', scheduled, rowColors[4]),
+      ('Failed', failed, rowColors[5]),
+    ];
+
+    final completionStr = total > 0 ? '${completion.toStringAsFixed(0)}%' : '0%';
+    final estRemainingParts = estimatedRemaining.startsWith('~')
+        ? (estimatedRemaining.split(' ')..removeWhere((s) => s.isEmpty))
+        : <String>[];
+    final estRemainingValue = estRemainingParts.isNotEmpty ? estRemainingParts[0] : estimatedRemaining;
+    final estRemainingUnit = estRemainingParts.length > 1 ? estRemainingParts[1] : '';
+
+    return _buildTopPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Live Call Activity', style: NeyvoTextStyles.heading),
+                    const SizedBox(height: 4),
+                    Text('Current campaign progress', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  ],
+                ),
+                if (_refreshing)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(color: Colors.green.shade700, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('Updating', style: NeyvoTextStyles.micro.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        )).toList(),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: NeyvoTheme.borderSubtle),
+          const SizedBox(height: 12),
+          if (!hasRunningCampaign)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('No campaign is currently running.', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted)),
+            ),
+          ...rows.map((r) => _LiveBarRow(label: r.$1, count: r.$2, pct: totalForBars > 0 ? (r.$2 / totalForBars) : 0, color: r.$3)),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: NeyvoTheme.borderSubtle),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Completion:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  const SizedBox(height: 2),
+                  Text(completionStr, style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.ubPurple, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('Est. remaining:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                  const SizedBox(height: 2),
+                  Text(estRemainingValue, style: NeyvoTextStyles.label.copyWith(fontWeight: FontWeight.w700)),
+                  if (estRemainingUnit.isNotEmpty)
+                    Text(estRemainingUnit, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
+      crossAxisAlignment: CrossAxisAlignment.start,
     );
   }
 
-  Widget _buildNpsSection(double npsScore, double pctPromoters, double pctPassives, double pctDetractors) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Net Promoter Score', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            _SemiGauge(value: npsScore, min: -100, max: 100),
-            const SizedBox(height: 8),
-            Text(npsScore.toStringAsFixed(1), style: NeyvoTextStyles.display.copyWith(fontSize: 24)),
-            const SizedBox(height: 12),
-            Row(
+  Widget _buildCallResolutionPanel() {
+    final total = _calls.length;
+    final succeeded = _calls.where((c) {
+      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+      return o == 'answered' || o == 'completed' || o == 'goal_achieved' || o == 'success';
+    }).length;
+    int resolved;
+    final summary = _successSummary?['success_summary'] as Map<String, dynamic>?;
+    if (summary != null && summary['calls_with_payment_received'] != null) {
+      final v = summary['calls_with_payment_received'];
+      resolved = (v is int ? v : int.tryParse(v.toString()) ?? 0).clamp(0, total);
+    } else {
+      resolved = _calls.where((c) {
+        final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
+        return o == 'goal_achieved' || (c['success_metric'] ?? '').toString().toLowerCase() == 'payment_received';
+      }).length;
+    }
+
+    // Fallback: if we have succeeded calls but no explicit "resolved" signal,
+    // treat all succeeded calls as resolved so the resolution rate matches success rate.
+    if (resolved == 0 && succeeded > 0) {
+      resolved = succeeded;
+    }
+
+    final unresolved = total - succeeded;
+    final resolutionPct = total > 0 ? (resolved / total * 100) : 0.0;
+    final succeededNotResolved = succeeded - resolved;
+
+    return _buildTopPanel(
+      child: Column(
+        children: [
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(child: _StackedBarSegment(label: '% Detractors', pct: pctDetractors, color: Colors.red)),
-                const SizedBox(width: 4),
-                Expanded(child: _StackedBarSegment(label: '% Passives', pct: pctPassives, color: Colors.orange)),
-                const SizedBox(width: 4),
-                Expanded(child: _StackedBarSegment(label: '% Promoters', pct: pctPromoters, color: Colors.green)),
+                Text('Call Resolution', style: NeyvoTextStyles.heading),
+                const SizedBox(height: 4),
+                Text('Success rate by outcome', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCallResolutions(int totalCalls, int callsAnswered, int callsResolved, double resolutionPct) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Call Resolutions %', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
+          ),
+          const SizedBox(height: 12),
+          _ResolutionBar(label: 'Calls Received', value: total, total: total, color: Colors.orange),
+          _ResolutionBar(label: 'Calls Succeeded', value: succeeded, total: total, color: Colors.purple),
+          _ResolutionBar(label: 'Resolution Count', value: resolved, total: total, color: Colors.blue),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ResolutionDonutChart(
+                resolutionPct: resolutionPct,
+                succeededNotResolvedPct: total > 0 ? (succeededNotResolved / total * 100) : 0.0,
+                unresolvedPct: total > 0 ? ((total - succeeded) / total * 100).clamp(0.0, 100.0) : 100.0,
+              ),
+              const SizedBox(width: 28),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _ResolutionBar(label: 'Call Received', value: totalCalls, color: const Color(0xFFE6A800)),
-                      _ResolutionBar(label: 'Call Answered', value: callsAnswered, total: totalCalls, color: const Color(0xFF7B4FA8)),
-                      _ResolutionBar(label: 'Call Resolutions', value: callsResolved, total: totalCalls, color: const Color(0xFF5E35B1)),
+                      _LegendRow('Received', total, Colors.orange),
+                      _LegendRow('Succeeded', succeeded, Colors.purple),
+                      _LegendRow('Resolved', resolved, Colors.blue),
+                      _LegendRow('Unresolved', unresolved, Colors.grey),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 80,
-                  height: 80,
-                  child: PieChart(
-                    PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 24,
-                      sections: [
-                        PieChartSectionData(value: resolutionPct, color: NeyvoColors.ubLightBlue, showTitle: false),
-                        PieChartSectionData(value: 100 - resolutionPct, color: Colors.grey.shade300, showTitle: false),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('${resolutionPct.toStringAsFixed(1)}% resolution', style: NeyvoTextStyles.label),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCsatSection(double avgCsat) {
-    final depts = _departments.take(6).toList();
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Customer Satisfaction Score', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            _SemiGauge(value: avgCsat, min: 1, max: 5),
-            Text(avgCsat.toStringAsFixed(1), style: NeyvoTextStyles.display.copyWith(fontSize: 24)),
-            const SizedBox(height: 16),
-            if (depts.isNotEmpty) ...[
-              Text('Customer Satisfaction Score by Department', style: NeyvoTextStyles.label),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 120,
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: 5.5,
-                    barTouchData: BarTouchData(enabled: false),
-                    titlesData: FlTitlesData(
-                      show: true,
-                      bottomTitles: AxisTitles(sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (v, meta) => Text(
-                          depts.length > v.toInt() ? (depts[v.toInt()]['department_name'] as String? ?? '').replaceAll(' ', '\n') : '',
-                          style: const TextStyle(fontSize: 9),
-                        ),
-                      )),
-                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    gridData: FlGridData(show: false),
-                    borderData: FlBorderData(show: false),
-                    barGroups: List.generate(depts.length, (i) {
-                      final v = (depts[i]['avg_csat'] as num?)?.toDouble() ?? 0.0;
-                      return BarChartGroupData(x: i, barRods: [
-                        BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
-                      ], showingTooltipIndicators: []);
-                    }),
                   ),
                 ),
               ),
             ],
-          ],
-        ),
+          ),
+        ],
       ),
+      crossAxisAlignment: CrossAxisAlignment.center,
     );
   }
 
-  Widget _buildNpsByDept() {
-    final depts = _departments.take(8).toList();
-    if (depts.isEmpty) return _emptyChartCard('NPS By Department');
+  Widget _buildCsatPanel() {
+    return _buildTopPanel(
+      child: Column(
+        children: [
+          Text('Customer Satisfaction Score', style: NeyvoTextStyles.heading),
+          const SizedBox(height: 4),
+          Text('CSAT · Based on post-call surveys', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 160,
+            height: 90,
+            child: CustomPaint(
+              painter: _HalfDoughnutPainter(
+                value: null,
+                noDataColors: [
+                  Colors.green,
+                  Colors.green.shade700,
+                  Colors.yellow.shade700,
+                  Colors.red,
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('—', style: NeyvoTextStyles.title.copyWith(fontSize: 20)),
+                    Text('awaiting data', style: NeyvoTextStyles.micro),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: [
+              _CsatLegendItem('Satisfied (5★)', Colors.green),
+              _CsatLegendItem('Good (4★)', Colors.green.shade700),
+              _CsatLegendItem('Neutral (3★)', Colors.yellow.shade700),
+              _CsatLegendItem('Poor (1-2★)', Colors.red),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Connect post-call survey to populate CSAT', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
+        ],
+      ),
+      crossAxisAlignment: CrossAxisAlignment.center,
+    );
+  }
+
+  Widget _buildRecentCallLogsPanel() {
+    final sorted = List<Map<String, dynamic>>.from(_recentCalls)
+      ..sort((a, b) {
+        final da = _parseDate(a['created_at'] ?? a['date']);
+        final db = _parseDate(b['created_at'] ?? b['date']);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return db.compareTo(da);
+      });
+    final list = sorted.take(5).toList();
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
@@ -465,101 +986,51 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('NPS By Department', style: NeyvoTextStyles.heading),
+            Text('Recent Call Logs', style: NeyvoTextStyles.heading),
             const SizedBox(height: 12),
-            SizedBox(
-              height: (40.0 * depts.length).clamp(80.0, 320.0),
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 100,
-                  minY: -100,
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (v, meta) => Text(
-                        depts.length > v.toInt() ? (depts[v.toInt()]['department_name'] as String? ?? '') : '',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    )),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            if (list.isEmpty)
+              Text('No recent calls', style: NeyvoTextStyles.label.copyWith(color: NeyvoTheme.textMuted))
+            else
+              Table(
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(0.8), 3: FlexColumnWidth(0.8), 4: FlexColumnWidth(0.6), 5: FlexColumnWidth(0.8)},
+                children: [
+                  TableRow(
+                    decoration: BoxDecoration(color: NeyvoColors.bgOverlay),
+                    children: [
+                      _tableHeader('Student'),
+                      _tableHeader('Campaign'),
+                      _tableHeader('Direction'),
+                      _tableHeader('Outcome'),
+                      _tableHeader('Duration'),
+                      _tableHeader('Time'),
+                    ],
                   ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  barGroups: List.generate(depts.length, (i) {
-                    final v = (depts[i]['nps_score'] as num?)?.toDouble() ?? 0.0;
-                    return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: v, color: NeyvoColors.ubLightBlue, width: 20, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))),
-                    ], showingTooltipIndicators: []);
+                  ...list.map((c) {
+                    final name = (c['student_name'] ?? c['customer_name'] ?? '—').toString();
+                    final phone = (c['student_phone'] ?? c['customer_phone'] ?? '').toString();
+                    final campaign = (c['campaign_name'] ?? '—').toString();
+                    final direction = ((c['direction'] ?? 'outbound') as String).toLowerCase();
+                    final outcome = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '—';
+                    final duration = _formatDuration(c);
+                    final created = _parseDate(c['created_at'] ?? c['date']);
+                    final timeStr = created != null ? DateFormat('MMM d, HH:mm').format(created) : '—';
+                    return TableRow(
+                      children: [
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: Text('$name\n$phone', style: NeyvoTextStyles.micro, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: Text(campaign, style: NeyvoTextStyles.micro, overflow: TextOverflow.ellipsis)),
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: _OutcomePill(label: direction, outcome: direction)),
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: _OutcomePill(label: outcome, outcome: outcome)),
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: Text(duration, style: NeyvoTextStyles.micro)),
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4), child: Text(timeStr, style: NeyvoTextStyles.micro)),
+                      ],
+                    );
                   }),
-                ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCallsHandledResolutionByDept() {
-    final depts = _departments.take(8).toList();
-    if (depts.isEmpty) return _emptyChartCard('Calls Handled & Resolution % By Department');
-    final maxCalls = depts.fold<int>(0, (m, d) {
-      final v = (d['calls_answered'] as num?)?.toInt() ?? 0;
-      return v > m ? v : m;
-    });
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Calls Handled & Resolution % By Department', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: (40.0 * depts.length).clamp(80.0, 320.0),
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: (maxCalls * 1.2).clamp(1.0, double.infinity),
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (v, meta) => Text(
-                        depts.length > v.toInt() ? (depts[v.toInt()]['department_name'] as String? ?? '') : '',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    )),
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  barGroups: List.generate(depts.length, (i) {
-                    final ca = (depts[i]['calls_answered'] as num?)?.toInt() ?? 0;
-                    return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: ca.toDouble(), color: NeyvoColors.ubLightBlue, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
-                    ], showingTooltipIndicators: []);
-                  }),
-                ),
-              ),
-            ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 16,
-              children: depts.map((d) => Text(
-                '${d['department_name']}: ${(d['resolution_rate_pct'] as num?)?.toStringAsFixed(1) ?? '0'}%',
-                style: NeyvoTextStyles.micro,
-              )).toList(),
+            InkWell(
+              onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls),
+              child: Text('View all →', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.ubLightBlue)),
             ),
           ],
         ),
@@ -567,71 +1038,162 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
     );
   }
 
-  Widget _buildAbandonRateByDept() {
-    final depts = _departments.take(8).toList();
-    if (depts.isEmpty) return _emptyChartCard('Call Abandon Rate By Department');
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Call Abandon Rate By Department', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: (40.0 * depts.length).clamp(80.0, 320.0),
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 15,
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (v, meta) => Text(
-                        depts.length > v.toInt() ? (depts[v.toInt()]['department_name'] as String? ?? '') : '',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    )),
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: FlGridData(show: false),
-                  borderData: FlBorderData(show: false),
-                  barGroups: List.generate(depts.length, (i) {
-                    final v = (depts[i]['abandon_rate_pct'] as num?)?.toDouble() ?? 0.0;
-                    return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(toY: v, color: v > 10 ? Colors.red : Colors.orange, width: 20, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
-                    ], showingTooltipIndicators: []);
-                  }),
+  Widget _tableHeader(String t) => Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4), child: Text(t, style: NeyvoTextStyles.label));
+
+  Widget _buildQuickActionsPanel() {
+    return SizedBox(
+      height: _kTopPanelHeight,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Text('Quick Actions', style: NeyvoTextStyles.heading),
+              const SizedBox(height: 10),
+              Expanded(
+                child: GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 2.6,
+                  children: [
+                _QuickActionButton(icon: Icons.person_add_outlined, label: 'Add Operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents)),
+                _QuickActionButton(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.campaigns)),
+                _QuickActionButton(icon: Icons.psychology_outlined, label: 'Goodwin Model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
+                _QuickActionButton(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.analytics)),
+                _QuickActionButton(icon: Icons.call_outlined, label: 'Start Outbound', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls)),
+                _QuickActionButton(icon: Icons.add_card_outlined, label: 'Add Credits', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.wallet)),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _emptyChartCard(String title) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: NeyvoTextStyles.heading),
-            const SizedBox(height: 12),
-            Text('No department data for selected filters.', style: NeyvoTextStyles.label),
-          ],
-        ),
+class _StickyFilterBarDelegate extends SliverPersistentHeaderDelegate {
+  final double barHeight;
+  final Widget child;
+  final Color backgroundColor;
+
+  _StickyFilterBarDelegate({
+    required this.barHeight,
+    required this.child,
+    required this.backgroundColor,
+  });
+
+  @override
+  double get minExtent => barHeight;
+
+  @override
+  double get maxExtent => barHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: backgroundColor,
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _StickyFilterBarDelegate oldDelegate) =>
+      oldDelegate.barHeight != barHeight;
+}
+
+class _CustomDateRangeDialog extends StatefulWidget {
+  final DateTime initialFrom;
+  final DateTime initialTo;
+
+  const _CustomDateRangeDialog({required this.initialFrom, required this.initialTo});
+
+  @override
+  State<_CustomDateRangeDialog> createState() => _CustomDateRangeDialogState();
+}
+
+class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
+  late DateTime _from;
+  late DateTime _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _from = widget.initialFrom;
+    _to = widget.initialTo;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Custom date range'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: const Text('From'),
+            subtitle: Text(DateFormat.yMMMd().format(_from)),
+            onTap: () async {
+              final d = await showDatePicker(context: context, initialDate: _from, firstDate: DateTime(2020), lastDate: DateTime.now());
+              if (d != null) setState(() => _from = d);
+            },
+          ),
+          ListTile(
+            title: const Text('To'),
+            subtitle: Text(DateFormat.yMMMd().format(_to)),
+            onTap: () async {
+              final d = await showDatePicker(context: context, initialDate: _to, firstDate: DateTime(2020), lastDate: DateTime.now());
+              if (d != null) setState(() => _to = d);
+            },
+          ),
+        ],
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, (from: _from, to: _to)),
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LiveBadge extends StatelessWidget {
+  final Animation<double> pulse;
+
+  const _LiveBadge({required this.pulse});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: pulse,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.3 + pulse.value * 0.4), blurRadius: 4, spreadRadius: 1)],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('Live · Refreshes every 5s', style: NeyvoTextStyles.micro),
+          ],
+        );
+      },
     );
   }
 }
@@ -639,38 +1201,95 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> {
 class _KpiCard extends StatelessWidget {
   final String title;
   final String value;
-  final IconData icon;
-  final Color color;
   final String? subtitle;
+  final String trend;
+  final Color topBorderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String? tooltip;
 
-  const _KpiCard({required this.title, required this.value, required this.icon, required this.color, this.subtitle});
+  const _KpiCard({
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.trend,
+    required this.topBorderColor,
+    required this.icon,
+    required this.iconColor,
+    this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: subtitle ?? title,
+      message: tooltip ?? title,
       child: Card(
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: NeyvoTheme.borderSubtle)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: color, size: 24),
-                  const SizedBox(width: 8),
-                  Text(title, style: NeyvoTextStyles.label),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: NeyvoTheme.borderSubtle),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border(top: BorderSide(color: topBorderColor, width: 3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: NeyvoTextStyles.label.copyWith(fontSize: 10, letterSpacing: 0.5),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: iconColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                      child: Icon(icon, color: iconColor, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: NeyvoTextStyles.title.copyWith(fontSize: 22),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (trend.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          trend,
+                          style: NeyvoTextStyles.micro.copyWith(color: trend.startsWith('+') ? Colors.green : Colors.red),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted), overflow: TextOverflow.ellipsis, maxLines: 1),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Text(value, style: NeyvoTextStyles.title.copyWith(fontSize: 22)),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted)),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -678,53 +1297,254 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _SemiGauge extends StatelessWidget {
-  final double value;
-  final double min;
-  final double max;
+class _LiveBarRow extends StatelessWidget {
+  final String label;
+  final int count;
+  final double pct;
+  final Color color;
 
-  const _SemiGauge({required this.value, required this.min, required this.max});
+  const _LiveBarRow({required this.label, required this.count, required this.pct, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final pct = ((value - min) / (max - min)).clamp(0.0, 1.0);
-    Color needleColor = Colors.grey;
-    if (max > 0 && value >= (min + max) / 2) needleColor = Colors.green;
-    else if (value > min) needleColor = Colors.orange;
-    else needleColor = Colors.red;
-    return SizedBox(
-      height: 48,
+    final fill = pct.clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
+          SizedBox(width: 140, child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: color))),
           Expanded(
-            child: Container(
-              height: 12,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                gradient: LinearGradient(
-                  colors: [Colors.red, Colors.grey, Colors.green],
-                  stops: const [0.0, 0.5, 1.0],
-                ),
-              ),
+            child: SizedBox(
+              height: 20,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  return Stack(
-                    children: [
-                      Positioned(
-                        left: constraints.maxWidth * pct - 2,
-                        top: -4,
-                        child: Container(
-                          width: 4,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: needleColor,
-                            borderRadius: BorderRadius.circular(2),
+                  final w = constraints.maxWidth;
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Row(
+                      children: [
+                        if (fill > 0)
+                          Container(
+                            width: (w * fill).clamp(0.0, w),
+                            height: 20,
+                            color: color,
+                          ),
+                        Expanded(
+                          child: Container(
+                            height: 20,
+                            color: Colors.grey.shade200,
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(width: 40, child: Text('$count', style: NeyvoTextStyles.micro, textAlign: TextAlign.right)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Donut chart for Call Resolution: blue (resolved), purple (succeeded not resolved), grey (rest).
+/// Matches reference: large ring, hollow center, big bold % and smaller "resolved" label.
+class _ResolutionDonutChart extends StatelessWidget {
+  final double resolutionPct;
+  final double succeededNotResolvedPct;
+  final double unresolvedPct;
+
+  const _ResolutionDonutChart({
+    required this.resolutionPct,
+    required this.succeededNotResolvedPct,
+    required this.unresolvedPct,
+  });
+
+  static const double _size = 140.0;
+  static const double _strokeWidth = 18.0;
+  static const Color _blue = Color(0xFF418AF8);
+  static const Color _purple = Color(0xFF8A4ECB);
+  static const Color _grey = Color(0xFFE8EAEF);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _size,
+      height: _size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(_size, _size),
+            painter: _ResolutionDonutPainter(
+              resolutionPct: resolutionPct,
+              succeededNotResolvedPct: succeededNotResolvedPct,
+              unresolvedPct: unresolvedPct,
+              strokeWidth: _strokeWidth,
+              blue: _blue,
+              purple: _purple,
+              grey: _grey,
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${resolutionPct.toStringAsFixed(0)}%',
+                style: NeyvoTextStyles.title.copyWith(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: NeyvoTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'resolved',
+                style: NeyvoTextStyles.micro.copyWith(
+                  color: NeyvoTheme.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResolutionDonutPainter extends CustomPainter {
+  final double resolutionPct;
+  final double succeededNotResolvedPct;
+  final double unresolvedPct;
+  final double strokeWidth;
+  final Color blue;
+  final Color purple;
+  final Color grey;
+
+  _ResolutionDonutPainter({
+    required this.resolutionPct,
+    required this.succeededNotResolvedPct,
+    required this.unresolvedPct,
+    required this.strokeWidth,
+    required this.blue,
+    required this.purple,
+    required this.grey,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide / 2) - strokeWidth / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const startFromTop = -pi / 2;
+
+    double sweepBlue = (resolutionPct / 100 * 2 * pi).clamp(0.0, 2 * pi);
+    double sweepPurple = (succeededNotResolvedPct / 100 * 2 * pi).clamp(0.0, 2 * pi);
+    double remaining = 2 * pi - sweepBlue - sweepPurple;
+    if (remaining < 0) remaining = 0;
+    double sweepGrey = remaining;
+
+    void drawSegment(double start, double sweep, Color color) {
+      if (sweep <= 0) return;
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(rect, start, sweep, false, paint);
+    }
+
+    double cursor = startFromTop;
+    drawSegment(cursor, sweepBlue, blue);
+    cursor += sweepBlue;
+    drawSegment(cursor, sweepPurple, purple);
+    cursor += sweepPurple;
+    drawSegment(cursor, sweepGrey, grey);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ResolutionDonutPainter oldDelegate) {
+    return oldDelegate.resolutionPct != resolutionPct
+        || oldDelegate.succeededNotResolvedPct != succeededNotResolvedPct
+        || oldDelegate.unresolvedPct != unresolvedPct;
+  }
+}
+
+class _ResolutionBar extends StatelessWidget {
+  final String label;
+  final int value;
+  final int total;
+  final Color color;
+
+  const _ResolutionBar({required this.label, required this.value, required this.total, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total > 0 ? (value / total) : 0.0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: color)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 20,
+                child: LinearProgressIndicator(
+                  value: pct.clamp(0.0, 1.0),
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            NumberFormat('#,###').format(value),
+            style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _LegendRow(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              text: TextSpan(
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textPrimary),
+                children: [
+                  TextSpan(text: '$label: '),
+                  TextSpan(text: '$value', style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w700)),
+                ],
               ),
             ),
           ),
@@ -734,72 +1554,114 @@ class _SemiGauge extends StatelessWidget {
   }
 }
 
-class _StackedBarSegment extends StatelessWidget {
+class _HalfDoughnutPainter extends CustomPainter {
+  final double? value;
+  final List<Color>? noDataColors;
+
+  _HalfDoughnutPainter({this.value, this.noDataColors});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const strokeWidth = 12.0;
+
+    if (value == null && noDataColors != null && noDataColors!.length >= 4) {
+      final segmentSweep = pi / noDataColors!.length;
+      for (var i = 0; i < noDataColors!.length; i++) {
+        final paint = Paint()
+          ..color = noDataColors![i]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round;
+        canvas.drawArc(rect, pi + i * segmentSweep, segmentSweep, false, paint);
+      }
+    } else {
+      final paint = Paint()
+        ..color = Colors.grey.shade300
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(rect, pi, pi, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CsatLegendItem extends StatelessWidget {
   final String label;
-  final double pct;
   final Color color;
 
-  const _StackedBarSegment({required this.label, required this.pct, required this.color});
+  const _CsatLegendItem(this.label, this.color);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
         Text(label, style: NeyvoTextStyles.micro),
-        const SizedBox(height: 2),
-        SizedBox(
-          height: 8,
-          child: LinearProgressIndicator(
-            value: (pct / 100).clamp(0.0, 1.0),
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-        ),
-        Text('${pct.toStringAsFixed(2)}%', style: NeyvoTextStyles.micro),
       ],
     );
   }
 }
 
-class _ResolutionBar extends StatelessWidget {
+class _OutcomePill extends StatelessWidget {
   final String label;
-  final int value;
-  final int? total;
-  final Color color;
+  final String outcome;
 
-  const _ResolutionBar({required this.label, required this.value, this.total, required this.color});
+  const _OutcomePill({required this.label, required this.outcome});
+
+  Color get _color {
+    final o = outcome.toLowerCase();
+    if (o == 'goal_achieved' || o == 'completed' || o == 'success') return Colors.green;
+    if (o == 'dropped' || o == 'no_answer') return Colors.red;
+    if (o == 'voicemail') return Colors.amber;
+    if (o == 'in_progress' || o == 'dialing') return Colors.blue;
+    return Colors.grey;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = total ?? value;
-    final pct = t > 0 ? (value / t) * 100 : 0.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _color.withOpacity(0.5)),
+      ),
+      child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: _color)),
+    );
+  }
+}
+
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickActionButton({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: NeyvoTextStyles.micro),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 20,
-                  child: LinearProgressIndicator(
-                    value: t > 0 ? (value / t).clamp(0.0, 1.0) : 0,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${NumberFormat('#,###').format(value)}${t != value ? ', ${pct.toStringAsFixed(1)}%' : ''}',
-                style: NeyvoTextStyles.micro,
-              ),
-            ],
-          ),
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Flexible(child: Text(label, style: NeyvoTextStyles.micro, overflow: TextOverflow.ellipsis)),
         ],
       ),
     );

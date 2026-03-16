@@ -6,7 +6,14 @@ import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 
-const String _kDefaultV2SiteKey = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+/// reCAPTCHA v2 site key.
+/// In production, pass a real key via:
+///   flutter build web --dart-define=RECAPTCHA_V2_SITE_KEY=your_site_key
+/// For local dev, this falls back to Google's public test key.
+const String _kDefaultV2SiteKey = String.fromEnvironment(
+  'RECAPTCHA_V2_SITE_KEY',
+  defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+);
 const String _kCallbackName = 'recaptchaV2Success';
 
 void _onRecaptchaSuccess(String token) {
@@ -27,7 +34,9 @@ void _registerViewFactory() {
       final div = html.DivElement()
         ..className = 'g-recaptcha'
         ..setAttribute('data-sitekey', _currentSiteKey)
-        ..setAttribute('data-callback', _kCallbackName);
+        ..setAttribute('data-callback', _kCallbackName)
+        ..style.height = '78px'
+        ..style.width = '304px';
       // Render after the element is in the DOM; reCAPTCHA script may load async.
       Future.microtask(() {
         _renderRecaptcha(div);

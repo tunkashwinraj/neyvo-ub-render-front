@@ -50,6 +50,21 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
       _post('/api/managed-profiles', body);
 
+  /// Create a raw Vapi assistant that is driven directly by a full VAPI JSON config (no wizard/tier overrides).
+  /// Body should at minimum include profile_name and custom_system_prompt.
+  static Future<Map<String, dynamic>> createRawProfile({
+    required String profileName,
+    required String systemPrompt,
+    String? voicemailMessage,
+  }) async =>
+      _post('/api/managed-profiles', {
+        'mode': 'raw_vapi',
+        'profile_name': profileName,
+        'custom_system_prompt': systemPrompt,
+        if (voicemailMessage != null && voicemailMessage.isNotEmpty)
+          'voicemail_message': voicemailMessage,
+      });
+
   /// Create profile from BI (use_bi=true). Requires org to have BI ready.
   /// Body: role, goal, allowed_actions, profile_name, conversation overrides.
   static Future<Map<String, dynamic>> createProfileFromBi({
@@ -76,6 +91,10 @@ class ManagedProfileApiService {
 
   static Future<Map<String, dynamic>> getProfile(String profileId) async =>
       _get('/api/managed-profiles/$profileId');
+
+  /// Duplicate an operator: backend clones the VAPI assistant and creates a new profile (name + " (copy)").
+  static Future<Map<String, dynamic>> duplicateProfile(String profileId) async =>
+      _post('/api/managed-profiles/$profileId/duplicate', {});
 
   /// Fetch variable metadata (source, in_prompt, has_default) for Additional settings.
   static Future<Map<String, dynamic>> getVariableMetadata(String profileId) async =>

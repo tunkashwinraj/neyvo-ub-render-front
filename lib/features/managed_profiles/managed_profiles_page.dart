@@ -1,5 +1,5 @@
 // lib/features/managed_profiles/managed_profiles_page.dart
-// Managed Voice Profiles — isolated feature; no changes to Agents page.
+// Managed Voice Profiles — operator list in tabular form with Update / Delete / Duplicate.
 
 import 'package:flutter/material.dart';
 import '../../theme/neyvo_theme.dart';
@@ -10,6 +10,7 @@ import '../operators/universal_operator_wizard/universal_operator_wizard_screen.
 import '../../pulse_route_names.dart';
 import 'managed_profile_api_service.dart';
 import 'profile_detail_page.dart';
+import 'raw_assistant_detail_page.dart';
 
 class ManagedProfilesPage extends StatefulWidget {
   const ManagedProfilesPage({super.key, this.onOpenProfileDetail});
@@ -57,6 +58,19 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
     }
   }
 
+  /// Format created_at for table (e.g. "Mar 15, 2026" or "2026-03-15").
+  String _formatCreatedAt(String? created) {
+    if (created == null || created.isEmpty) return '—';
+    final dt = DateTime.tryParse(created);
+    if (dt == null) return created;
+    return '${_month(dt.month)} ${dt.day}, ${dt.year}';
+  }
+
+  String _month(int m) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[m - 1];
+  }
+
   Future<void> _openCreateAgent() async {
     // No business wizard gate — allow creating operators directly.
     final created = await showDialog<bool>(
@@ -65,6 +79,80 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
     );
     if (created == true && mounted) {
       _load();
+    }
+  }
+
+  Future<void> _openCreateRawAssistant() async {
+    final nameCtrl = TextEditingController();
+    final promptCtrl = TextEditingController();
+    final voicemailCtrl = TextEditingController();
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New raw Vapi assistant'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: promptCtrl,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'System prompt',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: voicemailCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Voicemail message (optional)',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    if (created == true && mounted) {
+      try {
+        final res = await ManagedProfileApiService.createRawProfile(
+          profileName: nameCtrl.text.trim().isEmpty ? 'Raw assistant' : nameCtrl.text.trim(),
+          systemPrompt: promptCtrl.text.trim(),
+          voicemailMessage: voicemailCtrl.text.trim(),
+        );
+        final profileId = (res['profile_id'] ?? '').toString();
+        await _load();
+        if (profileId.isNotEmpty && mounted) {
+          _openProfileDetail(profileId);
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
     }
   }
 
@@ -80,17 +168,96 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
   }
 
   void _openProfileDetail(String profileId) {
-    // Always open detail on a separate page (inside Pulse shell when callback is set).
     final onOpen = widget.onOpenProfileDetail;
+    final profile = _profiles.firstWhere(
+      (p) => (p['profile_id'] ?? p['id'] ?? '').toString() == profileId,
+      orElse: () => const <String, dynamic>{},
+    );
+    final isRaw = profile['raw_vapi'] == true || profile['schema_version'] == 3;
+
     if (onOpen != null) {
       onOpen(profileId);
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ManagedProfileDetailPage(profileId: profileId),
+        builder: (_) => isRaw
+            ? RawAssistantDetailPage(profileId: profileId)
+            : ManagedProfileDetailPage(profileId: profileId),
       ),
     );
+  }
+
+  /// Update = open detail page.
+  void _onUpdate(Map<String, dynamic> p) {
+    final id = (p['profile_id'] ?? p['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    _openProfileDetail(id);
+  }
+
+  /// Delete with confirmation.
+  Future<void> _onDelete(Map<String, dynamic> p) async {
+    final id = (p['profile_id'] ?? p['id'] ?? '').toString();
+    final name = (p['profile_name'] ?? 'Unnamed').toString();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete operator'),
+        content: Text(
+          'Permanently delete "$name"? The assistant will be removed from VAPI and any attached number will be detached. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: NeyvoColors.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleting…')));
+      await ManagedProfileApiService.archiveProfile(id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Operator deleted.')));
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: ${e.toString()}')));
+    }
+  }
+
+  /// Duplicate: backend clones the operator (VAPI assistant + new profile).
+  Future<void> _onDuplicate(Map<String, dynamic> p) async {
+    final id = (p['profile_id'] ?? p['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Duplicating…')));
+    try {
+      final res = await ManagedProfileApiService.duplicateProfile(id);
+      final newId = (res['profile_id'] ?? '').toString();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Operator duplicated.')));
+      await _load();
+      // Duplicate is always a raw profile; open raw detail page so editing works correctly.
+      if (newId.isNotEmpty && mounted) {
+        final onOpen = widget.onOpenProfileDetail;
+        if (onOpen != null) {
+          onOpen(newId);
+        } else {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => RawAssistantDetailPage(profileId: newId),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Duplicate failed: $e')));
+    }
   }
 
   @override
@@ -112,26 +279,11 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
                     color: NeyvoColors.textPrimary,
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _openUniversalWizard,
-                      icon: const Icon(Icons.auto_awesome, size: 18),
-                      label: const Text('Create (universal)'),
-                      style: OutlinedButton.styleFrom(foregroundColor: primary),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _openCreateAgent,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create Operator'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: _openUniversalWizard,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create Operator'),
+                  style: OutlinedButton.styleFrom(foregroundColor: primary),
                 ),
               ],
             ),
@@ -163,109 +315,110 @@ class ManagedProfilesPageState extends State<ManagedProfilesPage> {
     }
     return RefreshIndicator(
       onRefresh: _load,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final crossAxisCount = constraints.maxWidth > 600 ? 2 : 1;
-          return GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 2.2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: _profiles.length,
-            itemBuilder: (context, i) {
-              final p = _profiles[i];
-              return _profileCard(p);
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _profileCard(Map<String, dynamic> p) {
-    final name = p['profile_name'] as String? ?? 'Unnamed';
-    final status = p['status'] as String? ?? 'active';
-    final industryId = p['industry_id'] as String? ?? '';
-    final voiceStyle = p['voice_style'] as String? ?? '';
-    final version = p['version'] as int? ?? 1;
-    final created = p['created_at'] as String? ?? '';
-    String createdLabel = created;
-    if (created.length >= 10) {
-      try {
-        final dt = DateTime.tryParse(created);
-        if (dt != null) {
-          final now = DateTime.now();
-          final diff = now.difference(dt);
-          if (diff.inDays > 0) {
-            createdLabel = '${diff.inDays} days ago';
-          } else if (diff.inHours > 0) {
-            createdLabel = '${diff.inHours} hours ago';
-          } else if (diff.inMinutes > 0) {
-            createdLabel = '${diff.inMinutes} min ago';
-          } else {
-            createdLabel = 'Just now';
-          }
-        }
-      } catch (_) {}
-    }
-    return Material(
-      color: NeyvoColors.bgRaised,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: () => _openProfileDetail(p['profile_id'] as String? ?? ''),
-        borderRadius: BorderRadius.circular(12),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: NeyvoCard(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      industryId == 'school_financial_aid' ? Icons.school : Icons.smart_toy_outlined,
-                      size: 28,
-                      color: TenantBrand.primary(context),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(name, style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: status == 'active' ? TenantBrand.primary(context).withValues(alpha: 0.2) : NeyvoColors.warning.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    headingRowColor: MaterialStateProperty.all(NeyvoColors.bgOverlay),
+                    columns: const [
+                      DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Operator ID', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Operator name', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Created date', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: SizedBox(width: 56, child: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600)))),
+                    ],
+                    rows: List<DataRow>.generate(_profiles.length, (i) {
+                final p = _profiles[i];
+                final profileId = (p['profile_id'] ?? p['id'] ?? '').toString();
+                final name = (p['profile_name'] ?? 'Unnamed').toString();
+                final created = _formatCreatedAt(p['created_at'] as String?);
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      InkWell(
+                        onTap: () => _openProfileDetail(profileId),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text('${i + 1}', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted)),
+                        ),
                       ),
-                      child: Text(status, style: NeyvoTextStyles.micro.copyWith(color: status == 'active' ? TenantBrand.primary(context) : NeyvoColors.warning)),
+                    ),
+                    DataCell(
+                      InkWell(
+                        onTap: () => _openProfileDetail(profileId),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: SelectableText(profileId, style: NeyvoTextStyles.micro.copyWith(fontFamily: 'monospace')),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      InkWell(
+                        onTap: () => _openProfileDetail(profileId),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(name, style: NeyvoTextStyles.body.copyWith(color: TenantBrand.primary(context), decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      InkWell(
+                        onTap: () => _openProfileDetail(profileId),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(created, style: NeyvoTextStyles.micro),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        padding: EdgeInsets.zero,
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'update':
+                              _onUpdate(p);
+                              break;
+                            case 'delete':
+                              _onDelete(p);
+                              break;
+                            case 'duplicate':
+                              _onDuplicate(p);
+                              break;
+                          }
+                        },
+                        itemBuilder: (ctx) => [
+                          const PopupMenuItem(value: 'update', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('Update')])),
+                          const PopupMenuItem(value: 'duplicate', child: Row(children: [Icon(Icons.copy_outlined, size: 18), SizedBox(width: 8), Text('Duplicate')])),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline, size: 18, color: NeyvoColors.error),
+                                const SizedBox(width: 8),
+                                Text('Delete', style: TextStyle(color: NeyvoColors.error)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
+                );
+                    }),
+                  ),
                 ),
-                Row(
-                  children: [
-                    Text(_voiceLabel(voiceStyle), style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
-                    const SizedBox(width: 8),
-                    Text('v$version', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
-                    const Spacer(),
-                    Text(createdLabel, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
-                  ],
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
     );
-  }
-
-  String _voiceLabel(String v) {
-    if (v == 'warm_friendly') return 'Warm & Friendly';
-    if (v == 'professional_clear') return 'Professional & Clear';
-    if (v == 'calm_reassuring') return 'Calm & Reassuring';
-    return v;
   }
 }

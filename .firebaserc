@@ -5,20 +5,14 @@
   "targets": {
     "ub-neyvo": {
       "hosting": {
+<<<<<<< HEAD
+=======
+        "default": [
+          "ub-neyvo"
+        ],
+>>>>>>> Testing
         "staging": [
-          "-",
-          "a",
-          "b",
-          "e",
-          "g",
-          "i",
-          "n",
-          "o",
-          "s",
-          "t",
-          "u",
-          "v",
-          "y"
+          "ub-neyvo-staging"
         ],
         "goodwin-staging": [
           "goodwin-neyvo-staging"

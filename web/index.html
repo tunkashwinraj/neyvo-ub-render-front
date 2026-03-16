@@ -19,7 +19,7 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
-  <meta name="theme-color" content="#592c82">
+  <meta name="theme-color" content="#592c82" id="meta-theme-color">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -27,8 +27,19 @@
   <meta name="apple-mobile-web-app-title" content="Neyvo">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon (University of Bridgeport) -->
-  <link rel="icon" type="image/x-icon" href="favicon.ico"/>
+  <!-- Favicon: UB default; for Goodwin tenant, place Goodwin-Stacked-RGB.png as web/favicon_goodwin.png -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico" id="favicon-link"/>
+  <script>
+    (function() {
+      var host = (window.location.hostname || '').toLowerCase();
+      if (host.indexOf('goodwin') !== -1) {
+        var link = document.getElementById('favicon-link');
+        if (link) { link.href = 'favicon_goodwin.png'; link.type = 'image/png'; }
+        var meta = document.getElementById('meta-theme-color');
+        if (meta) meta.content = '#003366';
+      }
+    })();
+  </script>
 
   <title>Neyvo</title>
   <link rel="manifest" href="manifest.json">

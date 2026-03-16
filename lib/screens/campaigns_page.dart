@@ -12,10 +12,12 @@ import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
+import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/csv_import.dart';
 import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
+import 'call_detail_page.dart';
 
 class CampaignsPage extends StatefulWidget {
   const CampaignsPage({super.key});
@@ -42,9 +44,15 @@ class _CampaignsPageState extends State<CampaignsPage> {
   int _wizardStep = 0;
   String? _selectedCampaignId;
   int _campaignDetailRefreshKey = 0;
+  String? _selectedActionsTabVapiCallId;
+  /// On-demand action items per vapi_call_id (from GET .../calls/<id>/actionable).
+  final Map<String, List<dynamic>> _actionItemsCache = {};
+  String? _loadingActionItemsVapiId;
   Timer? _detailRefreshTimer;
   // Cache last successful detail payload so auto-refresh doesn't blank the UI.
   final Map<String, Map<String, dynamic>> _campaignDetailCache = {};
+  /// When set, builder uses cache for this campaign (report was refetched after actionable 404).
+  String? _campaignReportRefetchedForActionItems;
   String _detailStatusFilter = 'all'; // all|queued|in_progress|completed|failed|retry_wait
   String? _editingCampaignId;
   Map<String, dynamic>? _editCampaignData;
@@ -507,39 +515,43 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
-    final baseName = (originalCampaign['name'] ?? 'Campaign').toString().trim();
-    final date = DateTime.now().toIso8601String().substring(0, 10);
-    final retryName = '$baseName (Retry $date)';
-    final agentId = (originalCampaign['agent_id'] ?? '').toString().trim();
-    final profileId = (originalCampaign['profile_id'] ?? '').toString().trim();
-    final templateId = (originalCampaign['template_id'] ?? '').toString().trim();
+    final campaignId = (originalCampaign['id'] ?? '').toString().trim();
+    if (campaignId.isEmpty) return;
 
     try {
-      final created = await NeyvoPulseApi.createCampaign(
-        name: retryName,
-        agentId: agentId.isNotEmpty ? agentId : null,
-        profileId: profileId.isNotEmpty ? profileId : null,
-        templateId: templateId.isNotEmpty ? templateId : null,
-        studentIds: studentIds,
-        audienceType: 'contact_list',
-        filters: null,
-        scheduledAt: null,
+      final res = await NeyvoPulseApi.retryCampaignCalls(
+        campaignId,
+        studentIds,
+        phoneNumberId: _selectedStartPhoneNumberId,
       );
-      final newCampaign = (created['campaign'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-      final newId = (newCampaign['id'] ?? '').toString().trim();
-      if (newId.isEmpty) throw Exception('Campaign created but no id returned');
-
-      final res = await NeyvoPulseApi.startCampaign(newId, phoneNumberId: _selectedStartPhoneNumberId);
       if (!mounted) return;
-      _showCampaignStartResult(res, isRerun: false);
+      final totalRetry = res['total_retry'] ?? studentIds.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message']?.toString() ?? 'Retry: $totalRetry call(s) queued in same campaign.'),
+          backgroundColor: NeyvoTheme.success,
+        ),
+      );
       setState(() {
-        _selectedCampaignId = newId;
         _detailStatusFilter = 'all';
         _campaignDetailRefreshKey++;
       });
+      _load();
       _startDetailAutoRefresh();
     } on ApiException catch (e) {
-      if (mounted) _showInsufficientCreditsSnackBar(e);
+      if (mounted) {
+        final payload = e.payload;
+        if (payload is Map && payload['error'] == 'insufficient_credits') {
+          _showInsufficientCreditsSnackBar(e);
+        } else {
+          final msg = payload is Map
+              ? (payload['message'] ?? payload['error'] ?? e.message)
+              : e.message;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg?.toString() ?? e.toString()), backgroundColor: NeyvoTheme.error),
+          );
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -610,6 +622,51 @@ class _CampaignsPageState extends State<CampaignsPage> {
   }
 
   String _escapeCsv(String s) => s.replaceAll('"', '""');
+
+  /// Full campaign export (name, id, phone, status, outcome, action insights). Shows loading dialog; may take 5–10+ seconds.
+  Future<void> _exportCampaignFull(String campaignId) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Building export'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: NeyvoSpacing.lg),
+            Text(
+              'Generating spreadsheet with action insights for all contacts. This may take 5–10 seconds or longer for large campaigns.',
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+    try {
+      final res = await NeyvoPulseApi.getCampaignExport(campaignId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['error']?.toString() ?? 'Export failed'), backgroundColor: NeyvoTheme.error),
+        );
+        return;
+      }
+      final filename = res['filename']?.toString() ?? 'campaign_export.csv';
+      final csvContent = res['csv_content']?.toString() ?? '';
+      await downloadCsv(filename, '\uFEFF$csvContent', context);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
 
   List<Map<String, dynamic>> get _filteredStudents {
     var list = List<Map<String, dynamic>>.from(_students);
@@ -796,13 +853,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   bool _ensureHasPhoneNumber() {
     if (_hasPhoneNumber) return true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add a phone number to make calls. Go to Phone Numbers to link or purchase a number.'),
-        backgroundColor: NeyvoTheme.warning,
-        duration: Duration(seconds: 5),
-      ),
-    );
+    // Alert removed: no snackbar for missing phone number.
     return false;
   }
 
@@ -881,10 +932,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
       ));
       return;
     }
-    // Ensure immutable audience snapshot exists and validation has passed before starting.
-    final ready = await _ensureCampaignSnapshotReady(id);
-    if (!ready || !mounted) return;
     final isRerun = c['status'] == 'completed' || c['status'] == 'running';
+    // For first-time start, ensure snapshot and validation are ready. For rerun, skip (snapshot already existed).
+    if (!isRerun) {
+      final ready = await _ensureCampaignSnapshotReady(id);
+      if (!ready || !mounted) return;
+    }
     try {
       final res = await NeyvoPulseApi.startCampaign(id, phoneNumberId: _selectedStartPhoneNumberId);
       if (mounted) {
@@ -892,7 +945,19 @@ class _CampaignsPageState extends State<CampaignsPage> {
         _load();
       }
     } on ApiException catch (e) {
-      if (mounted) _showInsufficientCreditsSnackBar(e);
+      if (mounted) {
+        final payload = e.payload;
+        if (payload is Map && payload['error'] == 'insufficient_credits') {
+          _showInsufficientCreditsSnackBar(e);
+        } else {
+          final msg = payload is Map
+              ? (payload['message'] ?? payload['error'] ?? e.message)
+              : e.message;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg?.toString() ?? e.toString()), backgroundColor: NeyvoTheme.error),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1079,7 +1144,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
             actions: [
               TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
                 onPressed: selected.isEmpty ? null : () => Navigator.of(ctx).pop(true),
                 child: const Text('Start'),
               ),
@@ -1119,6 +1184,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       if (mounted) {
         setState(() {
           _selectedCampaignId = null;
+          _selectedActionsTabVapiCallId = null;
           _stopDetailAutoRefresh();
         });
         _load();
@@ -1216,7 +1282,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
               }),
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Create Campaign'),
-              style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+              style: FilledButton.styleFrom(
+                backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+              ),
             ),
             const SizedBox(width: NeyvoSpacing.md),
           ],
@@ -1261,7 +1329,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
             }),
             icon: const Icon(Icons.add, size: 20),
             label: const Text('Create Campaign'),
-            style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+            style: FilledButton.styleFrom(
+              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+            ),
           ),
           const SizedBox(width: NeyvoSpacing.md),
         ],
@@ -1274,27 +1344,6 @@ class _CampaignsPageState extends State<CampaignsPage> {
             if (_error != null) ...[
               Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
               const SizedBox(height: NeyvoSpacing.md),
-            ],
-            if (!_hasPhoneNumber) ...[
-              Card(
-                color: NeyvoTheme.warning.withOpacity(0.15),
-                child: Padding(
-                  padding: const EdgeInsets.all(NeyvoSpacing.lg),
-                  child: Row(
-                    children: [
-                      Icon(Icons.phone_missed, color: NeyvoTheme.warning),
-                      const SizedBox(width: NeyvoSpacing.md),
-                      Expanded(
-                        child: Text(
-                          'Add a phone number to make calls. Go to Phone Numbers to link or purchase a number.',
-                          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: NeyvoSpacing.lg),
             ],
             Text('Campaigns', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: NeyvoSpacing.sm),
@@ -1311,13 +1360,20 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 buttonLabel: 'Create Campaign',
                 onAction: () => setState(() => _showCreateWizard = true),
                 icon: Icons.campaign_outlined,
+                actionButtonColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
               )
             else
               ..._campaigns.map((c) => Card(
                   color: NeyvoTheme.bgCard,
                   margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
                   child: ListTile(
-                    leading: CircleAvatar(backgroundColor: NeyvoTheme.bgHover, child: const Icon(Icons.campaign_outlined, color: NeyvoTheme.teal)),
+                    leading: CircleAvatar(
+                      backgroundColor: NeyvoTheme.bgHover,
+                      child: Icon(
+                        Icons.campaign_outlined,
+                        color: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+                      ),
+                    ),
                     title: Text(c['name']?.toString() ?? 'Unnamed', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
                     subtitle: Text(
                       '${c['total_planned'] ?? c['student_count'] ?? 0} contacts • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
@@ -1326,6 +1382,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     onTap: () => setState(() {
                       _detailStatusFilter = 'all';
                       _selectedCampaignId = c['id']?.toString();
+                      _selectedActionsTabVapiCallId = null;
                       _startDetailAutoRefresh();
                     }),
                     trailing: Row(
@@ -1337,6 +1394,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           onPressed: () => setState(() {
                             _detailStatusFilter = 'all';
                             _selectedCampaignId = c['id']?.toString();
+                            _selectedActionsTabVapiCallId = null;
                             _startDetailAutoRefresh();
                           }),
                         ),
@@ -1404,10 +1462,10 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
         final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
 
-        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId);
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 500);
         final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
         final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
-        final reportF = isTerminal ? NeyvoPulseApi.getCampaignReport(campaignId) : Future.value(<String, dynamic>{});
+        final reportF = NeyvoPulseApi.getCampaignReport(campaignId);
 
         final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
         final callsRes = results[0] as Map<String, dynamic>;
@@ -1429,7 +1487,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
           _campaignDetailCache[campaignId] = Map<String, dynamic>.from(snapshot.data!);
         }
         final cached = _campaignDetailCache[campaignId];
-        final data = snapshot.data ?? cached;
+        final preferRefetchedReport = _campaignReportRefetchedForActionItems == campaignId && cached != null;
+        final data = preferRefetchedReport ? cached : (snapshot.data ?? cached);
 
         // First load only: show full-screen loader.
         if (data == null) {
@@ -1442,6 +1501,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => setState(() {
                   _selectedCampaignId = null;
+                  _selectedActionsTabVapiCallId = null;
+                  _campaignReportRefetchedForActionItems = null;
                   _stopDetailAutoRefresh();
                 }),
               ),
@@ -1462,6 +1523,11 @@ class _CampaignsPageState extends State<CampaignsPage> {
               (k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
             ) ??
             const <String, Map<String, dynamic>>{};
+        final outcomeSummary = (report['outcome_summary'] as Map?)?.map(
+              (k, v) => MapEntry(k.toString(), (v is int) ? v : (int.tryParse(v?.toString() ?? '') ?? 0)),
+            ) ??
+            const <String, int>{};
+        final operatorGoal = report['operator_goal']?.toString() ?? '';
         final canStart = status == 'draft' || status == 'scheduled';
         final canRerun = status == 'completed' || status == 'running';
         final canEdit = status == 'draft' || status == 'scheduled';
@@ -1488,6 +1554,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         final failedCount = asInt(metrics['failed_count'] ?? c['failed_count'] ?? c['total_failed'] ?? 0);
         final maxConcurrent = asInt(metrics['max_concurrent'] ?? c['max_concurrent'] ?? 10, 10);
         final done = completedCount + failedCount;
+        final totalOperations = asInt(metrics['total_operations'] ?? done, done);
         final progress = totalPlanned > 0 ? (done / totalPlanned).clamp(0.0, 1.0) : 0.0;
         final progressPct = (metrics['progress_percentage'] as num?)?.toDouble() ?? (progress * 100.0);
         final eta = metrics['estimated_completion_time'];
@@ -1556,6 +1623,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => setState(() {
                 _selectedCampaignId = null;
+                _selectedActionsTabVapiCallId = null;
                 _stopDetailAutoRefresh();
               }),
             ),
@@ -1566,127 +1634,140 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 icon: const Icon(Icons.refresh),
                 onPressed: () => setState(() => _campaignDetailRefreshKey++),
               ),
-              Tooltip(
-                message: 'Download detailed campaign report (CSV)',
-                child: TextButton.icon(
-                  icon: const Icon(Icons.download_outlined, size: 20),
-                  label: const Text('Download report'),
-                  onPressed: () => _downloadCampaignReport(campaignId),
-                ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'More actions',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'download':
+                      _downloadCampaignReport(campaignId);
+                      break;
+                    case 'export':
+                      _exportCampaignFull(campaignId);
+                      break;
+                    case 'pause':
+                      NeyvoPulseApi.pauseCampaign(campaignId).then((_) {
+                        if (mounted) setState(() => _campaignDetailRefreshKey++);
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'resume':
+                      NeyvoPulseApi.resumeCampaign(campaignId).then((_) {
+                        if (mounted) setState(() => _campaignDetailRefreshKey++);
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'stop':
+                      NeyvoPulseApi.stopCampaign(campaignId).then((_) {
+                        if (mounted) {
+                          setState(() => _campaignDetailRefreshKey++);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign stopped. All calls ended.')));
+                        }
+                      }).catchError((e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+                        }
+                      });
+                      break;
+                    case 'delete':
+                      _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign');
+                      break;
+                    case 'edit':
+                      _nameController.text = c['name']?.toString() ?? '';
+                      _selectedTemplateId = c['template_id']?.toString();
+                      _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
+                      _selectedStudentIds = {};
+                      final ids = c['student_ids'];
+                      if (ids is List) {
+                        _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                      }
+                      _scheduleNow = c['scheduled_at'] == null;
+                      _scheduledAt = null;
+                      if (c['scheduled_at'] != null) {
+                        _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                      }
+                      _filterType = 'all';
+                      setState(() {
+                        _editingCampaignId = campaignId;
+                        _editCampaignData = Map<String, dynamic>.from(c);
+                        _showCreateWizard = true;
+                        _selectedCampaignId = null;
+                        _selectedActionsTabVapiCallId = null;
+                        _wizardStep = 0;
+                      });
+                      break;
+                    case 'start':
+                      _startOrRerunCampaign(c);
+                      break;
+                    case 'start_subset':
+                      _startCampaignWithSubset(campaignId, audienceIds);
+                      break;
+                    case 'rerun':
+                      _startOrRerunCampaign(c);
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_outlined, size: 20), title: Text('Download report'), dense: true)),
+                  const PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.table_chart_outlined, size: 20), title: Text('Export campaign (with action insights)'), dense: true)),
+                  if (status == 'running')
+                    const PopupMenuItem(value: 'pause', child: ListTile(leading: Icon(Icons.pause_circle_outline, size: 20), title: Text('Pause'), dense: true)),
+                  if (status == 'paused')
+                    const PopupMenuItem(value: 'resume', child: ListTile(leading: Icon(Icons.play_circle_outline, size: 20), title: Text('Resume'), dense: true)),
+                  if (status == 'running' || status == 'paused')
+                    const PopupMenuItem(value: 'stop', child: ListTile(leading: Icon(Icons.stop_circle_outlined, size: 20), title: Text('Stop'), dense: true)),
+                  if (canDelete)
+                    const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, size: 20), title: Text('Delete'), dense: true)),
+                  if (canEdit)
+                    const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined, size: 20), title: Text('Edit'), dense: true)),
+                  if (canStart)
+                    const PopupMenuItem(value: 'start', child: ListTile(leading: Icon(Icons.play_arrow, size: 20), title: Text('Start campaign'), dense: true)),
+                  if (canStart && audienceIds.isNotEmpty)
+                    const PopupMenuItem(value: 'start_subset', child: ListTile(leading: Icon(Icons.playlist_add_check_circle_outlined, size: 20), title: Text('Start subset'), dense: true)),
+                  if (canRerun)
+                    const PopupMenuItem(value: 'rerun', child: ListTile(leading: Icon(Icons.replay, size: 20), title: Text('Rerun campaign'), dense: true)),
+                ],
               ),
-              if (status == 'running')
-                TextButton.icon(
-                  icon: const Icon(Icons.pause_circle_outline, size: 20),
-                  label: const Text('Pause'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.pauseCampaign(campaignId);
-                      if (mounted) setState(() => _campaignDetailRefreshKey++);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              if (status == 'paused')
-                TextButton.icon(
-                  icon: const Icon(Icons.play_circle_outline, size: 20),
-                  label: const Text('Resume'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.resumeCampaign(campaignId);
-                      if (mounted) setState(() => _campaignDetailRefreshKey++);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              if (status == 'running' || status == 'paused')
-                TextButton.icon(
-                  icon: const Icon(Icons.stop_circle_outlined, size: 20),
-                  label: const Text('Stop'),
-                  onPressed: () async {
-                    try {
-                      await NeyvoPulseApi.stopCampaign(campaignId);
-                      if (mounted) {
-                        setState(() => _campaignDetailRefreshKey++);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Campaign stopped. All calls ended.')));
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
-                      }
-                    }
-                  },
-                ),
-              TextButton.icon(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                label: const Text('Delete'),
-                onPressed: canDelete ? () => _confirmDeleteCampaign(campaignId, c['name']?.toString() ?? 'Campaign') : null,
-              ),
-              if (canEdit)
-                TextButton.icon(
-                  icon: const Icon(Icons.edit_outlined, size: 20),
-                  label: const Text('Edit'),
-                  onPressed: () {
-                    _nameController.text = c['name']?.toString() ?? '';
-                    _selectedTemplateId = c['template_id']?.toString();
-                    _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
-                    _selectedStudentIds = {};
-                    final ids = c['student_ids'];
-                    if (ids is List) {
-                      _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
-                    }
-                    _scheduleNow = c['scheduled_at'] == null;
-                    _scheduledAt = null;
-                    if (c['scheduled_at'] != null) {
-                      _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
-                    }
-                    _filterType = 'all';
-                    setState(() {
-                      _editingCampaignId = campaignId;
-                      _editCampaignData = Map<String, dynamic>.from(c);
-                      _showCreateWizard = true;
-                      _selectedCampaignId = null;
-                      _wizardStep = 0;
-                    });
-                  },
-                ),
               if (canStart || canRerun)
                 Padding(
                   padding: const EdgeInsets.only(right: NeyvoSpacing.md),
                   child: _buildCallerIdDropdown(campaign: c),
                 ),
-              if (canStart)
-                TextButton.icon(
-                  icon: const Icon(Icons.play_arrow, size: 20),
-                  label: const Text('Start campaign'),
-                  onPressed: () => _startOrRerunCampaign(c),
-                ),
-              if (canStart && audienceIds.isNotEmpty)
-                TextButton.icon(
-                  icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 20),
-                  label: const Text('Start subset'),
-                  onPressed: () => _startCampaignWithSubset(campaignId, audienceIds),
-                ),
-              if (canRerun)
-                TextButton.icon(
-                  icon: const Icon(Icons.replay, size: 20),
-                  label: const Text('Rerun campaign'),
-                  onPressed: () => _startOrRerunCampaign(c),
-                ),
             ],
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(NeyvoSpacing.xl),
+          body: DefaultTabController(
+            length: 2,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Credits: available and required per call (campaigns need credits to place calls)
-                Card(
+                Material(
+                  color: NeyvoTheme.bgSurface,
+                  child: TabBar(
+                    labelColor: TenantBrand.primary(context),
+                    unselectedLabelColor: NeyvoTheme.textSecondary,
+                    indicatorColor: TenantBrand.primary(context),
+                    tabs: const [
+                      Tab(text: 'Overview'),
+                      Tab(text: 'Actions'),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Credits: available and required per call (campaigns need credits to place calls)
+                            Card(
                   color: (_walletCredits ?? 0) == 0 ? NeyvoTheme.warning.withOpacity(0.15) : NeyvoTheme.bgCard,
                   child: Padding(
                     padding: const EdgeInsets.all(NeyvoSpacing.md),
@@ -1728,11 +1809,17 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           children: [
                             _detailChip('Status', status),
                             _detailChip('Concurrency', '$activeCount / $maxConcurrent active'),
+                            _detailChip('Total operations', '$totalOperations'),
                             _detailChip('Queued', '$queuedCount'),
                             _detailChip('Retry', '$retryWaitCount'),
                             _detailChip('Completed', '$completedCount'),
                             _detailChip('Failed', '$failedCount'),
-                            _detailChip('Total', '$totalPlanned'),
+                            _detailChip('Planned', '$totalPlanned'),
+                            if (outcomeSummary.isNotEmpty) ...[
+                              _detailChip('Answered', '${outcomeSummary['answered'] ?? 0}'),
+                              _detailChip('Voicemail', '${outcomeSummary['voicemail'] ?? 0}'),
+                              _detailChip('Not connected', '${outcomeSummary['not_connected'] ?? 0}'),
+                            ],
                             _detailChip('Avg call', '${avgCallSeconds}s'),
                             if (totalCreditsUsed > 0) _detailChip('Credits used', '$totalCreditsUsed cr'),
                             if (totalCreditsUsed > 0 && calls.isNotEmpty) _detailChip('Avg / call', '${avgCreditsPerCall.toStringAsFixed(1)} cr'),
@@ -1771,7 +1858,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                             value: progress,
                             minHeight: 10,
                             backgroundColor: NeyvoTheme.bgHover,
-                            valueColor: AlwaysStoppedAnimation<Color>(NeyvoTheme.teal),
+                            valueColor: AlwaysStoppedAnimation<Color>(TenantBrand.primary(context)),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -1947,7 +2034,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         return NeyvoTheme.error;
                       case 'in_progress':
                       case 'dialing':
-                        return NeyvoTheme.teal;
+                        return TenantBrand.primary(context);
                       case 'retry_wait':
                         return NeyvoTheme.warning;
                       default:
@@ -1993,6 +2080,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                               : const <String, dynamic>{};
                           final outcome = (derived['outcome'] ?? '').toString();
                           final callbackRequested = derived['callbackRequested'] == true;
+                          final backendOutcomeType = (detail?['outcome_type'] ?? detail?['success_metric'] ?? '').toString().trim();
 
                           Color outcomeColor(String o) {
                             switch (o) {
@@ -2009,7 +2097,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
                           final subtitleLines = <String>[
                             '$phone • ${statusLabel(st)}${attempt != null ? ' • attempt $attempt' : ''}',
-                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome',
+                            if (isTerminal && outcome.isNotEmpty) 'Outcome: $outcome${backendOutcomeType.isNotEmpty ? ' • $backendOutcomeType' : ''}',
                             if (isTerminal && outcome == 'Answered' && callbackRequested) 'Callback requested',
                           ].where((e) => e.trim().isNotEmpty).toList();
                           final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
@@ -2056,7 +2144,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                         color: NeyvoTheme.bgCard,
                         margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                         child: ListTile(
-                          leading: Icon(Icons.phone_outlined, color: NeyvoTheme.teal),
+                          leading: Icon(Icons.phone_outlined, color: TenantBrand.primary(context)),
                           title: Text(call['student_name']?.toString() ?? '—', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
                           subtitle: Text('${call['student_phone'] ?? '—'} • ${call['status'] ?? '—'}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                           trailing: Text(formatDate(call['created_at']), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
@@ -2109,8 +2197,592 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ],
             ),
           ),
+                      _buildCampaignDetailActionsTab(
+                        campaignId: campaignId,
+                        campaign: c,
+                        status: status,
+                        canStart: canStart,
+                        canRerun: canRerun,
+                        canEdit: canEdit,
+                        canDelete: canDelete,
+                        audienceIds: audienceIds,
+                        items: items,
+                        callDetails: callDetails,
+                        outcomeSummary: outcomeSummary,
+                        operatorGoal: operatorGoal,
+                        selectedVapiCallId: _selectedActionsTabVapiCallId,
+                        onSelectVapiCallId: (id) => setState(() {
+                          _selectedActionsTabVapiCallId = id;
+                          _loadingActionItemsVapiId = null;
+                        }),
+                        actionItemsCache: _actionItemsCache,
+                        loadingActionItemsVapiId: _loadingActionItemsVapiId,
+                        onFetchActionItems: (vapiId) => _fetchActionItemsForCall(campaignId, vapiId),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  Future<void> _fetchActionItemsForCall(String campaignId, String vapiCallId) async {
+    if (vapiCallId.isEmpty) return;
+    setState(() => _loadingActionItemsVapiId = vapiCallId);
+    try {
+      final res = await NeyvoPulseApi.getCallActionable(campaignId, vapiCallId);
+      if (!mounted) return;
+      final list = res['action_items'];
+      setState(() {
+        _actionItemsCache[vapiCallId] = list is List ? List<dynamic>.from(list) : <dynamic>[];
+        _loadingActionItemsVapiId = null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingActionItemsVapiId = null);
+      if (e.statusCode == 404 || e.statusCode == null) {
+        _actionItemsCache[vapiCallId] = [];
+        _refetchCampaignReportForActionItems(campaignId);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingActionItemsVapiId = null);
+    }
+  }
+
+  /// On 404 from actionable endpoint: refetch campaign report so call_details may include action_items.
+  Future<void> _refetchCampaignReportForActionItems(String campaignId) async {
+    try {
+      final reportRes = await NeyvoPulseApi.getCampaignReport(campaignId);
+      if (!mounted || reportRes['ok'] != true) return;
+      final cached = _campaignDetailCache[campaignId];
+      if (cached != null) {
+        final updated = Map<String, dynamic>.from(cached);
+        updated['report'] = reportRes;
+        _campaignDetailCache[campaignId] = updated;
+        setState(() => _campaignReportRefetchedForActionItems = campaignId);
+      }
+    } catch (_) {}
+  }
+
+  Widget _buildCampaignDetailActionsTab({
+    required String campaignId,
+    required Map<String, dynamic> campaign,
+    required String status,
+    required bool canStart,
+    required bool canRerun,
+    required bool canEdit,
+    required bool canDelete,
+    required List<String> audienceIds,
+    required List<Map<String, dynamic>> items,
+    required Map<String, Map<String, dynamic>> callDetails,
+    required Map<String, int> outcomeSummary,
+    required String operatorGoal,
+    required String? selectedVapiCallId,
+    required void Function(String?) onSelectVapiCallId,
+    required Map<String, List<dynamic>> actionItemsCache,
+    required String? loadingActionItemsVapiId,
+    required void Function(String) onFetchActionItems,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(NeyvoSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Campaign actions',
+            style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+          ),
+          const SizedBox(height: NeyvoSpacing.sm),
+          Text(
+            'Start, pause, or manage this campaign. Select a student on the left to view focused action items (critical / success / neutral). Use "View full call details" for transcript and summary.',
+            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+          ),
+          const SizedBox(height: NeyvoSpacing.lg),
+          Wrap(
+            spacing: NeyvoSpacing.md,
+            runSpacing: NeyvoSpacing.md,
+            children: [
+              if (canStart)
+                FilledButton.icon(
+                  onPressed: () => _startOrRerunCampaign(campaign),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('Start campaign'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: TenantBrand.primary(context),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              if (canStart && audienceIds.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: () => _startCampaignWithSubset(campaignId, audienceIds),
+                  icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 20),
+                  label: const Text('Start subset'),
+                ),
+              if (canRerun)
+                OutlinedButton.icon(
+                  onPressed: () => _startOrRerunCampaign(campaign),
+                  icon: const Icon(Icons.replay, size: 20),
+                  label: const Text('Rerun campaign'),
+                ),
+              if (status == 'running')
+                OutlinedButton.icon(
+                  onPressed: () {
+                    NeyvoPulseApi.pauseCampaign(campaignId).then((_) {
+                      if (mounted) setState(() => _campaignDetailRefreshKey++);
+                    }).catchError((e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+                        );
+                      }
+                    });
+                  },
+                  icon: const Icon(Icons.pause_circle_outline, size: 20),
+                  label: const Text('Pause'),
+                ),
+              if (status == 'paused')
+                OutlinedButton.icon(
+                  onPressed: () {
+                    NeyvoPulseApi.resumeCampaign(campaignId).then((_) {
+                      if (mounted) setState(() => _campaignDetailRefreshKey++);
+                    }).catchError((e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+                        );
+                      }
+                    });
+                  },
+                  icon: const Icon(Icons.play_circle_outline, size: 20),
+                  label: const Text('Resume'),
+                ),
+              if (status == 'running' || status == 'paused')
+                OutlinedButton.icon(
+                  onPressed: () {
+                    NeyvoPulseApi.stopCampaign(campaignId).then((_) {
+                      if (mounted) {
+                        setState(() => _campaignDetailRefreshKey++);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Campaign stopped. All calls ended.')),
+                        );
+                      }
+                    }).catchError((e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+                        );
+                      }
+                    });
+                  },
+                  icon: const Icon(Icons.stop_circle_outlined, size: 20),
+                  label: const Text('Stop'),
+                  style: OutlinedButton.styleFrom(foregroundColor: NeyvoTheme.error),
+                ),
+              OutlinedButton.icon(
+                onPressed: () => _downloadCampaignReport(campaignId),
+                icon: const Icon(Icons.download_outlined, size: 20),
+                label: const Text('Download report'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _exportCampaignFull(campaignId),
+                icon: const Icon(Icons.table_chart_outlined, size: 20),
+                label: const Text('Export campaign'),
+              ),
+              if (canEdit)
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _nameController.text = campaign['name']?.toString() ?? '';
+                    _selectedTemplateId = campaign['template_id']?.toString();
+                    _useTemplate = _selectedTemplateId != null && _selectedTemplateId!.isNotEmpty;
+                    _selectedStudentIds = {};
+                    final ids = campaign['student_ids'];
+                    if (ids is List) {
+                      _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                    }
+                    _scheduleNow = campaign['scheduled_at'] == null;
+                    _scheduledAt = null;
+                    if (campaign['scheduled_at'] != null) {
+                      _scheduledAt = DateTime.tryParse(campaign['scheduled_at'].toString());
+                    }
+                    _filterType = 'all';
+                    setState(() {
+                      _editingCampaignId = campaignId;
+                      _editCampaignData = Map<String, dynamic>.from(campaign);
+                      _showCreateWizard = true;
+                      _selectedCampaignId = null;
+                      _selectedActionsTabVapiCallId = null;
+                      _wizardStep = 0;
+                    });
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  label: const Text('Edit campaign'),
+                ),
+              if (canDelete)
+                OutlinedButton.icon(
+                  onPressed: () => _confirmDeleteCampaign(campaignId, campaign['name']?.toString() ?? 'Campaign'),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  label: const Text('Delete campaign'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: NeyvoTheme.error,
+                    side: BorderSide(color: NeyvoTheme.error),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: NeyvoSpacing.lg),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 20,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: NeyvoTheme.bgHover.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: NeyvoTheme.border),
+                    ),
+                    child: items.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No call items yet',
+                              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              final it = items[index];
+                              final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
+                              final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
+                              final derived = _deriveCampaignCallOutcome(callItem: it, callDetail: detail);
+                              String outcomeLabel = derived['outcome'] as String? ?? 'Pending';
+                              final itemStatus = (it['status'] ?? '').toString().toLowerCase();
+                              if (outcomeLabel == 'Not Connected' && (itemStatus == 'queued' || itemStatus == 'dialing' || itemStatus == 'in_progress')) {
+                                outcomeLabel = 'In progress';
+                              } else if (outcomeLabel == 'Not Connected' && itemStatus != 'failed' && itemStatus != 'completed') {
+                                outcomeLabel = 'Pending';
+                              }
+                              final name = (it['student_name'] ?? it['name'] ?? 'Unknown').toString();
+                              final phone = (it['phone_number'] ?? it['phone'] ?? '—').toString();
+                              final selectionKey = vapiId.isNotEmpty ? vapiId : 'item:${it['id'] ?? index}';
+                              final isSelected = selectedVapiCallId == selectionKey;
+                              return Material(
+                                color: isSelected ? TenantBrand.primary(context).withValues(alpha: 0.15) : Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => onSelectVapiCallId(selectionKey),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.sm, vertical: NeyvoSpacing.xs),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: NeyvoType.bodyMedium.copyWith(
+                                                  color: NeyvoTheme.textPrimary,
+                                                  fontWeight: isSelected ? FontWeight.w600 : null,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              Text(
+                                                phone,
+                                                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: NeyvoSpacing.xs),
+                                        _actionsOutcomeChip(outcomeLabel),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+                const SizedBox(width: NeyvoSpacing.md),
+                Expanded(
+                  flex: 80,
+                  child: _buildActionsDetailPanel(
+                    operatorGoal: operatorGoal,
+                    selectedVapiCallId: selectedVapiCallId,
+                    items: items,
+                    callDetails: callDetails,
+                    actionItemsCache: actionItemsCache,
+                    loadingActionItemsVapiId: loadingActionItemsVapiId,
+                    onFetchActionItems: onFetchActionItems,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionsOutcomeChip(String label) {
+    Color bg;
+    if (label == 'Answered') bg = NeyvoTheme.success.withValues(alpha: 0.2);
+    else if (label == 'Voicemail') bg = NeyvoTheme.warning.withValues(alpha: 0.2);
+    else if (label == 'In progress' || label == 'Pending') bg = NeyvoTheme.bgHover;
+    else bg = NeyvoTheme.textSecondary.withValues(alpha: 0.2);
+    return Chip(
+      label: Text(label, style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textPrimary)),
+      backgroundColor: bg,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildActionsDetailPanel({
+    required String operatorGoal,
+    required String? selectedVapiCallId,
+    required List<Map<String, dynamic>> items,
+    required Map<String, Map<String, dynamic>> callDetails,
+    required Map<String, List<dynamic>> actionItemsCache,
+    required String? loadingActionItemsVapiId,
+    required void Function(String) onFetchActionItems,
+  }) {
+    Map<String, dynamic>? selectedItem;
+    String? vapiIdForDetail;
+    if (selectedVapiCallId != null && selectedVapiCallId.isNotEmpty) {
+      if (selectedVapiCallId.startsWith('item:')) {
+        final id = selectedVapiCallId.substring(5);
+        for (final it in items) {
+          if (it['id']?.toString() == id) {
+            selectedItem = it;
+            break;
+          }
+        }
+      } else {
+        vapiIdForDetail = selectedVapiCallId;
+        for (final it in items) {
+          if ((it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim() == selectedVapiCallId) {
+            selectedItem = it;
+            break;
+          }
+        }
+      }
+    }
+    if (selectedVapiCallId == null || selectedVapiCallId.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: NeyvoTheme.bgHover.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: NeyvoTheme.border),
+        ),
+        child: Center(
+          child: Text(
+            'Select a student to view action items',
+            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+          ),
+        ),
+      );
+    }
+    final detail = vapiIdForDetail != null ? callDetails[vapiIdForDetail] : null;
+    final actionable = detail?['actionable_summary'] as Map<String, dynamic>?;
+    List<dynamic>? actionItems = actionable?['action_items'] as List<dynamic>?;
+    if ((actionItems == null || actionItems.isEmpty) && detail != null) {
+      actionItems = _deriveActionItemsFromDetail(detail, actionable);
+    }
+    if ((actionItems == null || actionItems.isEmpty) && vapiIdForDetail != null) {
+      final cached = actionItemsCache[vapiIdForDetail];
+      if (cached != null && cached.isNotEmpty) actionItems = cached;
+    }
+    final isLoading = vapiIdForDetail != null && loadingActionItemsVapiId == vapiIdForDetail;
+    if (vapiIdForDetail != null && (actionItems == null || actionItems.isEmpty) && !isLoading && actionItemsCache[vapiIdForDetail] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) onFetchActionItems(vapiIdForDetail!);
+      });
+    }
+    final outcomeType = (detail?['outcome_type'] ?? '').toString();
+    String displayOutcome = outcomeType.isNotEmpty ? outcomeType : '—';
+    if (displayOutcome == '—' && selectedItem != null) {
+      final derived = _deriveCampaignCallOutcome(callItem: selectedItem, callDetail: detail);
+      displayOutcome = derived['outcome'] as String? ?? '—';
+    }
+
+    // Build call map for "View full call details" -> CallDetailPage
+    final callMapForDetail = Map<String, dynamic>.from(detail ?? {});
+    if (vapiIdForDetail != null) callMapForDetail['vapi_call_id'] = vapiIdForDetail;
+    callMapForDetail['transcript'] = detail?['transcript_full'] ?? detail?['transcript_snippet'];
+    if (selectedItem != null) {
+      callMapForDetail['student_name'] = selectedItem['student_name'] ?? selectedItem['name'];
+      callMapForDetail['from'] = selectedItem['phone_number'] ?? selectedItem['phone'];
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: NeyvoTheme.bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: NeyvoTheme.border),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                _actionsOutcomeChip(displayOutcome),
+                const SizedBox(width: NeyvoSpacing.md),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => CallDetailPage(call: callMapForDetail)),
+                    );
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('View full call details'),
+                  style: TextButton.styleFrom(foregroundColor: TenantBrand.primary(context)),
+                ),
+              ],
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
+            Text(
+              'Action items',
+              style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textSecondary),
+            ),
+            const SizedBox(height: NeyvoSpacing.sm),
+            if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: NeyvoSpacing.lg),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (actionItems != null && actionItems!.isNotEmpty) ...[
+              ...() {
+                final items = actionItems!;
+                return List.generate(items.length, (i) {
+                  final item = items[i];
+                  if (item is! Map) return const SizedBox.shrink();
+                final text = (item['text'] ?? '').toString().trim();
+                final category = (item['category'] ?? 'neutral').toString().toLowerCase();
+                if (text.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
+                  child: _buildActionItemCard(
+                    index: i + 1,
+                    text: text,
+                    category: category,
+                  ),
+                );
+                });
+              }(),
+            ] else
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.md),
+                child: Text(
+                  'No actionable items for this call. View full call details for transcript and summary.',
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build action items from analysis_structured_data or old actionable_summary when action_items is missing.
+  List<dynamic>? _deriveActionItemsFromDetail(Map<String, dynamic> detail, Map<String, dynamic>? actionable) {
+    final list = <Map<String, String>>[];
+    final analysis = detail['analysis_structured_data'] as Map<String, dynamic>?;
+    if (analysis != null && analysis.isNotEmpty) {
+      final support = analysis['support_area_mentioned']?.toString().trim();
+      if (support != null && support.isNotEmpty && support != 'none') {
+        final label = support == 'multiple'
+            ? 'Student needs support in multiple areas'
+            : 'Student needs ${support.replaceAll('_', ' ')} support';
+        list.add({'text': label, 'category': 'critical'});
+      }
+      if (analysis['callback_requested'] == true) {
+        list.add({'text': 'Callback requested', 'category': 'critical'});
+      }
+      if (analysis['reschedule_requested'] == true) {
+        list.add({'text': 'Reschedule requested', 'category': 'critical'});
+      }
+      final resolution = analysis['call_resolution']?.toString().trim();
+      if (resolution != null && resolution.isNotEmpty) {
+        final isSuccess = resolution == 'resolved' || resolution == 'voicemail_left';
+        list.add({
+          'text': 'Call resolution: ${resolution.replaceAll('_', ' ')}',
+          'category': isSuccess ? 'success' : 'neutral',
+        });
+      }
+    }
+    if (actionable != null) {
+      final needs = actionable['support_needs'];
+      if (needs is List && needs.isNotEmpty) {
+        for (final n in needs) {
+          final s = n?.toString().trim();
+          if (s != null && s.isNotEmpty) {
+            list.add({'text': 'Student needs: $s', 'category': 'critical'});
+          }
+        }
+      }
+      final suggested = actionable['suggested_actions'];
+      if (suggested is List && suggested.isNotEmpty) {
+        for (final a in suggested) {
+          final s = a?.toString().trim();
+          if (s != null && s.isNotEmpty) {
+            list.add({'text': s, 'category': 'critical'});
+          }
+        }
+      }
+    }
+    return list.isEmpty ? null : list;
+  }
+
+  Widget _buildActionItemCard({required int index, required String text, required String category}) {
+    Color bg;
+    Color fg;
+    if (category == 'critical') {
+      bg = NeyvoTheme.error.withValues(alpha: 0.15);
+      fg = NeyvoTheme.error;
+    } else if (category == 'success') {
+      bg = NeyvoTheme.success.withValues(alpha: 0.15);
+      fg = NeyvoTheme.success;
+    } else {
+      bg = NeyvoTheme.warning.withValues(alpha: 0.2);
+      fg = NeyvoTheme.warning;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.sm, vertical: NeyvoSpacing.sm),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: fg.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$index.',
+            style: NeyvoType.bodyMedium.copyWith(color: fg, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: NeyvoSpacing.xs),
+          Expanded(
+            child: Text(
+              text,
+              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2180,13 +2852,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 return Expanded(
                   child: Row(
                     children: [
-                      if (i > 0) Expanded(child: Divider(color: done ? NeyvoTheme.teal : NeyvoTheme.border)),
+                      if (i > 0) Expanded(child: Divider(color: done ? TenantBrand.primary(context) : NeyvoTheme.border)),
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: active ? NeyvoTheme.teal : (done ? NeyvoTheme.teal : NeyvoTheme.bgCard),
+                        backgroundColor: active ? TenantBrand.primary(context) : (done ? TenantBrand.primary(context) : NeyvoTheme.bgCard),
                         child: Text('${i + 1}', style: TextStyle(color: active || done ? NeyvoColors.white : NeyvoTheme.textMuted, fontSize: 12)),
                       ),
-                      if (i < steps.length - 1) Expanded(child: Divider(color: done ? NeyvoTheme.teal : NeyvoTheme.border)),
+                      if (i < steps.length - 1) Expanded(child: Divider(color: done ? TenantBrand.primary(context) : NeyvoTheme.border)),
                     ],
                   ),
                 );
@@ -2218,7 +2890,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       _launchCampaign();
                     }
                   },
-                  style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.teal),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+                  ),
                   child: Text(_wizardStep == steps.length - 1
                       ? (_editingCampaignId != null ? 'Save changes' : 'Create campaign')
                       : 'Next'),
@@ -2275,12 +2949,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'contact_list'
-                              ? NeyvoTheme.teal
+                              ? TenantBrand.primary(context)
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'contact_list'
-                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -2288,7 +2962,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           'From Contact List',
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'contact_list'
-                                ? NeyvoTheme.teal
+                                ? TenantBrand.primary(context)
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -2308,12 +2982,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'filters'
-                              ? NeyvoTheme.teal
+                              ? TenantBrand.primary(context)
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'filters'
-                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -2321,7 +2995,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           'Smart Filter',
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'filters'
-                                ? NeyvoTheme.teal
+                                ? TenantBrand.primary(context)
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -2340,12 +3014,12 @@ class _CampaignsPageState extends State<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'excel'
-                              ? NeyvoTheme.teal
+                              ? TenantBrand.primary(context)
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'excel'
-                            ? NeyvoTheme.teal.withValues(alpha: 0.1)
+                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -2354,7 +3028,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                           textAlign: TextAlign.center,
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'excel'
-                                ? NeyvoTheme.teal
+                                ? TenantBrand.primary(context)
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -2410,7 +3084,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${_previewAudienceCount!} students match these filters', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.teal)),
+                        Text('${_previewAudienceCount!} students match these filters', style: NeyvoType.titleMedium.copyWith(color: TenantBrand.primary(context))),
                         if (_previewAudienceSample.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           ..._previewAudienceSample.take(3).map((s) => Text('• ${s['name'] ?? '—'} ${s['phone'] ?? ''}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
@@ -2531,6 +3205,38 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 onChanged: (v) => setState(() => _filterOverdueOnly = v ?? false),
               ),
               const Divider(),
+              if (filtered.isEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: NeyvoSpacing.xl),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.people_outline, size: 48, color: NeyvoTheme.textMuted),
+                        const SizedBox(height: NeyvoSpacing.md),
+                        Text(
+                          'No contacts in this account yet.',
+                          style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textSecondary),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Text(
+                          'Add contacts from the Contacts page, then return here to create a campaign.',
+                          style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: NeyvoSpacing.lg),
+                        FilledButton.icon(
+                          onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
+                          icon: const Icon(Icons.people, size: 20),
+                          label: const Text('Go to Contacts'),
+                          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -2597,6 +3303,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                   },
                 );
               }),
+              ],
             ],
           ],
         ),
