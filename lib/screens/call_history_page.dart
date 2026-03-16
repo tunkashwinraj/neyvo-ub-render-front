@@ -33,7 +33,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
   final _searchController = TextEditingController();
   String _filterStatus = 'all'; // all, completed, failed, pending
   String _filterOutcome = 'all'; // all, callback, booked, handoff, missed, completed
-  String _filterDirection = 'outbound'; // all, inbound, outbound (default to outbound)
+  String _filterDirection = 'all'; // all, inbound, outbound (default to all)
   String _dateRange = 'all'; // all, 7d, 30d
   _CallSort _sortBy = _CallSort.dateNewest;
   /// User-selectable number of call logs to fetch per page (20, 50, 100, 200, 500).
@@ -47,7 +47,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     super.initState();
     _filterDirection = (widget.initialDirection).toLowerCase().trim();
     if (_filterDirection != 'inbound' && _filterDirection != 'outbound' && _filterDirection != 'all') {
-      _filterDirection = 'outbound';
+      _filterDirection = 'all';
     }
     _searchController.addListener(_filterCalls);
     _load();
@@ -646,7 +646,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             : (dateRaw != null ? UserTimezoneService.formatShort(dateRaw) : '');
                         final durationStr = formatDuration(call);
                         final transcript = call['transcript']?.toString() ?? '';
-                        final recordingUrl = (call['recording_url'] ?? call['recordingUrl'] ?? '').toString().trim();
+                        // Prefer mono recording_url, but fall back to stereo if only that exists.
+                        final recordingUrl = (
+                          call['recording_url'] ??
+                          call['recordingUrl'] ??
+                          call['stereo_recording_url'] ??
+                          call['stereoRecordingUrl'] ??
+                          ''
+                        ).toString().trim();
                         final statusColor = _getStatusColor(status);
                         final successMetric = call['success_metric']?.toString();
                         final attributedAmount = call['attributed_payment_amount']?.toString();
@@ -667,16 +674,25 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         final callId = (call['id'] ?? call['call_id'] ?? '').toString().trim();
                         final canDelete = TenantBrand.isGoodwin(context) && callId.isNotEmpty;
 
+                        void _openCallDetail() {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                          );
+                        }
+
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                           child: InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
-                            ),
+                            onTap: _openCallDetail,
                             onLongPress: canDelete
                                 ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
                                 : null,
                             child: ExpansionTile(
+                              onExpansionChanged: (expanded) {
+                                if (expanded) {
+                                  _openCallDetail();
+                                }
+                              },
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
