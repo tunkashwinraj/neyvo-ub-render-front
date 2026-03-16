@@ -86,9 +86,10 @@ bool get _isStagingHost {
 String _resolveBaseUrlForTenant(String tenantId) {
   // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
   if (_isStagingHost) return _kStagingBaseUrl;
-  // For now, prod uses the existing Render backend URL. When custom
-  // API subdomains are configured, this can route per-tenant.
-  return _kDefaultBaseUrl;
+
+  // For now, both UB and Goodwin tenants use the same backend service.
+  // This ensures all tenants talk to https://ub-neyvo-goodwin.onrender.com.
+  return 'https://ub-neyvo-goodwin.onrender.com';
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
 /// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
