@@ -468,12 +468,15 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Two rows, two columns: [Quick Actions | Live Call Activity], [Call Resolution | CSAT]
         LayoutBuilder(
           builder: (context, constraints) {
             final narrow = constraints.maxWidth < 800;
             if (narrow) {
               return Column(
                 children: [
+                  _buildQuickActionsPanel(),
+                  const SizedBox(height: 16),
                   _buildLiveCallActivityPanel(),
                   const SizedBox(height: 16),
                   _buildCallResolutionPanel(),
@@ -482,14 +485,26 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                 ],
               );
             }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _buildLiveCallActivityPanel()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildCallResolutionPanel()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildCsatPanel()),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildQuickActionsPanel()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildLiveCallActivityPanel()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildCallResolutionPanel()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildCsatPanel()),
+                  ],
+                ),
               ],
             );
           },
@@ -502,8 +517,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
               return Column(
                 children: [
                   _buildRecentCallLogsPanel(),
-                  const SizedBox(height: 16),
-                  _buildQuickActionsPanel(),
                 ],
               );
             }
@@ -511,8 +524,6 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(flex: 2, child: _buildRecentCallLogsPanel()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildQuickActionsPanel()),
               ],
             );
           },
