@@ -491,10 +491,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: _buildQuickActionsPanel(),
-                    ),
+                    Expanded(child: _buildQuickActionsPanel()),
                     const SizedBox(width: 16),
                     Expanded(child: _buildLiveCallActivityPanel()),
                   ],
