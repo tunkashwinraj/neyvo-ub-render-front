@@ -863,7 +863,14 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         return o == 'goal_achieved' || (c['success_metric'] ?? '').toString().toLowerCase() == 'payment_received';
       }).length;
     }
-    final unresolved = total - resolved;
+
+    // Fallback: if we have succeeded calls but no explicit "resolved" signal,
+    // treat all succeeded calls as resolved so the resolution rate matches success rate.
+    if (resolved == 0 && succeeded > 0) {
+      resolved = succeeded;
+    }
+
+    final unresolved = total - succeeded;
     final resolutionPct = total > 0 ? (resolved / total * 100) : 0.0;
     final succeededNotResolved = succeeded - resolved;
 
