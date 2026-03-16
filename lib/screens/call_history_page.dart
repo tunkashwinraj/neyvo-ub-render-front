@@ -310,6 +310,62 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
   }
 
+  /// Show delete confirmation for a single call log (Goodwin: hold to delete).
+  static Future<void> _showDeleteCallLogDialog(
+    BuildContext context,
+    String callId,
+    String studentName,
+    String date,
+    VoidCallback onDeleted,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete call log?'),
+        content: Text(
+          'This will permanently remove this call log from history.\n\n'
+          '${studentName.isNotEmpty ? studentName : "Call"}${date.isNotEmpty ? " · $date" : ""}',
+          style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: NeyvoTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final res = await NeyvoPulseApi.deleteCalls([callId]);
+      if (!context.mounted) return;
+      if (res['ok'] == true) {
+        onDeleted();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Call log deleted'), backgroundColor: NeyvoTheme.success),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message']?.toString() ?? res['error']?.toString() ?? 'Failed to delete call log'),
+            backgroundColor: NeyvoTheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -608,6 +664,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             : routedIntentRaw.toString().trim();
                         
                         final showNumberCalled = numberCalled.isNotEmpty && numberCalled != studentPhone;
+                        final callId = (call['id'] ?? call['call_id'] ?? '').toString().trim();
+                        final canDelete = TenantBrand.isGoodwin(context) && callId.isNotEmpty;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
@@ -615,6 +673,9 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
                             ),
+                            onLongPress: canDelete
+                                ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
+                                : null,
                             child: ExpansionTile(
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
