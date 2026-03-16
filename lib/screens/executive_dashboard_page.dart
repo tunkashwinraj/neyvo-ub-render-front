@@ -491,7 +491,10 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildQuickActionsPanel()),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: _buildQuickActionsPanel(),
+                    ),
                     const SizedBox(width: 16),
                     Expanded(child: _buildLiveCallActivityPanel()),
                   ],
@@ -1059,11 +1062,11 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
               crossAxisCount: 2,
               mainAxisSpacing: 6,
               crossAxisSpacing: 6,
-              childAspectRatio: 1.8,
+              childAspectRatio: 2.6,
               children: [
                 _QuickActionButton(icon: Icons.person_add_outlined, label: 'Add Operator', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents)),
                 _QuickActionButton(icon: Icons.campaign_outlined, label: 'Campaigns', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.campaigns)),
-                _QuickActionButton(icon: Icons.psychology_outlined, label: 'UB Model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
+                _QuickActionButton(icon: Icons.psychology_outlined, label: 'Goodwin Model', onTap: () => Navigator.of(context, rootNavigator: true).pushNamed(PulseRouteNames.ubModelOverview)),
                 _QuickActionButton(icon: Icons.analytics_outlined, label: 'Analytics', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.analytics)),
                 _QuickActionButton(icon: Icons.call_outlined, label: 'Start Outbound', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.calls)),
                 _QuickActionButton(icon: Icons.add_card_outlined, label: 'Add Credits', onTap: () => PulseShellController.navigatePulse(context, PulseRouteNames.wallet)),
@@ -1648,12 +1651,15 @@ class _QuickActionButton extends StatelessWidget {
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 8),
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
           Flexible(child: Text(label, style: NeyvoTextStyles.micro, overflow: TextOverflow.ellipsis)),
         ],
       ),
