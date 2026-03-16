@@ -2073,33 +2073,38 @@ class _PerformanceTrendChart extends StatelessWidget {
 
   const _PerformanceTrendChart({required this.trendData, required this.tab});
 
-  static const double _chartAreaHeight = 148;
   static const double _leftAxisWidth = 92;
   static const double _rightAxisWidth = 98;
+  static const double _xAxisLabelHeight = 18;
+  static const double _axisPadding = 22;
+  static const double _minChartAreaHeight = 100;
 
-  /// Maps calls value to y position (0 = top, _chartAreaHeight = bottom). Bars start at 0 (bottom).
-  static double _callsToY(double value, int yCallsMin, int yCallsMax) {
-    if (yCallsMax <= yCallsMin) return _chartAreaHeight;
-    return _chartAreaHeight - (value - yCallsMin) / (yCallsMax - yCallsMin) * _chartAreaHeight;
+  /// Maps calls value to y position (0 = top, chartAreaHeight = bottom). Bars start at 0 (bottom).
+  static double _callsToY(double value, int yCallsMin, int yCallsMax, double chartAreaHeight) {
+    if (yCallsMax <= yCallsMin) return chartAreaHeight;
+    return chartAreaHeight - (value - yCallsMin) / (yCallsMax - yCallsMin) * chartAreaHeight;
   }
 
   @override
   Widget build(BuildContext context) {
     if (trendData.isEmpty) return const SizedBox.shrink();
-    final maxCalls = trendData.fold<int>(0, (m, d) {
-      final t = (d['total'] as num?)?.toInt() ?? 0;
-      return t > m ? t : m;
-    });
-    // Y-axis always starts at 0 so bars are shown from 0 (bottom), not from any higher value.
-    const yCallsMin = 0;
-    final yCallsMax = maxCalls < 1 ? 1 : (maxCalls <= 6 ? 6 : (maxCalls + 2));
-    final callsScale = (yCallsMax - yCallsMin) > 0 ? _chartAreaHeight / (yCallsMax - yCallsMin) : 1.0;
-    final showBars = tab == 'calls' || tab == 'both';
-    final showLine = tab == 'rate' || tab == 'both';
-    // Grid ticks always include 0 at bottom so the baseline is clear.
-    final gridSet = {yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0};
-    final gridValuesCalls = gridSet.toList()..sort((a, b) => b.compareTo(a));
-    final gridYPositions = gridValuesCalls.map((v) => _callsToY(v.toDouble(), yCallsMin, yCallsMax)).toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chartAreaHeight = (constraints.maxHeight - _axisPadding - 4 - _xAxisLabelHeight).clamp(_minChartAreaHeight, double.infinity);
+        final maxCalls = trendData.fold<int>(0, (m, d) {
+          final t = (d['total'] as num?)?.toInt() ?? 0;
+          return t > m ? t : m;
+        });
+        // Y-axis always starts at 0 so bars are shown from 0 (bottom). Add headroom so scale doesn't cut.
+        const yCallsMin = 0;
+        final yCallsMax = maxCalls < 1 ? 1 : (maxCalls <= 6 ? 6 : (maxCalls * 1.15).ceil() + 2);
+        final callsScale = (yCallsMax - yCallsMin) > 0 ? chartAreaHeight / (yCallsMax - yCallsMin) : 1.0;
+        final showBars = tab == 'calls' || tab == 'both';
+        final showLine = tab == 'rate' || tab == 'both';
+        // Grid ticks always include 0 at bottom so the baseline is clear.
+        final gridSet = {yCallsMax, (yCallsMax * 2 / 3).round(), (yCallsMax / 3).round(), 0};
+        final gridValuesCalls = gridSet.toList()..sort((a, b) => b.compareTo(a));
+        final gridYPositions = gridValuesCalls.map((v) => _callsToY(v.toDouble(), yCallsMin, yCallsMax, chartAreaHeight)).toList();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -2107,13 +2112,13 @@ class _PerformanceTrendChart extends StatelessWidget {
         // Left Y-axis: NUMBER OF CALLS (vertical label on left)
         SizedBox(
           width: _leftAxisWidth,
-          height: _chartAreaHeight + 22,
+          height: chartAreaHeight + _axisPadding,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
                 width: 16,
-                height: _chartAreaHeight + 22,
+                height: chartAreaHeight + _axisPadding,
                 child: Center(
                   child: RotatedBox(
                     quarterTurns: 3,
@@ -2133,7 +2138,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                   children: [
                     if (showBars)
                       SizedBox(
-                        height: _chartAreaHeight,
+                        height: chartAreaHeight,
                         child: Stack(
                           children: [
                             for (var i = 0; i < gridValuesCalls.length; i++)
@@ -2154,7 +2159,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                         ),
                       )
                     else
-                      SizedBox(height: _chartAreaHeight),
+                      SizedBox(height: chartAreaHeight),
                     const SizedBox(height: 4),
                   ],
                 ),
@@ -2170,7 +2175,7 @@ class _PerformanceTrendChart extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                height: _chartAreaHeight,
+                height: chartAreaHeight,
                 child: Stack(
                   children: [
                     // Horizontal grid lines at scale positions (0 at bottom)
@@ -2179,50 +2184,54 @@ class _PerformanceTrendChart extends StatelessWidget {
                         painter: _PerformanceTrendGridPainter(yPositions: gridYPositions),
                       ),
                     ),
-                    // Bars (when calls or both)
+                    // Bars (when calls or both) — full-height row so bars sit on x-axis with no gap
                     if (showBars)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: trendData.map((d) {
-                          final total = (d['total'] as num?)?.toInt() ?? 0;
-                          return Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                                  child: total > 0
-                                  ? Container(
-                                      // Bar height from 0 (baseline) so bar always starts at 0 on y-axis.
-                                      height: ((total - yCallsMin) * callsScale).clamp(2.0, _chartAreaHeight),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF3B82F6),
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      SizedBox(
+                        height: chartAreaHeight,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: trendData.map((d) {
+                            final total = (d['total'] as num?)?.toInt() ?? 0;
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                                child: total > 0
+                                    ? Container(
+                                        height: ((total - yCallsMin) * callsScale).clamp(2.0, chartAreaHeight),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF3B82F6),
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                        ),
+                                      )
+                                    : Container(
+                                        height: 1,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF94A3B8).withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(1),
+                                        ),
                                       ),
-                                    )
-                                  : Container(
-                                      height: 1,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF94A3B8).withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(1),
-                                      ),
-                                    ),
-                            ),
-                          );
-                        }).toList(),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
-                    // Resolution rate line (orange, dashed)
+                    // Resolution rate line (orange, dashed) — vertical inset so 100% isn't cut
                     if (showLine && trendData.length >= 2)
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final w = constraints.maxWidth;
                           final n = trendData.length;
                           final barW = w / n;
+                          const vertInset = 0.05; // 5% top/bottom so scale doesn't cut
+                          final range = chartAreaHeight * (1 - 2 * vertInset);
                           final pts = <Offset>[];
                           for (var i = 0; i < n; i++) {
                             final rate = (trendData[i]['resolutionRate'] as num?)?.toDouble() ?? 0.0;
-                            final y = _chartAreaHeight - (rate / 100.0 * _chartAreaHeight);
-                            pts.add(Offset((i + 0.5) * barW, y.clamp(0.0, _chartAreaHeight)));
+                            final y = chartAreaHeight * vertInset + (1 - rate / 100.0) * range;
+                            pts.add(Offset((i + 0.5) * barW, y.clamp(0.0, chartAreaHeight)));
                           }
                           return CustomPaint(
-                            size: Size(w, _chartAreaHeight),
+                            size: Size(w, chartAreaHeight),
                             painter: _DashedLineChartPainter(pts: pts, color: const Color(0xFFF97316)),
                           );
                         },
@@ -2265,7 +2274,7 @@ class _PerformanceTrendChart extends StatelessWidget {
         if (showLine)
           SizedBox(
             width: _rightAxisWidth,
-            height: _chartAreaHeight + 22,
+            height: chartAreaHeight + _axisPadding,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -2274,7 +2283,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                        height: _chartAreaHeight,
+                        height: chartAreaHeight,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2288,7 +2297,7 @@ class _PerformanceTrendChart extends StatelessWidget {
                 const SizedBox(width: 4),
                 SizedBox(
                   width: 16,
-                  height: _chartAreaHeight + 22,
+                  height: chartAreaHeight + _axisPadding,
                   child: Center(
                     child: RotatedBox(
                       quarterTurns: 3,
@@ -2307,6 +2316,8 @@ class _PerformanceTrendChart extends StatelessWidget {
         else
           const SizedBox(width: _rightAxisWidth),
       ],
+    );
+      },
     );
   }
 }
