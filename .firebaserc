@@ -7,6 +7,12 @@
       "hosting": {
         "default": [
           "ub-neyvo"
+        ],
+        "staging": [
+          "ub-neyvo-staging"
+        ],
+        "goodwin-staging": [
+          "goodwin-neyvo-staging"
         ]
       }
     }
