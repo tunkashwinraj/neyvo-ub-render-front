@@ -32,13 +32,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyC27EA4v032qzE56j7zk7mLN553yeBwEqs',
-    appId: '1:714495385281:web:49a759dfa4843f4b633e40',
-    messagingSenderId: '714495385281',
-    projectId: 'ub-neyvo',
-    authDomain: 'ub-neyvo.firebaseapp.com',
-    storageBucket: 'ub-neyvo.firebasestorage.app',
-    measurementId: 'G-0YJK8XR114',
+    apiKey: 'AIzaSyBUCuj67BNk91FP6CH3TDKlQ1B7hWkZfYk',
+    appId: '1:175705543820:web:8482abc223a117208017a9',
+    messagingSenderId: '175705543820',
+    projectId: 'goodwin-neyvo',
+    authDomain: 'goodwin-neyvo.firebaseapp.com',
+    storageBucket: 'goodwin-neyvo.firebasestorage.app',
+    measurementId: 'G-P12H1JF82D',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

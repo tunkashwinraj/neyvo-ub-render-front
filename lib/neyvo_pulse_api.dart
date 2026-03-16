@@ -509,6 +509,7 @@ class NeyvoPulseApi {
   }
 
   // Calls (offset = pagination). Use q to search entire call log by name or phone (substring/letter match).
+  // noVapi: when true (default), skips per-call Vapi enrichment so list loads fast; use false when recordings/rich data needed in list.
   static Future<Map<String, dynamic>> listCalls({
     String? studentId,
     String? from,
@@ -517,6 +518,7 @@ class NeyvoPulseApi {
     int? offset,
     String? q,
     bool syncFromVapi = true,
+    bool noVapi = true,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
@@ -526,6 +528,7 @@ class NeyvoPulseApi {
     if (limit != null) params['limit'] = q != null && q.trim().isNotEmpty ? limit.clamp(1, 2000) : limit.clamp(1, 500);
     if (offset != null && offset > 0) params['offset'] = offset;
     if (syncFromVapi) params['sync_initiated'] = '1';
+    if (noVapi) params['no_vapi'] = '1';
     final search = (q ?? '').trim();
     if (search.isNotEmpty) params['q'] = search;
     return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
