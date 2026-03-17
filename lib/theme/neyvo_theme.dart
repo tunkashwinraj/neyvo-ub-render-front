@@ -1,19 +1,20 @@
 // lib/theme/neyvo_theme.dart
-// Neyvo — University of Bridgeport style guide (April 2024).
-// Colors: Purple #592c82 (PMS 268), Light Blue #00a7e0 (PMS 2995), White.
-// Typography: Roboto Slab (H1/H2), Open Sans (body) — style guide alternates.
+// Neyvo — Goodwin University style guide (April 2024).
+// Working State 2 marker – Goodwin theme applied across the app.
+// Colors: Dark Blue #005cb9 (Pantone 300), Light Blue #00a7e0 (Pantone 2995 C), Green #80bc00.
+// Typography: Freight Sans Pro (preferred) → Roboto Slab (headings) + Open Sans (body) as web alternates.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// NEYVO COLORS — UB Style Guide
+// NEYVO COLORS — GOODWIN STYLE GUIDE
 // ═══════════════════════════════════════════════════════════════════════════
 
 class NeyvoColors {
-  // Primary palette (UB style guide)
-  static const Color ubPurple = Color(0xFF592C82);   // PMS 268 C, RGB 89,44,130
-  static const Color ubLightBlue = Color(0xFF00A7E0); // PMS 2995 C, RGB 0,167,224
+  // Primary palette (Goodwin style guide)
+  static const Color ubPurple = Color(0xFF005CB9);    // Goodwin dark blue
+  static const Color ubLightBlue = Color(0xFF00A7E0); // Goodwin light blue
   static const Color white = Color(0xFFFFFFFF);
 
   // Backgrounds — white with subtle tints
@@ -41,12 +42,12 @@ class NeyvoColors {
   static const Color textMuted = textLightMuted;
 
   // Brand variants
-  static const Color ubPurpleSoft = Color(0xFF7B4FA8);
+  static const Color ubPurpleSoft = Color(0xFF2F79C7);   // lighter Goodwin blue
   static const Color ubLightBlueSoft = Color(0xFF4DB8E8);
   static const Color teal = ubPurple;
   static const Color tealGlow = Color(0x1A592C82);
   static const Color tealLight = ubPurpleSoft;
-  static const Color coral = ubLightBlue;  // accent/secondary
+  static const Color coral = Color(0xFF80BC00);  // Goodwin green accent
 
   // Status — purple primary, light blue for info/success
   static const Color success = ubLightBlue;
@@ -54,7 +55,7 @@ class NeyvoColors {
   static const Color error = Color(0xFFD32F2F);   // red for errors
   static const Color info = ubLightBlue;
 
-  // Sidebar — UB purple with subtle elevation states
+  // Sidebar — Goodwin dark blue with subtle elevation states
   static const Color sidebarBg = ubPurple;
   static const Color sidebarSelected = Color(0xFF7B4FA8);   // lighter purple band
   static const Color sidebarHover = Color(0x33592C82);     // 20% purple overlay
