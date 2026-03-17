@@ -205,7 +205,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
           NeyvoPulseApi.setDefaultAccountId(null);
           if (!mounted) return;
           setState(() {
-            _error = 'These credentials are not valid for this portal. Please sign in at the correct school site (ub.neyvo.ai or goodwin.neyvo.ai).';
+            _error = 'This account is not authorized for Goodwin University. Please sign in with a Goodwin University account or contact your administrator.';
             _loading = false;
           });
           return;
@@ -227,7 +227,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
           msg.contains('throttl') || msg.contains('403');
       setState(() {
         _error = isAppCheckOrThrottle
-            ? 'Sign-in is temporarily unavailable. Please use the correct portal (ub.neyvo.ai or goodwin.neyvo.ai) or try again later.'
+            ? 'Sign-in is temporarily unavailable. Please try again later or contact your administrator.'
             : (e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString());
         _loading = false;
       });

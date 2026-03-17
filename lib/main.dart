@@ -46,30 +46,10 @@ const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue
     defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
   );
 
+/// This app is Goodwin University only (single tenant). No UB/tenant switching.
 String _resolveTenantId() {
-  if (!kIsWeb) {
-    // For mobile/desktop builds we can keep using the default tenant for now.
-    return '';
-  }
-  final host = Uri.base.host.toLowerCase();
-
-  // Local dev: dart-define NEYVO_TENANT=goodwin or ?tenant=goodwin / ?tenant=ub
-  if (host == 'localhost' || host == '127.0.0.1') {
-    if (_kLocalTenant.isNotEmpty) return _kLocalTenant.toLowerCase();
-    final q = (Uri.base.queryParameters['tenant'] ?? '').toLowerCase().trim();
-    if (q == 'goodwin') return 'goodwin';
-    if (q == 'ub') return 'ub';
-  }
-
-  // Prod custom domains
-  if (host.startsWith('goodwin.')) return 'goodwin';
-  if (host.startsWith('ub.')) return 'ub';
-
-  // Firebase Hosting (goodwin-neyvo.web.app, goodwin-neyvo-staging.web.app, etc.)
-  if (host.startsWith('goodwin-neyvo')) return 'goodwin';
-  if (host.startsWith('ub-neyvo')) return 'ub';
-
-  return '';
+  if (!kIsWeb) return 'goodwin';
+  return 'goodwin';
 }
 
 /// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
@@ -91,13 +71,12 @@ String _resolveBaseUrlForTenant(String tenantId) {
   // This ensures all tenants talk to https://ub-neyvo-goodwin.onrender.com.
   return 'https://ub-neyvo-goodwin.onrender.com';
 }
-/// Fallback account_id when getAccountInfo fails or returns empty (single-tenant deployments).
-/// 1) Build-time: flutter build web --dart-define=NEYVO_ACCOUNT_ID=870065
-/// 2) Runtime: when backend is ub-neyvo-goodwin.onrender.com, use 870065 per FIRESTORE_QUICK_REFERENCE
+/// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
+/// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=160067
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (SpeariaApi.baseUrl.contains('ub-neyvo-goodwin.onrender.com')) return '870065';
+  if (SpeariaApi.baseUrl.contains('ub-neyvo-goodwin.onrender.com')) return '160067';
   return '';
 }
 
@@ -168,9 +147,7 @@ String get _kFallbackAccountId {
     try {
       tenantConfig = await TenantApi.fetchConfig().timeout(timeout);
     } catch (_) {
-      tenantConfig = tenantId == 'goodwin'
-          ? TenantConfig.defaultGoodwin
-          : TenantApi.ubFallback;
+      tenantConfig = TenantConfig.defaultGoodwin;
     }
 
     runApp(NeyvoPulseRoot(tenantConfig: tenantConfig));
@@ -287,14 +264,9 @@ String get _kFallbackAccountId {
         final ok = res['ok'] == true;
         final accountId = res['account_id'] as String?;
         final onboardingFromApi = res['onboarding_completed'];
-        // Only use the UB demo fallback account for the UB tenant. For
-        // Goodwin (and future tenants) we require a real account mapping
-        // from the backend so each school has its own business data.
-        final tenant = TenantScope.of(context)?.config;
-        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
         if (ok && accountId != null && accountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(accountId);
-        } else if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
+        } else if (_kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         // Load user timezone from settings for date display
@@ -316,25 +288,18 @@ String get _kFallbackAccountId {
           });
         }
       } on ApiException catch (e) {
-        // Any 403 on account endpoint = wrong portal (tenant mismatch). Stop at auth:
-        // show message, sign out, clear account — user must use the correct domain.
+        // 403 = account not authorized for Goodwin University (single-tenant app).
         if (e.statusCode == 403) {
           if (!mounted) return;
           NeyvoPulseApi.clearAccountInfoCache();
           NeyvoPulseApi.setDefaultAccountId(null);
-          final tenant = TenantScope.of(context)?.config;
-          final tenantId = tenant?.tenantId ?? 'ub';
-          final otherDomain = tenantId == 'goodwin' ? 'ub.neyvo.ai' : 'goodwin.neyvo.ai';
-          final schoolName = tenantId == 'goodwin'
-              ? 'University of Bridgeport'
-              : 'Goodwin University';
           await showDialog<void>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('Use the correct portal'),
-              content: Text(
-                'This account belongs to $schoolName.\n\n'
-                'Please sign in at $otherDomain instead.',
+              title: const Text('Not authorized'),
+              content: const Text(
+                'This account is not authorized for Goodwin University.\n\n'
+                'Please sign in with a Goodwin University account or contact your administrator.',
               ),
               actions: [
                 TextButton(
@@ -345,20 +310,14 @@ String get _kFallbackAccountId {
             ),
           );
           await FirebaseAuth.instance.signOut();
-          // Do not set _loaded; authStateChanges will rebuild to PulseAuthPage.
           return;
         }
-        // For other API errors: only allow UB fallback on UB tenant; never show wrong tenant data.
-        final tenant = TenantScope.of(context)?.config;
-        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
-        if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
+        if (_kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
       } catch (_) {
-        final tenant = TenantScope.of(context)?.config;
-        final isUbTenant = tenant == null || tenant.tenantId == 'ub';
-        if (isUbTenant && _kFallbackAccountId.isNotEmpty) {
+        if (_kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
         if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
@@ -370,10 +329,7 @@ String get _kFallbackAccountId {
       if (!_loaded) {
         return const NeyvoLoadingScreen();
       }
-      final tenant = TenantScope.of(context)?.config;
-      if (!_onboardingCompleted && (tenant?.tenantId == 'ub' || tenant == null)) {
-        return const UbOnboardingPage();
-      }
+      // Goodwin-only: no separate onboarding; go straight to shell.
       // On web refresh: use URL path so /pulse/operators (etc.) opens the correct tab instead of a blank/wrong view.
       final path = kIsWeb ? Uri.base.path : null;
       final hasPaymentParam = kIsWeb && (Uri.base.queryParameters['payment'] ?? '').trim().isNotEmpty;
