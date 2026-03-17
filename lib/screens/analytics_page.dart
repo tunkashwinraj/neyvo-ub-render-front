@@ -939,6 +939,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _campaignStatusTabChip(String label, String value, {required int count}) {
     final isSelected = _campaignStatusTab == value;
+    Color countColorFor(String v) {
+      switch (v) {
+        case 'running':
+          return const Color(0xFF10B981);
+        case 'draft':
+          return const Color(0xFFF97316);
+        case 'done':
+          return const Color(0xFF9CA3AF);
+        case 'stopped':
+          return const Color(0xFF9CA3AF);
+        default:
+          return const Color(0xFF64748B);
+      }
+    }
+
+    final countColor = countColorFor(value);
     return InkWell(
       onTap: () {
         setState(() {
@@ -946,14 +962,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           _campaignPage = 1;
         });
       },
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE0F2FE) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? const Color(0xFF1D4ED8) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+            color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFFE2E8F0),
           ),
         ),
         child: Row(
@@ -962,15 +978,24 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             Text(
               label,
               style: NeyvoTextStyles.micro.copyWith(
-                color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
+                color: isSelected ? Colors.white : const Color(0xFF64748B),
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              count.toString(),
-              style: NeyvoTextStyles.micro.copyWith(
-                color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF94A3B8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: isSelected ? Colors.white : const Color(0xFFE2E8F0)),
+              ),
+              child: Text(
+                count.toString(),
+                style: NeyvoTextStyles.micro.copyWith(
+                  color: countColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
