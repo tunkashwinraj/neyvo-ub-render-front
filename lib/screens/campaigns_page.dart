@@ -2626,6 +2626,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
       callMapForDetail['from'] = selectedItem['phone_number'] ?? selectedItem['phone'];
     }
 
+    final supportTags = _deriveSupportTagsFromDetail(detail, actionable, actionItems);
+
     return Container(
       decoration: BoxDecoration(
         color: NeyvoTheme.bgSurface,
@@ -2654,6 +2656,19 @@ class _CampaignsPageState extends State<CampaignsPage> {
               ],
             ),
             const SizedBox(height: NeyvoSpacing.lg),
+            if (supportTags.isNotEmpty) ...[
+              Text(
+                'Support requested',
+                style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textSecondary),
+              ),
+              const SizedBox(height: NeyvoSpacing.xs),
+              Wrap(
+                spacing: NeyvoSpacing.xs,
+                runSpacing: NeyvoSpacing.xs,
+                children: supportTags.map(_supportTagChip).toList(),
+              ),
+              const SizedBox(height: NeyvoSpacing.lg),
+            ],
             Text(
               'Action items',
               style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textSecondary),
@@ -2679,6 +2694,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                     index: i + 1,
                     text: text,
                     category: category,
+                    supportTags: supportTags,
                   ),
                 );
                 });
@@ -2747,7 +2763,103 @@ class _CampaignsPageState extends State<CampaignsPage> {
     return list.isEmpty ? null : list;
   }
 
-  Widget _buildActionItemCard({required int index, required String text, required String category}) {
+  List<String> _deriveSupportTagsFromDetail(
+    Map<String, dynamic>? detail,
+    Map<String, dynamic>? actionable,
+    List<dynamic>? actionItems,
+  ) {
+    final tags = <String>{};
+
+    // 1) Prefer explicit structured signal when present.
+    final analysis = detail?['analysis_structured_data'] as Map<String, dynamic>?;
+    final support = analysis?['support_area_mentioned']?.toString().trim().toLowerCase();
+    if (support != null && support.isNotEmpty && support != 'none') {
+      if (support == 'multiple') {
+        // Fall back to keyword inference below.
+      } else if (support == 'transportation') {
+        tags.add('transportation');
+      } else if (support == 'academic' || support == 'academics') {
+        tags.add('academics');
+      } else if (support == 'student_services' || support == 'career_support') {
+        tags.add('career_support');
+      }
+    }
+
+    // 2) Infer from action item text (backend-derived).
+    final blob = (actionItems ?? const [])
+        .whereType<Map>()
+        .map((m) => (m['text'] ?? '').toString().toLowerCase())
+        .join(' ');
+    if (blob.isNotEmpty) {
+      if (blob.contains('transportation') || blob.contains('bus pass') || blob.contains('getting to campus')) {
+        tags.add('transportation');
+      }
+      if (blob.contains('academic') || blob.contains('tutor') || blob.contains('textbook') || blob.contains('advis')) {
+        tags.add('academics');
+      }
+      if (blob.contains('career') || blob.contains('co-op') || blob.contains('coop') || blob.contains('student services') || blob.contains('case management')) {
+        tags.add('career_support');
+      }
+    }
+
+    // 3) Infer from legacy actionable fields if present.
+    if (actionable != null) {
+      final needs = actionable['support_needs'];
+      if (needs is List) {
+        final nblob = needs.map((x) => (x ?? '').toString().toLowerCase()).join(' ');
+        if (nblob.contains('transport')) tags.add('transportation');
+        if (nblob.contains('academic') || nblob.contains('tutor') || nblob.contains('textbook') || nblob.contains('advis')) tags.add('academics');
+        if (nblob.contains('career') || nblob.contains('co-op') || nblob.contains('case') || nblob.contains('student services')) tags.add('career_support');
+      }
+    }
+
+    final out = tags.toList();
+    out.sort();
+    return out;
+  }
+
+  Widget _supportTagChip(String tag) {
+    final label = switch (tag) {
+      'transportation' => 'Transportation',
+      'academics' => 'Academics',
+      'career_support' => 'Career support',
+      _ => tag,
+    };
+    final Color bg;
+    final Color fg;
+    switch (tag) {
+      case 'transportation':
+        bg = NeyvoTheme.info.withValues(alpha: 0.18);
+        fg = NeyvoTheme.info;
+        break;
+      case 'academics':
+        bg = NeyvoTheme.success.withValues(alpha: 0.18);
+        fg = NeyvoTheme.success;
+        break;
+      case 'career_support':
+        bg = NeyvoTheme.warning.withValues(alpha: 0.20);
+        fg = NeyvoTheme.warning;
+        break;
+      default:
+        bg = NeyvoTheme.bgHover;
+        fg = NeyvoTheme.textSecondary;
+    }
+    return Chip(
+      label: Text(label, style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textPrimary)),
+      backgroundColor: bg,
+      side: BorderSide(color: fg.withValues(alpha: 0.45)),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildActionItemCard({
+    required int index,
+    required String text,
+    required String category,
+    List<String> supportTags = const [],
+  }) {
     Color bg;
     Color fg;
     if (category == 'critical') {
@@ -2767,19 +2879,32 @@ class _CampaignsPageState extends State<CampaignsPage> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: fg.withValues(alpha: 0.5)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$index.',
-            style: NeyvoType.bodyMedium.copyWith(color: fg, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: NeyvoSpacing.xs),
-          Expanded(
-            child: Text(
-              text,
-              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+          if (supportTags.isNotEmpty) ...[
+            Wrap(
+              spacing: NeyvoSpacing.xs,
+              runSpacing: NeyvoSpacing.xs,
+              children: supportTags.map(_supportTagChip).toList(),
             ),
+            const SizedBox(height: NeyvoSpacing.xs),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$index.',
+                style: NeyvoType.bodyMedium.copyWith(color: fg, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: NeyvoSpacing.xs),
+              Expanded(
+                child: Text(
+                  text,
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+                ),
+              ),
+            ],
           ),
         ],
       ),
