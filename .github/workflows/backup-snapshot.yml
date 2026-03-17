@@ -1,0 +1,85 @@
+name: Backup snapshot (12h)
+
+on:
+  schedule:
+    # Every 12 hours
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Optional note for this snapshot"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build web (release)
+        run: flutter build web --release -O 4
+
+      - name: Zip build/web
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build
+          zip -r ../frontend-build-web.zip web
+
+      - name: Compute snapshot tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          ts="$(date -u +'%Y%m%d-%H%MZ')"
+          echo "tag=backup-${ts}" >> "$GITHUB_OUTPUT"
+          echo "ts=${ts}" >> "$GITHUB_OUTPUT"
+
+      - name: Create annotated tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          note="${{ inputs.note }}"
+          msg="Automated backup snapshot ${tag}"
+          if [ -n "${note}" ]; then
+            msg="${msg}\n\nNote: ${note}"
+          fi
+          git tag -a "${tag}" -m "$(printf "%b" "${msg}")"
+          git push origin "${tag}"
+
+      - name: Create GitHub Release (attach build)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            Backup snapshot created from `${{ github.repository }}`.
+
+            - Timestamp (UTC): `${{ steps.tag.outputs.ts }}`
+            - Commit: `${{ github.sha }}`
+            - Note: `${{ inputs.note }}`
+
+            Attached:
+            - `frontend-build-web.zip` (built `build/web`)
+            - encrypted secret snapshots (if present)
+          files: |
+            frontend-build-web.zip
+            ops/secrets/*.enc
+

@@ -43,7 +43,7 @@ class CreateFirstOperatorPanel extends StatelessWidget {
             const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
             const SizedBox(height: 20),
             Text(
-              'Create your first Operator',
+              'No operators yet',
               style: NeyvoTextStyles.title.copyWith(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -53,7 +53,7 @@ class CreateFirstOperatorPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Choose a department to create a voice operator. You can add more later.',
+              'To begin, use the “Create operator test” button in the top right to create a universal operator.',
               style: NeyvoTextStyles.body,
               textAlign: TextAlign.center,
             ),

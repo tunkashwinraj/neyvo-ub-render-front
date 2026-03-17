@@ -44,3 +44,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Ops secrets (plaintext must never be committed)
+/ops/secrets/**/*.env
+/ops/secrets/**/*.json
+/ops/secrets/**/*.txt
+/ops/secrets/**/render-prod.env
+/ops/secrets/**/firebase-prod.json
+
+# Allow encrypted secret snapshots
+!/ops/secrets/**/*.enc

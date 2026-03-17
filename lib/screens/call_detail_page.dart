@@ -1,16 +1,82 @@
 // lib/screens/call_detail_page.dart
-// Full call details: everything VAPI provides — from/to, transcript, AI insights,
-// cost, credits used, recording, and expandable VAPI/technical sections.
+// Full call details: VAPI call info — from/to, transcript, AI insights,
+// recording, and expandable VAPI/technical sections.
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../neyvo_pulse_api.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 
-class CallDetailPage extends StatelessWidget {
+class CallDetailPage extends StatefulWidget {
   final Map<String, dynamic> call;
 
   const CallDetailPage({super.key, required this.call});
+
+  @override
+  State<CallDetailPage> createState() => _CallDetailPageState();
+}
+
+class _CallDetailPageState extends State<CallDetailPage> {
+  late Map<String, dynamic> _merged;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _merged = Map<String, dynamic>.from(widget.call);
+    _loadRich();
+  }
+
+  static String _safeStr(dynamic v) => (v ?? '').toString().trim();
+
+  String _resolveVapiCallId(Map<String, dynamic> c) {
+    final v = _safeStr(c['vapi_call_id']);
+    if (v.isNotEmpty) return v;
+    final v2 = _safeStr(c['vapiCallId']);
+    if (v2.isNotEmpty) return v2;
+    // In unified schema, doc id is often the vapi_call_id.
+    final id = _safeStr(c['id']);
+    if (id.isNotEmpty) return id;
+    final cid = _safeStr(c['call_id']);
+    if (cid.isNotEmpty) return cid;
+    return '';
+  }
+
+  Future<void> _loadRich() async {
+    final vapiId = _resolveVapiCallId(_merged);
+    if (vapiId.isEmpty) {
+      setState(() => _loading = false);
+      return;
+    }
+    try {
+      final res = await NeyvoPulseApi.getCallById(vapiId);
+      final ok = res['ok'] == true;
+      final call = res['call'];
+      if (ok && call is Map) {
+        final rich = Map<String, dynamic>.from(call as Map);
+        if (!mounted) return;
+        setState(() {
+          // Prefer rich fields, but keep any list-provided labels if missing.
+          _merged = {..._merged, ...rich};
+          _loading = false;
+        });
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _error = (res['error'] ?? 'Failed to load call details').toString();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   static String formatDuration(dynamic c) {
     final sec = c['duration_seconds'];
@@ -29,7 +95,7 @@ class CallDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final merged = call;
+    final merged = _merged;
     final fromVal = (merged['from'] ?? merged['customer_phone'] ?? merged['student_phone'] ?? '').toString().trim();
     final toVal = (merged['to'] ?? '').toString().trim();
     final name = (merged['customer_name'] ?? merged['student_name'] ?? '').toString().trim();
@@ -40,8 +106,6 @@ class CallDetailPage extends StatelessWidget {
     final transcript = (merged['transcript'] ?? merged['transcription'] ?? '').toString();
     final recordingUrl = (merged['recording_url'] ?? merged['recordingUrl'] ?? '').toString().trim();
     final stereoUrl = (merged['stereo_recording_url'] ?? merged['stereoRecordingUrl'] ?? '').toString().trim();
-    final creditsCharged = merged['credits_charged'];
-    final costUsd = merged['cost'] ?? merged['cost_usd'] ?? merged['costUsd'];
     final summary = (merged['summary'] ?? merged['analysis_summary'] ?? merged['ai_summary'] ?? '').toString();
     final sentiment = (merged['sentiment'] ?? merged['customer_sentiment'] ?? merged['ai_sentiment'] ?? '').toString();
 
@@ -63,6 +127,24 @@ class CallDetailPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(NeyvoSpacing.lg),
         children: [
+          if (_loading) ...[
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+                Text('Loading rich call data…', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+              ],
+            ),
+            const SizedBox(height: NeyvoSpacing.lg),
+          ],
+          if (_error != null && _error!.trim().isNotEmpty) ...[
+            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
+            const SizedBox(height: NeyvoSpacing.lg),
+          ],
           _heroCard(
             name: name.isEmpty ? 'Unknown' : name,
             from: fromVal,
@@ -73,8 +155,6 @@ class CallDetailPage extends StatelessWidget {
             status: status,
             statusColor: statusColor,
           ),
-          const SizedBox(height: NeyvoSpacing.lg),
-          _costAndCreditsCard(creditsCharged: creditsCharged, costUsd: costUsd),
           if (recordingUrl.isNotEmpty || stereoUrl.isNotEmpty) ...[
             const SizedBox(height: NeyvoSpacing.lg),
             _recordingCard(recordingUrl: recordingUrl, stereoUrl: stereoUrl),
@@ -108,9 +188,9 @@ class CallDetailPage extends StatelessWidget {
           ),
           const SizedBox(height: NeyvoSpacing.sm),
           _expandableSection(context,
-            title: 'Cost & recordings',
-            icon: Icons.attach_money,
-            child: _costAndRecordingsGrid(merged),
+            title: 'Recordings',
+            icon: Icons.audiotrack,
+            child: _recordingsGrid(merged),
           ),
           const SizedBox(height: NeyvoSpacing.sm),
           _expandableSection(context,
@@ -212,55 +292,6 @@ class CallDetailPage extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _costAndCreditsCard({dynamic creditsCharged, dynamic costUsd}) {
-    final credits = creditsCharged != null ? (creditsCharged is int ? creditsCharged : int.tryParse(creditsCharged.toString())) : null;
-    final cost = costUsd != null ? (costUsd is num ? costUsd.toDouble() : double.tryParse(costUsd.toString())) : null;
-    return Card(
-      color: NeyvoTheme.bgCard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(NeyvoRadius.lg), side: const BorderSide(color: NeyvoTheme.border)),
-      child: Padding(
-        padding: const EdgeInsets.all(NeyvoSpacing.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.credit_card, size: 20, color: NeyvoTheme.teal),
-                const SizedBox(width: 8),
-                Text('Cost & credits', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text('Credits used:', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textMuted)),
-                const SizedBox(width: 8),
-                Text(
-                  credits != null ? '$credits' : '—',
-                  style: NeyvoType.titleMedium.copyWith(
-                    color: credits != null && credits > 0 ? NeyvoTheme.teal : NeyvoTheme.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text('Cost (USD):', style: NeyvoType.labelLarge.copyWith(color: NeyvoTheme.textMuted)),
-                const SizedBox(width: 8),
-                Text(
-                  cost != null ? '\$${cost.toStringAsFixed(2)}' : '—',
-                  style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -414,24 +445,14 @@ class CallDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _costAndRecordingsGrid(Map<String, dynamic> m) {
-    final cost = m['cost'] ?? m['cost_usd'] ?? m['costUsd'];
-    final costStr = cost != null ? '\$${cost is num ? (cost as num).toStringAsFixed(2) : cost}' : '—';
-    final credits = m['credits_charged'];
-    final creditsStr = credits != null ? credits.toString() : '—';
-    final cb = m['cost_breakdown'];
+  Widget _recordingsGrid(Map<String, dynamic> m) {
+    final recordingUrl = (m['recording_url'] ?? '').toString().trim();
+    final stereoUrl = (m['stereo_recording_url'] ?? '').toString().trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _detailRow('Credits used', creditsStr),
-        _detailRow('Cost (USD)', costStr),
-        if (cb is Map && cb.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text('Breakdown:', style: NeyvoType.labelSmall.copyWith(color: NeyvoTheme.textMuted)),
-          ...(cb.entries.map((e) => _detailRow('  ${e.key}', (e.value ?? '').toString()))),
-        ],
-        _detailRow('Recording URL', (m['recording_url'] ?? '').toString().trim()),
-        _detailRow('Stereo recording', (m['stereo_recording_url'] ?? '').toString().trim()),
+        _detailRow('Recording URL', recordingUrl),
+        _detailRow('Stereo recording', stereoUrl),
       ],
     );
   }

@@ -904,6 +904,28 @@ class NeyvoPulseApi {
       _post('/api/pulse/integrations/school/test', {});
 
   // -------------------------------------------------------------------------
+  // CRM Integrations (Slate)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getSlateIntegration() async =>
+      _get('/api/pulse/integrations/slate');
+
+  static Future<Map<String, dynamic>> setSlateIntegration({
+    bool? enabled,
+    String? webhookUrl,
+    String? authToken,
+  }) async {
+    return _patch('/api/pulse/integrations/slate', {
+      if (enabled != null) 'enabled': enabled,
+      if (webhookUrl != null) 'webhook_url': webhookUrl,
+      if (authToken != null) 'auth_token': authToken,
+    });
+  }
+
+  static Future<Map<String, dynamic>> testSlateIntegration() async =>
+      _post('/api/pulse/integrations/slate/test', {});
+
+  // -------------------------------------------------------------------------
   // Call templates (scripts for assistant)
   // -------------------------------------------------------------------------
 

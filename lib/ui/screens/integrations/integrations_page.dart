@@ -14,29 +14,13 @@ class IntegrationsPage extends StatefulWidget {
 class _IntegrationsPageState extends State<IntegrationsPage> {
   bool _loading = true;
   String? _error;
-  Map<String, dynamic> _config = {};
 
-  bool _enabled = false;
-  List<String> _modes = [];
-  final _apiPullUrl = TextEditingController();
-  final _webhookSecret = TextEditingController();
-  bool _saving = false;
-  bool _syncing = false;
-
-  Map<String, dynamic>? _inboundHealth;
-  bool _checkingHealth = false;
+  Map<String, dynamic> _slateConfig = {};
 
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    _apiPullUrl.dispose();
-    _webhookSecret.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -45,14 +29,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       _error = null;
     });
     try {
-      final res = await NeyvoPulseApi.getIntegrationConfig();
-      final c = res['config'] as Map<String, dynamic>? ?? res;
+      final slateRes = await NeyvoPulseApi.getSlateIntegration();
+      final s = slateRes['config'] as Map<String, dynamic>? ?? slateRes;
       if (!mounted) return;
       setState(() {
-        _config = Map<String, dynamic>.from(c);
-        _enabled = c['enabled'] == true;
-        _modes = List<String>.from(c['modes'] as List? ?? const []);
-        _apiPullUrl.text = c['api_pull_url']?.toString() ?? '';
+        _slateConfig = Map<String, dynamic>.from(s);
         _loading = false;
       });
     } catch (e) {
@@ -61,80 +42,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
         _error = e.toString();
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      await NeyvoPulseApi.setIntegrationConfig(
-        enabled: _enabled,
-        modes: _modes.isEmpty ? null : _modes,
-        webhookSecret: _webhookSecret.text.trim().isEmpty ? null : _webhookSecret.text.trim(),
-        apiPullUrl: _apiPullUrl.text.trim().isEmpty ? null : _apiPullUrl.text.trim(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Integrations saved')),
-      );
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Save failed: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _syncNow() async {
-    if (_apiPullUrl.text.trim().isEmpty) return;
-    setState(() => _syncing = true);
-    try {
-      final res = await NeyvoPulseApi.triggerIntegrationSync();
-      if (!mounted) return;
-      final ok = res['ok'] == true;
-      final summary = res['summary'] as Map<String, dynamic>?;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? 'Sync done. Students: ${summary?['students_upserted'] ?? '?'}, Payments: ${summary?['payments_created'] ?? '?'}'
-                : (res['error']?.toString() ?? 'Sync failed'),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _syncing = false);
-    }
-  }
-
-  Future<void> _checkInboundHealth() async {
-    setState(() => _checkingHealth = true);
-    try {
-      final res = await NeyvoPulseApi.getInboundHealthCheck();
-      if (!mounted) return;
-      setState(() {
-        _inboundHealth = res;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inbound health check complete')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Health check failed: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _checkingHealth = false);
     }
   }
 
@@ -156,8 +63,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
       );
     }
 
-    final lastSync = _config['last_sync_at']?.toString();
-    final lastStatus = _config['last_sync_status']?.toString() ?? '—';
+    final slateEnabled = _slateConfig['enabled'] == true;
+    final slateLastSent = _slateConfig['last_sent_at']?.toString();
+    final slateLastError = _slateConfig['last_error']?.toString();
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -181,130 +89,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Text('Inbound health check', style: NeyvoTextStyles.heading),
+                Text('CRM integrations', style: NeyvoTextStyles.heading),
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Validate Twilio webhook + Vapi endpoint wiring.',
-                        style: NeyvoTextStyles.body,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: 260,
-                        child: FilledButton.icon(
-                          onPressed: _checkingHealth ? null : _checkInboundHealth,
-                          icon: _checkingHealth
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.health_and_safety_outlined, size: 18),
-                          label: const Text('Run health check'),
-                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                  child: _integrationCard(
+                    context,
+                    title: 'Slate CRM',
+                    subtitle: 'Send call events to Slate via webhook',
+                    enabled: slateEnabled,
+                    lastSentAt: slateLastSent,
+                    lastError: slateLastError,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SlateIntegrationPage(initialConfig: _slateConfig),
                         ),
-                      ),
-                      if (_inboundHealth != null) ...[
-                        const SizedBox(height: 12),
-                        _kv('Twilio configured', '${_inboundHealth!['twilio_configured'] ?? '—'}'),
-                        _kv('Vapi configured', '${_inboundHealth!['vapi_configured'] ?? '—'}'),
-                        _kv('Numbers checked', '${_inboundHealth!['numbers_checked'] ?? '—'}'),
-                        if (_inboundHealth!['issues'] is List && (_inboundHealth!['issues'] as List).isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text('Issues', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-                          const SizedBox(height: 6),
-                          ...(_inboundHealth!['issues'] as List).take(10).map((e) => Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text('- $e', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning)),
-                              )),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text('Data integration', style: NeyvoTextStyles.heading),
-                const SizedBox(height: 10),
-                NeyvoGlassPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SwitchListTile(
-                        value: _enabled,
-                        onChanged: (v) => setState(() => _enabled = v),
-                        title: const Text('Enable integration'),
-                        subtitle: Text(
-                          'Webhook, CSV ingest, or API pull',
-                          style: NeyvoTextStyles.micro,
-                        ),
-                        activeColor: NeyvoColors.teal,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _modeChip('webhook', 'Webhook'),
-                          _modeChip('api_pull', 'API pull'),
-                          _modeChip('file_ingest', 'CSV ingest'),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _apiPullUrl,
-                        decoration: const InputDecoration(
-                          labelText: 'API pull URL',
-                          hintText: 'https://their-api.example.com/...',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _webhookSecret,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Webhook secret (HMAC)',
-                          hintText: 'Optional',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 220,
-                            child: FilledButton(
-                              onPressed: _saving ? null : _save,
-                              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                              child: _saving
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Text('Save'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 220,
-                            child: OutlinedButton(
-                              onPressed: _syncing ? null : _syncNow,
-                              child: _syncing
-                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Text('Sync now'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Last sync: ${lastSync ?? '—'} · Status: $lastStatus',
-                        style: NeyvoTextStyles.micro,
-                      ),
-                    ],
+                      );
+                      if (!mounted) return;
+                      await _load();
+                    },
                   ),
                 ),
               ],
@@ -315,35 +118,344 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     );
   }
 
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(width: 160, child: Text(k, style: NeyvoTextStyles.micro)),
-          Expanded(child: Text(v, style: NeyvoTextStyles.bodyPrimary)),
-        ],
+  Widget _integrationCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required String? lastSentAt,
+    required String? lastError,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final hasErr = lastError != null && lastError.trim().isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                gradient: LinearGradient(
+                  colors: [
+                    NeyvoColors.ubPurple.withOpacity(0.95),
+                    NeyvoColors.ubLightBlue.withOpacity(0.95),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  'S',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: enabled ? NeyvoColors.teal.withOpacity(0.14) : NeyvoColors.borderSubtle.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: enabled ? NeyvoColors.teal.withOpacity(0.35) : NeyvoColors.borderSubtle),
+                        ),
+                        child: Text(
+                          enabled ? 'Enabled' : 'Disabled',
+                          style: NeyvoTextStyles.micro.copyWith(
+                            color: enabled ? NeyvoColors.teal : NeyvoColors.textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right, color: NeyvoColors.textMuted),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(subtitle, style: NeyvoTextStyles.micro),
+                  const SizedBox(height: 8),
+                  Text(
+                    hasErr ? 'Last error: $lastError' : 'Last sent: ${lastSentAt ?? '—'}',
+                    style: NeyvoTextStyles.micro.copyWith(color: hasErr ? NeyvoColors.warning : NeyvoColors.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _modeChip(String key, String label) {
-    final selected = _modes.contains(key);
-    return FilterChip(
-      selected: selected,
-      label: Text(label),
-      onSelected: (v) {
-        setState(() {
-          if (v) {
-            if (!_modes.contains(key)) _modes.add(key);
-          } else {
-            _modes.remove(key);
-          }
-        });
-      },
-      selectedColor: NeyvoColors.teal.withOpacity(0.18),
-      checkmarkColor: NeyvoColors.teal,
-      side: BorderSide(color: selected ? NeyvoColors.teal.withOpacity(0.5) : NeyvoColors.borderSubtle),
+class SlateIntegrationPage extends StatefulWidget {
+  final Map<String, dynamic> initialConfig;
+
+  const SlateIntegrationPage({super.key, required this.initialConfig});
+
+  @override
+  State<SlateIntegrationPage> createState() => _SlateIntegrationPageState();
+}
+
+class _SlateIntegrationPageState extends State<SlateIntegrationPage> {
+  bool _loading = true;
+  String? _error;
+
+  Map<String, dynamic> _slateConfig = {};
+  bool _enabled = false;
+  bool _saving = false;
+  bool _testing = false;
+  final _webhookUrl = TextEditingController();
+  final _authToken = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _applyConfig(widget.initialConfig);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _webhookUrl.dispose();
+    _authToken.dispose();
+    super.dispose();
+  }
+
+  void _applyConfig(Map<String, dynamic> cfg) {
+    _slateConfig = Map<String, dynamic>.from(cfg);
+    _enabled = _slateConfig['enabled'] == true;
+    _webhookUrl.text = _slateConfig['webhook_url']?.toString() ?? '';
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final slateRes = await NeyvoPulseApi.getSlateIntegration();
+      final s = slateRes['config'] as Map<String, dynamic>? ?? slateRes;
+      if (!mounted) return;
+      setState(() {
+        _applyConfig(s);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await NeyvoPulseApi.setSlateIntegration(
+        enabled: _enabled,
+        webhookUrl: _webhookUrl.text.trim(),
+        authToken: _authToken.text.trim(),
+      );
+      if (!mounted) return;
+      _authToken.clear();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Slate saved')));
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Slate save failed: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _test() async {
+    setState(() => _testing = true);
+    try {
+      final res = await NeyvoPulseApi.testSlateIntegration();
+      if (!mounted) return;
+      final ok = res['ok'] == true;
+      final status = res['status_code']?.toString() ?? '';
+      final msg = ok ? 'Test payload sent (HTTP $status)' : 'Test failed: ${res['error'] ?? res['response'] ?? ''}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Test failed: $e')));
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lastSent = _slateConfig['last_sent_at']?.toString();
+    final lastError = _slateConfig['last_error']?.toString();
+    final tokenSet = _slateConfig['auth_token_set'] == true;
+
+    return Scaffold(
+      backgroundColor: NeyvoTheme.bgPrimary,
+      appBar: AppBar(
+        backgroundColor: NeyvoTheme.bgSurface,
+        title: Text('Slate CRM', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+        actions: [
+          TextButton.icon(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Refresh'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          if (_loading) ...[
+            const Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+            const SizedBox(height: 16),
+          ],
+          if (_error != null && _error!.trim().isNotEmpty) ...[
+            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning)),
+            const SizedBox(height: 16),
+          ],
+          NeyvoGlassPanel(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Configuration', style: NeyvoTextStyles.heading),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    value: _enabled,
+                    onChanged: (v) => setState(() => _enabled = v),
+                    title: const Text('Enable Slate webhook'),
+                    subtitle: Text('Send inbound/outbound call events to Slate', style: NeyvoTextStyles.micro),
+                    activeColor: NeyvoColors.teal,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _webhookUrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Slate webhook URL',
+                      hintText: 'https://...',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _authToken,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Auth token (optional)',
+                      hintText: tokenSet ? 'Token is set (enter to replace)' : 'Bearer token',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: FilledButton(
+                          onPressed: _saving ? null : _save,
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Save'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 200,
+                        child: OutlinedButton(
+                          onPressed: _testing ? null : _test,
+                          child: _testing
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Text('Send test payload'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Last sent: ${lastSent ?? '—'}${lastError != null && lastError.trim().isNotEmpty ? ' · Last error: $lastError' : ''}',
+                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          NeyvoGlassPanel(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Payload', style: NeyvoTextStyles.heading),
+                  const SizedBox(height: 8),
+                  Text('Slate receives a lead with a nested call object.', style: NeyvoTextStyles.micro),
+                  const SizedBox(height: 10),
+                  SelectableText(
+                    '''{
+  "lead": {
+    "created_at": "2026-03-16T12:00:00Z",
+    "display_name": "Test User",
+    "event_type": "Call",
+    "contact": {
+      "first_name": "Test",
+      "last_name": "User",
+      "email": "test@example.com",
+      "phone_work": "555-0199"
+    },
+    "chat": {
+      "summary": "Short call summary"
+    },
+    "call": {
+      "vapi_call_id": "xxxxxxxx",
+      "status": "completed",
+      "duration_seconds": 60,
+      "recording_url": "https://..."
+    }
+  }
+}''',
+                    style: NeyvoTextStyles.micro.copyWith(fontFamily: 'monospace'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

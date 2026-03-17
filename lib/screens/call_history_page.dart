@@ -668,14 +668,17 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
-                          child: InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
-                            ),
+                          child: GestureDetector(
                             onLongPress: canDelete
                                 ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
                                 : null,
                             child: ExpansionTile(
+                              onExpansionChanged: (expanded) {
+                                if (!expanded) return;
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => CallDetailPage(call: call)),
+                                );
+                              },
                               leading: CircleAvatar(
                                 backgroundColor: statusColor.withOpacity(0.1),
                                 child: Icon(_getStatusIcon(status), color: statusColor),
