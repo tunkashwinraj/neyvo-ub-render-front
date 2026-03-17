@@ -1,6 +1,9 @@
 name: Backup snapshot (12h)
 
 on:
+  push:
+    tags:
+      - "backup-*"
   schedule:
     # Every 12 hours
     - cron: "0 */12 * * *"
