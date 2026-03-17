@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,6 +18,11 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
   static const _frontRepo = 'tunkashwinraj/Goodwin_Neyvo_Front';
   static const _backRepo = 'tunkashwinraj/Goodwin_Neyvo_Back';
 
+  /// Internal access gate: comma-separated list of admin emails.
+  /// Build example:
+  /// flutter build web --release -O 4 --dart-define=INTERNAL_BACKUP_ADMINS=a@b.com,c@d.com
+  static const String _kAdminsCsv = String.fromEnvironment('INTERNAL_BACKUP_ADMINS', defaultValue: '');
+
   bool _loading = true;
   String? _error;
 
@@ -29,12 +35,35 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
     _load();
   }
 
+  bool get _isAuthorized {
+    final user = FirebaseAuth.instance.currentUser;
+    final email = (user?.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return false;
+    final allowed = _kAdminsCsv
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    // If not configured, default-deny (internal page should never be open to everyone).
+    if (allowed.isEmpty) return false;
+    return allowed.contains(email);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      if (!_isAuthorized) {
+        if (!mounted) return;
+        setState(() {
+          _front = const [];
+          _back = const [];
+          _loading = false;
+        });
+        return;
+      }
       final front = await _fetchBackupReleases(_frontRepo);
       final back = await _fetchBackupReleases(_backRepo);
       if (!mounted) return;
@@ -103,6 +132,21 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isAuthorized) {
+      return Scaffold(
+        backgroundColor: NeyvoTheme.bgPrimary,
+        appBar: AppBar(
+          backgroundColor: NeyvoTheme.bgSurface,
+          title: Text('Page not found', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+        ),
+        body: Center(
+          child: Text(
+            'Not available.',
+            style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: NeyvoTheme.bgPrimary,
       appBar: AppBar(

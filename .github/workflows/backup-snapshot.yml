@@ -23,6 +23,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate sops config (age recipient set)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q "REPLACE_WITH_AGE_PUBLIC_KEY" .sops.yaml; then
+            echo "::error::.sops.yaml still contains REPLACE_WITH_AGE_PUBLIC_KEY"
+            exit 1
+          fi
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
