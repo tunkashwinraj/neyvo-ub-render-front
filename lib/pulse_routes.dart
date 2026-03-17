@@ -13,6 +13,7 @@ import 'ui/screens/calls/test_call_page.dart';
 import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';
 import 'features/operators/universal_operator_wizard/universal_operator_wizard_screen.dart';
+import 'ui/screens/internal/backup_rollback_page.dart';
 
 /// Maps legacy Pulse paths to canonical (tab-matching) route names for deep links.
 String? _legacyPulsePathToCanonical(String path) {
@@ -43,6 +44,9 @@ class PulseRouter {
     }
     // #endregion
     switch (settings.name) {
+      case PulseRouteNames.internalBackups:
+        // Internal ops page (not shown in sidebar).
+        return MaterialPageRoute(builder: (_) => const BackupRollbackPage());
       case PulseRouteNames.auth:
         return MaterialPageRoute(builder: (_) => const PulseAuthPage());
       case PulseRouteNames.onboarding:

@@ -59,4 +59,6 @@ abstract class PulseRouteNames {
   static const String adminConsole = '/admin/console';
   static const String adminAuditLog = '/admin/audit-log';
   static const String adminBackendTest = '/admin/backend-test';
+  // Internal ops (not in sidebar)
+  static const String internalBackups = '/internal/backups';
 }
