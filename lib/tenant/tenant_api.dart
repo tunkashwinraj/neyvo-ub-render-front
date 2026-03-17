@@ -4,20 +4,22 @@ import 'tenant_config.dart';
 
 /// API helper to load tenant configuration from the backend.
 class TenantApi {
-  static Future<TenantConfig> fetchConfig() async {
-    try {
-      final res = await SpeariaApi.getJsonMap('/api/tenant/config');
-      return TenantConfig.fromJson(res);
-    } catch (_) {
-      // Fallback to UB theme so the app is always usable even if the
-      // tenant endpoint is temporarily unavailable.
-      return TenantConfig(
+  /// Fallback UB theme when tenant endpoint is unavailable (used by main.dart
+  /// on timeout/error and by fetchConfig catch).
+  static TenantConfig get ubFallback => TenantConfig(
         tenantId: 'ub',
         schoolName: 'Neyvo',
         primaryColor: NeyvoColors.ubPurple,
         secondaryColor: NeyvoColors.ubLightBlue,
         accentColor: NeyvoColors.ubLightBlueSoft,
       );
+
+  static Future<TenantConfig> fetchConfig() async {
+    try {
+      final res = await SpeariaApi.getJsonMap('/api/tenant/config');
+      return TenantConfig.fromJson(res);
+    } catch (_) {
+      return ubFallback;
     }
   }
 }

@@ -65,9 +65,9 @@ String _resolveTenantId() {
   if (host.startsWith('goodwin.')) return 'goodwin';
   if (host.startsWith('ub.')) return 'ub';
 
-  // Staging web.app domains
-  if (host.startsWith('goodwin-neyvo-staging')) return 'goodwin';
-  if (host.startsWith('ub-neyvo-staging')) return 'ub';
+  // Firebase Hosting (goodwin-neyvo.web.app, goodwin-neyvo-staging.web.app, etc.)
+  if (host.startsWith('goodwin-neyvo')) return 'goodwin';
+  if (host.startsWith('ub-neyvo')) return 'ub';
 
   return '';
 }
@@ -162,7 +162,16 @@ String get _kFallbackAccountId {
 
     tz.initializeTimeZones();
 
-    final tenantConfig = await TenantApi.fetchConfig();
+    // Timeout so first paint is not blocked by slow/403 backend; use host-based default on failure.
+    const timeout = Duration(seconds: 5);
+    TenantConfig tenantConfig;
+    try {
+      tenantConfig = await TenantApi.fetchConfig().timeout(timeout);
+    } catch (_) {
+      tenantConfig = tenantId == 'goodwin'
+          ? TenantConfig.defaultGoodwin
+          : TenantApi.ubFallback;
+    }
 
     runApp(NeyvoPulseRoot(tenantConfig: tenantConfig));
   }

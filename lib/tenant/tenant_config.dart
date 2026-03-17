@@ -12,6 +12,16 @@ class TenantConfig {
   final String? logoStackedColorUrl;
   final String? logoStackedWhiteUrl;
 
+  /// Default Goodwin theme (e.g. when hosting on goodwin-neyvo.web.app and
+  /// /api/tenant/config is slow or fails). Primary #003366.
+  static const TenantConfig defaultGoodwin = TenantConfig(
+    tenantId: 'goodwin',
+    schoolName: 'Goodwin',
+    primaryColor: Color(0xFF003366),
+    secondaryColor: Color(0xFF0066B3),
+    accentColor: Color(0xFF4A90D9),
+  );
+
   const TenantConfig({
     required this.tenantId,
     required this.schoolName,

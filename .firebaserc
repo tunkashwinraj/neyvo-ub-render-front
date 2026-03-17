@@ -1,17 +1,15 @@
 {
   "projects": {
-    "ub-neyvo": "ub-neyvo"
+    "default": "goodwin-neyvo",
+    "goodwin-neyvo": "goodwin-neyvo"
   },
   "targets": {
-    "ub-neyvo": {
+    "goodwin-neyvo": {
       "hosting": {
         "default": [
-          "ub-neyvo"
+          "goodwin-neyvo"
         ],
         "staging": [
-          "ub-neyvo-staging"
-        ],
-        "goodwin-staging": [
           "goodwin-neyvo-staging"
         ]
       }
