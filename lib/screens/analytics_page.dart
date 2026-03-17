@@ -42,6 +42,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String _dateRange = '30d';
   /// Performance Trend view: 'calls' | 'both' | 'rate'
   String _performanceTrendTab = 'both';
+  /// Campaigns table filter + pagination
+  String _campaignStatusTab = 'all'; // all|running|draft|done|stopped
+  int _campaignPage = 1;
+  static const int _campaignsPerPage = 8;
 
   /// Current week (Monday 00:00 through end of today) for Performance Trend.
   ({String from, String to}) _currentWeekRangeIso() {
@@ -154,6 +158,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  List<Map<String, dynamic>> _filteredCampaignsForTab() {
+    if (_campaignStatusTab == 'all') return _campaigns;
+    return _campaigns.where((c) {
+      final raw = (c['status'] ?? '').toString().toLowerCase().trim();
+      switch (_campaignStatusTab) {
+        case 'running':
+          return raw == 'running';
+        case 'draft':
+          return raw == 'draft';
+        case 'done':
+          return raw == 'completed';
+        case 'stopped':
+          return raw == 'stopped' || raw == 'cancelled' || raw == 'deleted';
+        default:
+          return true;
+      }
+    }).toList();
   }
 
   void _openDownloadReportDialog() {
@@ -803,6 +826,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final running = _campaigns.where((c) => (c['status'] ?? '').toString().toLowerCase() == 'running').length;
     final draft = _campaigns.where((c) => (c['status'] ?? '').toString().toLowerCase() == 'draft').length;
     final completed = _campaigns.where((c) => (c['status'] ?? '').toString().toLowerCase() == 'completed').length;
+    final stopped = _campaigns.where((c) {
+      final s = (c['status'] ?? '').toString().toLowerCase();
+      return s == 'stopped' || s == 'cancelled' || s == 'deleted';
+    }).length;
+
+    final filtered = _filteredCampaignsForTab();
+    final total = filtered.length;
+    final totalPages = total == 0 ? 1 : ((total - 1) ~/ _campaignsPerPage) + 1;
+    if (_campaignPage > totalPages) _campaignPage = totalPages;
+    final startIndex = (_campaignPage - 1) * _campaignsPerPage;
+    final endIndex = (startIndex + _campaignsPerPage).clamp(0, total);
+    final pageItems = total == 0 ? <Map<String, dynamic>>[] : filtered.sublist(startIndex, endIndex);
 
     return _InsightsCard(
       child: Column(
@@ -818,7 +853,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   Text('Campaigns', style: NeyvoTextStyles.heading.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
-                    '${_campaigns.length} total · $running running · $draft draft',
+                    '${_campaigns.length} total · $running running · $draft draft · $completed done',
                     style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8)),
                   ),
                 ],
@@ -828,15 +863,46 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 children: [
                   _campaignStat('$running', 'Running', const Color(0xFF10B981)),
                   const SizedBox(width: 10),
-                  _campaignStat('$draft', 'Draft', const Color(0xFF94A3B8)),
+                  _campaignStat('$draft', 'Draft', const Color(0xFFF97316)),
                   const SizedBox(width: 10),
                   _campaignStat('$completed', 'Done', const Color(0xFF94A3B8)),
+                  const SizedBox(width: 10),
+                  _campaignStat('$stopped', 'Stopped', const Color(0xFF94A3B8)),
                 ],
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _campaignStatusTabChip('All', 'all', count: _campaigns.length),
+                const SizedBox(width: 6),
+                _campaignStatusTabChip('Running', 'running', count: running),
+                const SizedBox(width: 6),
+                _campaignStatusTabChip('Draft', 'draft', count: draft),
+                const SizedBox(width: 6),
+                _campaignStatusTabChip('Done', 'done', count: completed),
+                const SizedBox(width: 6),
+                _campaignStatusTabChip('Stopped', 'stopped', count: stopped),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
-          _CampaignTable(campaigns: _campaigns),
+          _CampaignTable(campaigns: pageItems),
+          const SizedBox(height: 8),
+          if (total > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Showing ${startIndex + 1}-${endIndex} of $total',
+                  style: NeyvoTextStyles.micro.copyWith(color: const Color(0xFF94A3B8)),
+                ),
+                _buildCampaignPagination(totalPages),
+              ],
+            ),
           const SizedBox(height: 12),
           TextButton.icon(
             onPressed: () {
@@ -850,7 +916,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             label: const Text('Download campaign report'),
             style: TextButton.styleFrom(
               foregroundColor: NeyvoColors.ubLightBlue,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              textStyle: NeyvoTextStyles.micro.copyWith(fontWeight: FontWeight.w500),
+              side: const BorderSide(color: Color(0xFFBFDBFE)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
           ),
         ],
@@ -866,6 +935,119 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         Text(label.toUpperCase(), style: NeyvoTextStyles.micro.copyWith(letterSpacing: 0.5)),
       ],
     );
+  }
+
+  Widget _campaignStatusTabChip(String label, String value, {required int count}) {
+    final isSelected = _campaignStatusTab == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _campaignStatusTab = value;
+          _campaignPage = 1;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE0F2FE) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: NeyvoTextStyles.micro.copyWith(
+                color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              count.toString(),
+              style: NeyvoTextStyles.micro.copyWith(
+                color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF94A3B8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCampaignPagination(int totalPages) {
+    if (totalPages <= 1) return const SizedBox.shrink();
+    final buttons = <Widget>[];
+    for (var i = 1; i <= totalPages; i++) {
+      final isSelected = i == _campaignPage;
+      buttons.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _campaignPage = i;
+              });
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF1D4ED8) : Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Text(
+                '$i',
+                style: NeyvoTextStyles.micro.copyWith(
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    buttons.add(
+      Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: InkWell(
+          onTap: _campaignPage < totalPages
+              ? () {
+                  setState(() {
+                    _campaignPage += 1;
+                  });
+                }
+              : null,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: _campaignPage < totalPages ? const Color(0xFF475569) : const Color(0xFFCBD5F5),
+            ),
+          ),
+        ),
+      ),
+    );
+    return Row(children: buttons);
   }
 
   Widget _buildOperatorWalletCallbacksCard() {
@@ -2525,18 +2707,24 @@ class _CampaignTable extends StatelessWidget {
     final lower = (s ?? '').toString().toLowerCase();
     if (lower == 'running') return NeyvoColors.success;
     if (lower == 'ready') return const Color(0xFF0EA5E9);
-    if (lower == 'draft') return NeyvoColors.textMuted;
-    if (lower == 'stopped') return NeyvoColors.error;
-    return NeyvoColors.textMuted;
+    if (lower == 'draft') return const Color(0xFFF97316);
+    if (lower == 'completed') return const Color(0xFF9CA3AF);
+    if (lower == 'stopped' || lower == 'cancelled' || lower == 'deleted') {
+      return const Color(0xFF9CA3AF);
+    }
+    return const Color(0xFF9CA3AF);
   }
 
   static Color _statusPillBg(String? s) {
     final lower = (s ?? '').toString().toLowerCase();
     if (lower == 'running') return NeyvoColors.success.withValues(alpha: 0.2);
     if (lower == 'ready') return const Color(0xFFE0F2FE);
-    if (lower == 'draft') return NeyvoColors.borderSubtle;
-    if (lower == 'stopped') return NeyvoColors.error.withValues(alpha: 0.2);
-    return NeyvoColors.borderSubtle;
+    if (lower == 'draft') return const Color(0xFFFFEDD5);
+    if (lower == 'completed') return const Color(0xFFE5E7EB);
+    if (lower == 'stopped' || lower == 'cancelled' || lower == 'deleted') {
+      return const Color(0xFFE5E7EB);
+    }
+    return const Color(0xFFE5E7EB);
   }
 
   @override
