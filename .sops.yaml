@@ -4,5 +4,5 @@ creation_rules:
     encrypted_regex: '^(data|stringData|secrets|env|content)$'
     # Replace with your age recipient (public key), e.g. "age1...".
     age:
-      - "REPLACE_WITH_AGE_PUBLIC_KEY"
+      - "age17cmmft74use5kyqndrktpjpw4ahmwhqzjk9ml4xfyut37hlg8utshmh7q3"
 
