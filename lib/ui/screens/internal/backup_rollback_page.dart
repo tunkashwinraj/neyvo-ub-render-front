@@ -228,7 +228,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w800)),
+            Text(title, style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w800)),
             const SizedBox(height: 10),
             child,
           ],
@@ -289,7 +289,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: NeyvoType.titleSmall.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w800)),
+                      Text(title, style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 2),
                       Text(subtitle, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
                     ],
