@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../api/spearia_api.dart';
 import '../../../theme/neyvo_theme.dart';
 
 class BackupRollbackPage extends StatefulWidget {
@@ -64,8 +64,14 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
         });
         return;
       }
-      final front = await _fetchBackupReleases(_frontRepo);
-      final back = await _fetchBackupReleases(_backRepo);
+      final res = await SpeariaApi.getJsonMap('/api/pulse/internal/backups');
+      if (res['ok'] != true) {
+        throw Exception(res['error']?.toString() ?? 'Failed to load backups');
+      }
+      final repos = res['repos'];
+      if (repos is! Map) throw Exception('Invalid backups response');
+      final front = _parseRepoResult(repos[_frontRepo]);
+      final back = _parseRepoResult(repos[_backRepo]);
       if (!mounted) return;
       setState(() {
         _front = front;
@@ -81,47 +87,36 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
     }
   }
 
-  Future<List<_Release>> _fetchBackupReleases(String repo) async {
-    final uri = Uri.parse('https://api.github.com/repos/$repo/releases?per_page=100');
-    final r = await http.get(uri, headers: {
-      'Accept': 'application/vnd.github+json',
-    });
-    if (r.statusCode < 200 || r.statusCode >= 300) {
-      throw Exception('GitHub API failed (${r.statusCode}): ${r.body}');
+  List<_Release> _parseRepoResult(dynamic v) {
+    final m = (v is Map) ? v : null;
+    final ok = m?['ok'] == true;
+    if (!ok) {
+      final status = m?['status']?.toString();
+      final body = m?['body']?.toString();
+      throw Exception('Backups API failed${status != null ? " ($status)" : ""}: ${body ?? m?['error'] ?? 'unknown'}');
     }
-    final data = jsonDecode(r.body);
-    if (data is! List) return const [];
-
-    final releases = <_Release>[];
-    for (final item in data) {
+    final list = m?['releases'];
+    if (list is! List) return const [];
+    final out = <_Release>[];
+    for (final item in list) {
       if (item is! Map) continue;
-      final tag = (item['tag_name'] ?? '').toString();
+      final tag = (item['tag'] ?? '').toString();
       if (!tag.startsWith('backup-')) continue;
       final htmlUrl = (item['html_url'] ?? '').toString();
       final name = (item['name'] ?? tag).toString();
       final createdAt = (item['created_at'] ?? '').toString();
-      final assets = item['assets'];
       final assetNames = <String>[];
-      if (assets is List) {
-        for (final a in assets) {
-          if (a is Map) {
-            final n = (a['name'] ?? '').toString();
-            if (n.isNotEmpty) assetNames.add(n);
-          }
+      final a = item['asset_names'];
+      if (a is List) {
+        for (final x in a) {
+          final s = x?.toString() ?? '';
+          if (s.isNotEmpty) assetNames.add(s);
         }
       }
-      releases.add(_Release(
-        tag: tag,
-        name: name,
-        createdAt: createdAt,
-        htmlUrl: htmlUrl,
-        assetNames: assetNames,
-      ));
+      out.add(_Release(tag: tag, name: name, createdAt: createdAt, htmlUrl: htmlUrl, assetNames: assetNames));
     }
-
-    // Sort newest-first by tag (timestamp encoded).
-    releases.sort((a, b) => b.tag.compareTo(a.tag));
-    return releases;
+    out.sort((a, b) => b.tag.compareTo(a.tag));
+    return out;
   }
 
   Future<void> _openUrl(String url) async {
