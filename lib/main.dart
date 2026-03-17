@@ -1,9 +1,8 @@
   import 'dart:async';
 
-  import 'package:firebase_app_check/firebase_app_check.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:firebase_core/firebase_core.dart';
-  import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+  import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
   import 'package:shared_preferences/shared_preferences.dart';
   import 'package:timezone/data/latest.dart' as tz;
@@ -15,7 +14,6 @@ import 'neyvo_pulse_api.dart';
 import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
-import 'ui/screens/ub/ub_onboarding_page.dart';
 import 'screens/pulse_shell.dart';
 import 'tenant/tenant_api.dart';
 import 'tenant/tenant_config.dart';
@@ -27,25 +25,18 @@ import 'widgets/neyvo_loading_screen.dart';
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
   const String _kDefaultBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL',
-    defaultValue: 'https://ub-neyvo-goodwin.onrender.com',
+    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
   );
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
   /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
   /// If not set, staging uses the same URL as prod (single Render service).
   const String _kStagingBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL_STAGING',
-    defaultValue: 'https://ub-neyvo-goodwin.onrender.com',
+    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
   );
 
 /// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
 const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
-  /// reCAPTCHA v3 site key for Firebase App Check (web). Set via:
-  /// flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key
-  const String _kRecaptchaV3SiteKey = String.fromEnvironment(
-    'RECAPTCHA_V3_SITE_KEY',
-    defaultValue: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-  );
-
 /// This app is Goodwin University only (single tenant). No UB/tenant switching.
 String _resolveTenantId() {
   if (!kIsWeb) return 'goodwin';
@@ -67,16 +58,15 @@ String _resolveBaseUrlForTenant(String tenantId) {
   // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
   if (_isStagingHost) return _kStagingBaseUrl;
 
-  // For now, both UB and Goodwin tenants use the same backend service.
-  // This ensures all tenants talk to https://ub-neyvo-goodwin.onrender.com.
-  return 'https://ub-neyvo-goodwin.onrender.com';
+  // Single-tenant Goodwin deployment: use the configured base URL.
+  return _kDefaultBaseUrl;
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
-/// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=160067
+/// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=757763
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (SpeariaApi.baseUrl.contains('ub-neyvo-goodwin.onrender.com')) return '160067';
+  if (SpeariaApi.baseUrl.contains('goodwin-neyvo-back.onrender.com')) return '757763';
   return '';
 }
 
@@ -86,35 +76,6 @@ String get _kFallbackAccountId {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
-    // Firebase App Check: verify the app (reCAPTCHA v3 on web) before Auth/Backend.
-    // In debug mode on web we skip activation so login works without 403/throttling from
-    // App Check (e.g. when domain isn't registered or reCAPTCHA key is test key).
-    // In release, activate so production domains get tokens once configured in Firebase Console.
-    try {
-      final shouldActivateAppCheck = !(kIsWeb && kDebugMode);
-      if (shouldActivateAppCheck) {
-        if (kIsWeb) {
-          await FirebaseAppCheck.instance.activate(
-            webProvider: ReCaptchaV3Provider(_kRecaptchaV3SiteKey),
-            androidProvider: AndroidProvider.debug,
-            appleProvider: AppleProvider.debug,
-          );
-        } else {
-          await FirebaseAppCheck.instance.activate(
-            androidProvider: AndroidProvider.debug,
-            appleProvider: AppleProvider.debug,
-          );
-        }
-      } else {
-        debugPrint('Firebase App Check skipped (web debug mode) so sign-in can succeed.');
-      }
-    } catch (e, st) {
-      if (kIsWeb) {
-        debugPrint('Firebase App Check activation failed (app will continue): $e');
-        debugPrint('Stack trace: $st');
-      }
-    }
 
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.SESSION);
@@ -207,7 +168,7 @@ String get _kFallbackAccountId {
   }
 }
 
-  /// After login: load account; if UB intro not completed show UbOnboardingPage else PulseShell.
+  /// After login: load account then show PulseShell (Goodwin-only; no tenant switching).
   class _PostAuthGate extends StatefulWidget {
     const _PostAuthGate();
 

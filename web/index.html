@@ -99,10 +99,6 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <!-- reCAPTCHA v3 (Firebase App Check). Load first. -->
-  <script src="https://www.google.com/recaptcha/api.js?render=6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" async></script>
-  <!-- reCAPTCHA v2 checkbox ("I'm not a robot") - visible on login. Load after v3 so render() is available. -->
-  <script src="https://www.google.com/recaptcha/api.js" async></script>
   <script>
     window.addEventListener('flutter-first-frame', function () {
       const loader = document.getElementById('app-loader');
