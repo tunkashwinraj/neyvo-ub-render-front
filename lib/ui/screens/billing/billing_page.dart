@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/billing_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
@@ -14,14 +16,14 @@ import 'plan_selector_page.dart';
 import 'voice_tier_page.dart';
 import 'wallet_page.dart';
 
-class BillingPage extends StatefulWidget {
+class BillingPage extends ConsumerStatefulWidget {
   const BillingPage({super.key});
 
   @override
-  State<BillingPage> createState() => _BillingPageState();
+  ConsumerState<BillingPage> createState() => _BillingPageState();
 }
 
-class _BillingPageState extends State<BillingPage> {
+class _BillingPageState extends ConsumerState<BillingPage> {
   bool _loading = true;
   String? _error;
 
@@ -60,39 +62,7 @@ class _BillingPageState extends State<BillingPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final now = DateTime.now();
-      final from = DateTime(now.year, now.month, 1);
-      final fromStr =
-          '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
-      final toStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-      final results = await Future.wait([
-        NeyvoPulseApi.getBillingWallet(),
-        NeyvoPulseApi.getBillingUsage(from: fromStr, to: toStr),
-        NeyvoPulseApi.getSubscription(),
-        NeyvoPulseApi.listNumbers(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _wallet = results[0] as Map<String, dynamic>;
-        _usage = results[1] as Map<String, dynamic>;
-        _subscription = results[2] as Map<String, dynamic>;
-        _numbers = results[3] as Map<String, dynamic>;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
+    ref.invalidate(billingNotifierProvider);
   }
 
   void _addCredits() {
@@ -101,6 +71,19 @@ class _BillingPageState extends State<BillingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncValue = ref.watch(billingNotifierProvider);
+    asyncValue.whenData((value) {
+      _wallet = value.wallet;
+      _usage = value.usage;
+      _subscription = value.subscription;
+      _numbers = value.numbers;
+      _loading = false;
+      _error = null;
+    });
+    if (asyncValue.hasError) {
+      _error = '${asyncValue.error}';
+      _loading = false;
+    }
     final primary = TenantBrand.primary(context);
     if (_loading && _wallet == null) {
       return Center(child: CircularProgressIndicator(color: primary));
