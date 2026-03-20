@@ -4,8 +4,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/providers/account_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
@@ -14,14 +16,14 @@ import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../activation/activation_service.dart';
 
-class TestCallPage extends StatefulWidget {
+class TestCallPage extends ConsumerStatefulWidget {
   const TestCallPage({super.key});
 
   @override
-  State<TestCallPage> createState() => _TestCallPageState();
+  ConsumerState<TestCallPage> createState() => _TestCallPageState();
 }
 
-class _TestCallPageState extends State<TestCallPage> {
+class _TestCallPageState extends ConsumerState<TestCallPage> {
   bool _loading = true;
   String? _error;
   String? _trainingNumber;
@@ -47,7 +49,7 @@ class _TestCallPageState extends State<TestCallPage> {
     });
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
         NeyvoPulseApi.listNumbers(),
       ]);
       final account = results[0] as Map<String, dynamic>;

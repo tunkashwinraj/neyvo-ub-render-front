@@ -2,22 +2,24 @@
 // Voice OS – Numbers Hub: Production numbers only.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/account_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
-class PhoneNumbersPage extends StatefulWidget {
+class PhoneNumbersPage extends ConsumerStatefulWidget {
   const PhoneNumbersPage({super.key});
 
   @override
-  State<PhoneNumbersPage> createState() => _PhoneNumbersPageState();
+  ConsumerState<PhoneNumbersPage> createState() => _PhoneNumbersPageState();
 }
 
-class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
+class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
   bool _loading = true;
   String? _error;
 
@@ -42,7 +44,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     });
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
         NeyvoPulseApi.listNumbers(),
         ManagedProfileApiService.listProfiles(),
       ]);

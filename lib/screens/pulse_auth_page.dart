@@ -3,22 +3,24 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/account_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_scope.dart';
 import '../tenant/tenant_brand.dart';
 
-class PulseAuthPage extends StatefulWidget {
+class PulseAuthPage extends ConsumerStatefulWidget {
   const PulseAuthPage({super.key});
 
   @override
-  State<PulseAuthPage> createState() => _PulseAuthPageState();
+  ConsumerState<PulseAuthPage> createState() => _PulseAuthPageState();
 }
 
-class _PulseAuthPageState extends State<PulseAuthPage> {
+class _PulseAuthPageState extends ConsumerState<PulseAuthPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
@@ -191,7 +193,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
       // logins are rejected at the auth screen instead of inside the
       // Pulse shell. No dashboard data is ever loaded until this succeeds.
       try {
-        await NeyvoPulseApi.getAccountInfo();
+        await ref.read(accountInfoProvider.future);
       } on ApiException catch (e) {
         // Any 403 on account = wrong portal (same as main.dart gate).
         if (e.statusCode == 403) {

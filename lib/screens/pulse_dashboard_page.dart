@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers/account_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
@@ -18,14 +20,14 @@ import '../features/agents/create_agent_wizard.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../features/setup/setup_api_service.dart';
 
-class PulseDashboardPage extends StatefulWidget {
+class PulseDashboardPage extends ConsumerStatefulWidget {
   const PulseDashboardPage({super.key});
 
   @override
-  State<PulseDashboardPage> createState() => _PulseDashboardPageState();
+  ConsumerState<PulseDashboardPage> createState() => _PulseDashboardPageState();
 }
 
-class _PulseDashboardPageState extends State<PulseDashboardPage> {
+class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   bool _loading = true;
   String? _error;
 
@@ -270,7 +272,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
         NeyvoPulseApi.listCalls(from: from, to: to), // 3
         NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 4
         NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 5
-        NeyvoPulseApi.getAccountInfo(), // 6
+        ref.read(accountInfoProvider.future), // 6
         NeyvoPulseApi.getUbStatus(), // 7
         NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 8
         NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 9

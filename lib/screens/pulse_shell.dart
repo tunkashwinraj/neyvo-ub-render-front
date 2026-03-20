@@ -7,10 +7,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
+import '../core/providers/account_provider.dart';
 import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
@@ -61,7 +63,7 @@ class PulseShellController {
   }
 }
 
-class PulseShell extends StatefulWidget {
+class PulseShell extends ConsumerStatefulWidget {
   const PulseShell({
     super.key,
     this.initialRouteName,
@@ -75,10 +77,10 @@ class PulseShell extends StatefulWidget {
   final CallsSection? initialCallsSection;
 
   @override
-  State<PulseShell> createState() => _PulseShellState();
+  ConsumerState<PulseShell> createState() => _PulseShellState();
 }
 
-class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateMixin {
+class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   /// When true, content is driven by _selectedIndex only (user tapped a sidebar tab). When false and initialRoute was wallet, we show Wallet page while Billing is selected.
   bool _userHasChangedTab = false;
@@ -356,7 +358,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _loadAccountInfo() async {
     try {
-      final res = await NeyvoPulseApi.getAccountInfo();
+      final res = await ref.read(accountInfoProvider.future);
       if (res['ok'] == true && res['account_id'] != null) {
         final accountId = res['account_id']?.toString() ?? '';
         NeyvoPulseApi.setDefaultAccountId(accountId);
