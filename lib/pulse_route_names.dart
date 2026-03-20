@@ -15,6 +15,7 @@ abstract class PulseRouteNames {
   static const String payments = '/pulse/payments';
   static const String aiInsights = '/pulse/ai-insights';
   static const String training = '/pulse/training';
+  /// Deprecated: audit log removed; deep links redirect to dashboard.
   static const String auditLog = '/pulse/audit-log';
   // Canonical integrations route for Voice OS.
   static const String integrations = '/pulse/integrations';
@@ -57,6 +58,7 @@ abstract class PulseRouteNames {
 
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';
+  /// Deprecated: audit log removed.
   static const String adminAuditLog = '/admin/audit-log';
   static const String adminBackendTest = '/admin/backend-test';
   // Internal ops (not in sidebar)

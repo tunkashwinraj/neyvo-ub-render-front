@@ -2,7 +2,7 @@
 // Neyvo Pulse – API client. All data is keyed by account_id.
 // Account id is set dynamically from GET /api/pulse/account (no hardcoded values).
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 
 class NeyvoPulseApi {
   static String _defaultAccountId = '';
@@ -55,6 +55,7 @@ class NeyvoPulseApi {
     'VALIDATION_FAILED',
     'SNAPSHOT_NOT_READY',
     'CAMPAIGN_RUNNING',
+    'VAPI_RATE_LIMITED',
   };
 
   /// Extract a normalized campaign error code from an ApiException, or null if none.
@@ -63,6 +64,11 @@ class NeyvoPulseApi {
     if (payload is Map && payload['error'] is String) {
       final code = (payload['error'] as String).toUpperCase();
       if (_campaignErrorCodes.contains(code)) return code;
+    }
+    // Backend may return lower_snake_case for some newer errors.
+    if (payload is Map && payload['error'] is String) {
+      final raw = (payload['error'] as String).toLowerCase().trim();
+      if (raw == 'vapi_rate_limited') return 'VAPI_RATE_LIMITED';
     }
     // Some backend errors may only be surfaced via e.message.
     final m = e.message.toUpperCase();
@@ -648,19 +654,6 @@ class NeyvoPulseApi {
     );
   }
 
-  /// Phase D: Audit log (who viewed/edited what)
-  static Future<Map<String, dynamic>> getAuditLog({
-    String? resource,
-    int limit = 100,
-  }) async =>
-      _get(
-        '/api/pulse/audit-log',
-        params: <String, dynamic>{
-          if (resource != null) 'resource': resource,
-          'limit': limit,
-        },
-      );
-
   /// Phase D RBAC: list members and their roles
   static Future<Map<String, dynamic>> listMembers() async =>
       _get('/api/pulse/members');
@@ -924,6 +917,33 @@ class NeyvoPulseApi {
 
   static Future<Map<String, dynamic>> testSlateIntegration() async =>
       _post('/api/pulse/integrations/slate/test', {});
+
+  // -------------------------------------------------------------------------
+  // Calendar Integrations (Calendly)
+  // -------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getCalendlyIntegration() async =>
+      _get('/api/pulse/integrations/calendly');
+
+  static Future<Map<String, dynamic>> setCalendlyIntegration({
+    bool? enabled,
+    String? eventTypeUri,
+  }) async {
+    return _patch('/api/pulse/integrations/calendly', {
+      if (enabled != null) 'enabled': enabled,
+      if (eventTypeUri != null) 'event_type_uri': eventTypeUri,
+    });
+  }
+
+  static Future<Map<String, dynamic>> listCalendlyEventTypes() async =>
+      _post('/api/pulse/integrations/calendly/event-types', {});
+
+  static Future<Map<String, dynamic>> startCalendlyOAuth() async =>
+      SpeariaApi.getJsonMap('/api/pulse/integrations/calendly/oauth/start',
+          params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+
+  static Future<Map<String, dynamic>> disconnectCalendly() async =>
+      _post('/api/pulse/integrations/calendly/disconnect', {});
 
   // -------------------------------------------------------------------------
   // Call templates (scripts for assistant)

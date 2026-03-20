@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';

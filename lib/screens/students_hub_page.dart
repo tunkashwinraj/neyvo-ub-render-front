@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -1174,8 +1174,8 @@ class _ImportTabState extends State<_ImportTab> {
   Future<void> _downloadTemplate() async {
     if (kIsWeb) {
       final url =
-          '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
-      final ok = await SpeariaApi.launchExternal(url);
+          '${NeyvoApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await NeyvoApi.launchExternal(url);
       if (ok) return;
     }
     try {
@@ -1728,13 +1728,13 @@ class _SyncTabState extends State<_SyncTab> {
                       title: Text('Webhook URL',
                           style: NeyvoType.labelLarge),
                       subtitle: SelectableText(
-                          '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'),
+                          '${NeyvoApi.baseUrl}/api/pulse/integrations/school/webhook'),
                       trailing: IconButton(
                         icon: const Icon(Icons.copy),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
                               text:
-                                  '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'));
+                                  '${NeyvoApi.baseUrl}/api/pulse/integrations/school/webhook'));
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('URL copied')));
                         },

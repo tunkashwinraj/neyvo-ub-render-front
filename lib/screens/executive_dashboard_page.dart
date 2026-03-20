@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
+import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import 'pulse_shell.dart';
 
@@ -66,7 +67,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
   }
 
   String get _fromIso {
-    final now = DateTime.now();
+    final now = UserTimezoneService.userLocalNow();
     switch (_dateRange) {
       case _DateRange.today:
         return _dayStartEnd(now).start;
@@ -116,7 +117,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}T23:59:59';
 
   ({String from, String to}) _priorRange() {
-    final now = DateTime.now();
+    final now = UserTimezoneService.userLocalNow();
     switch (_dateRange) {
       case _DateRange.today:
         final y = now.subtract(const Duration(days: 1));
@@ -1142,7 +1143,12 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
             title: const Text('From'),
             subtitle: Text(DateFormat.yMMMd().format(_from)),
             onTap: () async {
-              final d = await showDatePicker(context: context, initialDate: _from, firstDate: DateTime(2020), lastDate: DateTime.now());
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _from,
+                firstDate: DateTime(2020),
+                lastDate: UserTimezoneService.userLocalNow(),
+              );
               if (d != null) setState(() => _from = d);
             },
           ),
@@ -1150,7 +1156,12 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
             title: const Text('To'),
             subtitle: Text(DateFormat.yMMMd().format(_to)),
             onTap: () async {
-              final d = await showDatePicker(context: context, initialDate: _to, firstDate: DateTime(2020), lastDate: DateTime.now());
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _to,
+                firstDate: DateTime(2020),
+                lastDate: UserTimezoneService.userLocalNow(),
+              );
               if (d != null) setState(() => _to = d);
             },
           ),

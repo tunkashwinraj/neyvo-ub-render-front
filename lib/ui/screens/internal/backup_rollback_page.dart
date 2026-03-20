@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../api/spearia_api.dart';
+import '../../../api/neyvo_api.dart';
 import '../../../theme/neyvo_theme.dart';
 
 class BackupRollbackPage extends StatefulWidget {
@@ -64,7 +64,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
         });
         return;
       }
-      final res = await SpeariaApi.getJsonMap('/api/pulse/internal/backups');
+      final res = await NeyvoApi.getJsonMap('/api/pulse/internal/backups');
       if (res['ok'] != true) {
         throw Exception(res['error']?.toString() ?? 'Failed to load backups');
       }

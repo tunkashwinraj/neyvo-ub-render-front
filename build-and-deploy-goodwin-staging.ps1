@@ -8,16 +8,16 @@ Write-Host "Building Flutter web..." -ForegroundColor Cyan
 flutter build web
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Clearing hosting target goodwin-staging..." -ForegroundColor Cyan
-firebase target:clear hosting goodwin-staging
+Write-Host "Clearing hosting target staging..." -ForegroundColor Cyan
+firebase target:clear hosting staging
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Applying hosting target goodwin-staging -> goodwin-neyvo-staging..." -ForegroundColor Cyan
-firebase target:apply hosting goodwin-staging goodwin-neyvo-staging
+Write-Host "Applying hosting target staging -> goodwin-neyvo-staging..." -ForegroundColor Cyan
+firebase target:apply hosting staging goodwin-neyvo-staging
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Deploying to hosting:goodwin-staging..." -ForegroundColor Cyan
-firebase deploy --only hosting:goodwin-staging
+Write-Host "Deploying to hosting:staging..." -ForegroundColor Cyan
+firebase deploy --only hosting:staging
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Done." -ForegroundColor Green

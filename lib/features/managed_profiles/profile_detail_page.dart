@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../utils/voice_preview_player.dart';
 
 import '../../neyvo_pulse_api.dart';

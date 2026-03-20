@@ -1,6 +1,6 @@
 // lib/screens/call_detail_page.dart
-// Full call details: VAPI call info — from/to, transcript, AI insights,
-// recording, and expandable VAPI/technical sections.
+// Full call details: from/to, transcript, summary, recording — lean Firestore docs
+// (businesses/{accountId}/calls). Server strips Vapi rounds/messages/history when sanitized.
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';

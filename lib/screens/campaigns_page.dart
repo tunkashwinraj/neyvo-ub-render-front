@@ -7,7 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
@@ -274,8 +274,8 @@ class _CampaignsPageState extends State<CampaignsPage> {
   Future<void> _downloadAudienceTemplate() async {
     // Reuse the existing students import template.
     if (kIsWeb) {
-      final url = '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
-      final ok = await SpeariaApi.launchExternal(url);
+      final url = '${NeyvoApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await NeyvoApi.launchExternal(url);
       if (ok) return;
     }
     try {
@@ -947,8 +947,20 @@ class _CampaignsPageState extends State<CampaignsPage> {
     } on ApiException catch (e) {
       if (mounted) {
         final payload = e.payload;
+        final campaignCode = NeyvoPulseApi.campaignErrorCodeFrom(e);
         if (payload is Map && payload['error'] == 'insufficient_credits') {
           _showInsufficientCreditsSnackBar(e);
+        } else if (campaignCode == 'VAPI_RATE_LIMITED') {
+          final msg = payload is Map
+              ? (payload['message'] ?? 'Vapi rate limit / concurrency limit reached. Calls will retry automatically with backoff.')
+              : 'Vapi rate limit / concurrency limit reached. Calls will retry automatically with backoff.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg.toString()),
+              backgroundColor: NeyvoTheme.error,
+              duration: const Duration(seconds: 6),
+            ),
+          );
         } else {
           final msg = payload is Map
               ? (payload['message'] ?? payload['error'] ?? e.message)

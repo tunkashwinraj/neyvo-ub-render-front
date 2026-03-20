@@ -123,7 +123,8 @@ class PulseRouter {
       case PulseRouteNames.training:
         return MaterialPageRoute(builder: (_) => const TrainingPage());
       case PulseRouteNames.auditLog:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.auditLog));
+        // Audit log feature removed — land on dashboard.
+        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
       case PulseRouteNames.integrations:
         return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.integrations));
       case PulseRouteNames.integration:

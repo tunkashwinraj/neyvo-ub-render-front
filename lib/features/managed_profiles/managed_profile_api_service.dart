@@ -1,7 +1,7 @@
 // lib/features/managed_profiles/managed_profile_api_service.dart
 // API client for Managed Profiles only. Uses /api/managed-profiles/*.
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
@@ -10,14 +10,14 @@ class ManagedProfileApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       p['account_id'] = p['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.getJsonMap(path, params: p);
+    return NeyvoApi.getJsonMap(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.postJsonMap(path, body: body);
+    return NeyvoApi.postJsonMap(path, body: body);
   }
 
   static Future<void> _delete(String path, {Map<String, dynamic>? body}) async {
@@ -25,14 +25,14 @@ class ManagedProfileApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       params['account_id'] = params['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    await SpeariaApi.deleteJson(path, params: params);
+    await NeyvoApi.deleteJson(path, params: params);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    final v = await SpeariaApi.patchJson(path, body: body);
+    final v = await NeyvoApi.patchJson(path, body: body);
     return Map<String, dynamic>.from(v as Map);
   }
 

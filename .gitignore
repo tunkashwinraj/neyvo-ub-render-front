@@ -45,6 +45,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Local crypto keys (never commit private material)
+age.key
+
 # Ops secrets (plaintext must never be committed)
 /ops/secrets/**/*.env
 /ops/secrets/**/*.json

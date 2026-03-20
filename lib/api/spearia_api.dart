@@ -38,7 +38,6 @@ class SpeariaApi {
   static String? _adminToken; // optional X-Admin-Token for admin routes
   static String? _userId; // optional X-User-Id for Pulse RBAC
   static String? _defaultAccountId; // auto-injected if a call forgets it
-  static String? _tenantId; // optional X-Tenant for multi-tenant branding
   static Duration _defaultTimeout = const Duration(seconds: 20);
   static bool _sendNgrokSkipHeader = false;
   static bool _autoAdminForAdminPaths = true; // add X-Admin-Token for /admin/*
@@ -83,12 +82,6 @@ class SpeariaApi {
   static void setDefaultAccountId(String? id) {
     _defaultAccountId =
         (id == null || id.trim().isEmpty) ? null : id.trim();
-  }
-
-  /// Optional: current tenant id (sent as X-Tenant) for multi-tenant setups.
-  static void setTenantId(String? tenantId) {
-    _tenantId =
-        (tenantId == null || tenantId.trim().isEmpty) ? null : tenantId.trim();
   }
 
   /// Optional: adjust default request timeout
@@ -163,10 +156,6 @@ class SpeariaApi {
     // Pulse RBAC: send current user id when set
     if (_userId != null && _userId!.isNotEmpty) {
       h['X-User-Id'] = _userId!;
-    }
-    // Tenant header so backend can resolve branding even when Host is shared.
-    if (_tenantId != null && _tenantId!.isNotEmpty) {
-      h['X-Tenant'] = _tenantId!;
     }
     return h;
   }

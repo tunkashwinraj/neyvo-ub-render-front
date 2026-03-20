@@ -1,7 +1,7 @@
 // lib/features/setup/setup_api_service.dart
 // Single source of truth for setup status – wraps GET /api/setup/status.
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class SetupStatusApiService {
@@ -20,7 +20,7 @@ class SetupStatusApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       params['account_id'] = NeyvoPulseApi.defaultAccountId;
     }
-    final res = await SpeariaApi.getJsonMap('/api/setup/status', params: params);
+    final res = await NeyvoApi.getJsonMap('/api/setup/status', params: params);
     return Map<String, dynamic>.from(res);
   }
 }

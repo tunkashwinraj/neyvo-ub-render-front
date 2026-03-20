@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 
 class HealthCheckPage extends StatefulWidget {
@@ -60,10 +60,10 @@ class _HealthCheckPageState extends State<HealthCheckPage> {
       } else {
         switch (test.responseType) {
           case _EndpointResponseType.text:
-            response = await SpeariaApi.getText(test.path);
+            response = await NeyvoApi.getText(test.path);
             break;
           case _EndpointResponseType.json:
-            response = await SpeariaApi.getJsonMap(test.path);
+            response = await NeyvoApi.getJsonMap(test.path);
             break;
         }
       }

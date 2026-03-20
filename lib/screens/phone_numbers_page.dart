@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_brand.dart';

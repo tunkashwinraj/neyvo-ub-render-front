@@ -340,7 +340,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildPageHeader() {
-    final lastUpdated = DateFormat('MMMM d, y').format(DateTime.now());
+    final lastUpdated = UserTimezoneService.formatNow();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -545,7 +545,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       weekDays.add(row);
     }
 
-    final year = DateTime.now().year;
+    final year = UserTimezoneService.userLocalNow().year;
     final trendData = weekDays.map((d) {
       final r = (d['resolved'] as num?)?.toInt() ?? 0;
       final u = (d['unresolved'] as num?)?.toInt() ?? 0;

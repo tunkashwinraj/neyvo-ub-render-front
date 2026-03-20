@@ -162,7 +162,9 @@ class _CallbacksPageState extends State<CallbacksPage> {
                         final c = _filteredCallbacks()[index];
                         final name = (c['name'] ?? 'Unknown').toString();
                         final phone = (c['phone'] ?? '—').toString();
-                        final status = (c['callback_status'] ?? '').toString();
+                        // API sends both status (alias) and callback_status — prefer explicit status.
+                        final status =
+                            (c['status'] ?? c['callback_status'] ?? '').toString();
                         final attempts = (c['callback_attempt_count'] as num?)?.toInt();
                         final maxAttempts = (c['callback_max_attempts'] as num?)?.toInt();
                         final at = (c['callback_at_display'] ?? '').toString().trim().isNotEmpty

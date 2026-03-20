@@ -1,5 +1,10 @@
 // lib/screens/call_history_page.dart
-// Call logs ? history with filters, date range, transcripts, export, recording link
+// Call logs — history with filters, date range, transcripts, export, recording link.
+//
+// Firestore lean contract (businesses/{accountId}/calls): expect
+// vapi_call_id, from, to, status, duration_seconds, created_at, ended_at,
+// recording_url, summary, transcript, student_id, campaign_id, agent_id, direction.
+// Extra Vapi fields may be absent when FF_SINGLE_CALLS_PATH is on server.
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';

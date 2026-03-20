@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 
 /// Wraps [child] and signs out the user after [timeout] of no pointer or keyboard activity.
@@ -48,8 +48,8 @@ class _InactivityDetectorState extends State<InactivityDetector> {
     _timer?.cancel();
     _timer = null;
     FirebaseAuth.instance.signOut();
-    SpeariaApi.setSessionToken(null);
-    SpeariaApi.setUserId(null);
+    NeyvoApi.setSessionToken(null);
+    NeyvoApi.setUserId(null);
     NeyvoPulseApi.setDefaultAccountId(null);
   }
 

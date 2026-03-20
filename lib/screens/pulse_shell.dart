@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
@@ -16,15 +15,13 @@ import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
 import 'phone_numbers_page.dart';
-import 'call_history_page.dart';
 import 'analytics_page.dart';
 import 'executive_dashboard_page.dart';
-import 'callbacks_page.dart';
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/raw_assistant_detail_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
@@ -45,7 +42,6 @@ import '../ui/screens/agency/agency_overview_page.dart';
 import 'students_hub_page.dart';
 import 'team_page.dart';
 import 'training_page.dart';
-import 'audit_log_page.dart';
 import 'health_check_page.dart';
 
 /// Allows navigating to a pulse tab without pushing a new PulseShell (avoids full re-init and slow load).
@@ -122,7 +118,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls, 'call_logs'),
     _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
-    _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'audit_log'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
     _NavItem('Executive Dashboard', Icons.dashboard_outlined, PulseRouteNames.executiveDashboard, 'insights'),
     _NavItem('Training', Icons.quiz_outlined, PulseRouteNames.training, 'settings'), // temporary: FAQ + policy
@@ -133,8 +128,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   ];
 
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
-  /// Audit Log is admin-only (hidden from non-admin).
-  /// If staff has no permissions (empty list), show all tabs except Audit Log so the user is not locked out.
+  /// If staff has no permissions (empty list), show all tabs so the user is not locked out.
   List<_NavItem> get _navItems {
     final role = _myRole?.toLowerCase();
     final perms = _myPermissions;
@@ -142,10 +136,9 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     List<_NavItem> items;
     if (isAdmin || perms == null) {
       items = List<_NavItem>.from(_allNavItems);
-      if (!isAdmin) items.removeWhere((n) => n.permissionKey == 'audit_log');
     } else {
-      final filtered = _allNavItems.where((n) => n.permissionKey != 'audit_log' && perms.contains(n.permissionKey)).toList();
-      items = filtered.isEmpty ? _allNavItems.where((n) => n.permissionKey != 'audit_log').toList() : filtered;
+      final filtered = _allNavItems.where((n) => perms.contains(n.permissionKey)).toList();
+      items = filtered.isEmpty ? List<_NavItem>.from(_allNavItems) : filtered;
     }
     if (_selectedIndex >= items.length) _selectedIndex = 0;
     return items;
@@ -352,8 +345,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _signOut() async {
     await FirebaseAuth.instance.signOut();
-    SpeariaApi.setSessionToken(null);
-    SpeariaApi.setUserId(null);
+    NeyvoApi.setSessionToken(null);
+    NeyvoApi.setUserId(null);
     NeyvoPulseApi.setDefaultAccountId(null);
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -442,22 +435,12 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
     final tenant = TenantScope.of(context)?.config;
-    final isGoodwin = tenant?.tenantId == 'goodwin';
-    final Color sidebarBgColor = isGoodwin && tenant?.primaryColor != null
-        ? tenant!.primaryColor!
-        : NeyvoColors.sidebarBg;
-    final Color sidebarAccentColor = isGoodwin && tenant?.secondaryColor != null
-        ? tenant!.secondaryColor!
-        : NeyvoColors.ubLightBlue;
-    final Color sidebarSelectedColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.85)
-        : NeyvoColors.sidebarSelected;
-    final Color sidebarHoverColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.5)
-        : NeyvoColors.sidebarHover;
+    final Color sidebarBgColor = tenant?.primaryColor ?? NeyvoColors.sidebarBg;
+    final Color sidebarAccentColor = tenant?.secondaryColor ?? NeyvoColors.ubLightBlue;
+    final Color sidebarSelectedColor = sidebarBgColor.withOpacity(0.85);
+    final Color sidebarHoverColor = sidebarBgColor.withOpacity(0.5);
 
     final brandPrimary = TenantBrand.primary(context);
-    final brandSecondary = TenantBrand.secondary(context);
 
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
@@ -486,27 +469,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
-                        final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-                        final isGoodwin = tenantId == 'goodwin';
-                        final isUb = tenantId == 'ub' || tenant == null;
-                        if (isGoodwin) {
-                          return Image.asset(
-                            'assets/goodwin_logo/goodwin_horiz_white.png',
-                            fit: BoxFit.contain,
-                            height: 46,
-                          );
-                        }
-                        if (isUb) {
-                          return SvgPicture.asset(
-                            'assets/ub_logo/ub_logo_horizontal_white.svg',
-                            fit: BoxFit.contain,
-                            height: 46,
-                            colorFilter: const ColorFilter.mode(
-                              NeyvoColors.white,
-                              BlendMode.srcIn,
-                            ),
-                          );
-                        }
                         final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
                         if (logoUrl != null && logoUrl.isNotEmpty) {
                           final lower = logoUrl.toLowerCase();
@@ -517,18 +479,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               height: 46,
                               errorBuilder: (context, _, __) {
                                 final t = TenantScope.of(context)?.config;
-                                final isUb = t == null || t.tenantId == 'ub';
-                                if (isUb) {
-                                  return SvgPicture.asset(
-                                    'assets/ub_logo/ub_logo_horizontal_white.svg',
-                                    fit: BoxFit.contain,
-                                    height: 46,
-                                    colorFilter: const ColorFilter.mode(
-                                      NeyvoColors.white,
-                                      BlendMode.srcIn,
-                                    ),
-                                  );
-                                }
                                 return Text(
                                   (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
                                   style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
@@ -546,14 +496,11 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                             );
                           }
                         }
-                        return SvgPicture.asset(
-                          'assets/ub_logo/ub_logo_horizontal_white.svg',
-                          fit: BoxFit.contain,
-                          height: 46,
-                          colorFilter: const ColorFilter.mode(
-                            NeyvoColors.white,
-                            BlendMode.srcIn,
-                          ),
+                        return Text(
+                          (tenant?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (tenant?.schoolName ?? 'Neyvo'),
+                          style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         );
                       },
                     ),
@@ -872,6 +819,7 @@ extension on _PulseShellState {
     final items = _navItems;
     final idx = items.indexWhere((n) => n.route == route);
     if (idx >= 0) {
+      // ignore: invalid_use_of_protected_member
       setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
       if (kIsWeb) url_helper.updateBrowserUrl(route);
     }
@@ -987,8 +935,6 @@ extension on _PulseShellState {
         return const CampaignsPage();
       case PulseRouteNames.team:
         return const TeamPage();
-      case PulseRouteNames.auditLog:
-        return const AuditLogPage();
       case PulseRouteNames.testCall:
         return const TestCallPage();
       case PulseRouteNames.analytics:

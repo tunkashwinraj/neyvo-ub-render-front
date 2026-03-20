@@ -4,10 +4,12 @@
   import 'package:firebase_core/firebase_core.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
   import 'package:shared_preferences/shared_preferences.dart';
   import 'package:timezone/data/latest.dart' as tz;
 
-import 'api/spearia_api.dart';
+import 'api/neyvo_api.dart';
+import 'core/providers/timezone_provider.dart';
 import 'services/user_timezone_service.dart';
 import 'firebase_options.dart';
 import 'neyvo_pulse_api.dart';
@@ -15,7 +17,6 @@ import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
-import 'tenant/tenant_api.dart';
 import 'tenant/tenant_config.dart';
 import 'tenant/tenant_scope.dart';
 import 'theme/neyvo_theme.dart';
@@ -23,25 +24,18 @@ import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
+const String _kProductionBackendUrl = 'https://goodwin-neyvo-back.onrender.com';
   const String _kDefaultBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL',
-    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
+  defaultValue: _kProductionBackendUrl,
   );
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
   /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
   /// If not set, staging uses the same URL as prod (single Render service).
   const String _kStagingBaseUrl = String.fromEnvironment(
     'SPEARIA_BASE_URL_STAGING',
-    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
+  defaultValue: _kProductionBackendUrl,
   );
-
-/// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
-const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
-/// This app is Goodwin University only (single tenant). No UB/tenant switching.
-String _resolveTenantId() {
-  if (!kIsWeb) return 'goodwin';
-  return 'goodwin';
-}
 
 /// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
 const bool _kForceStaging = bool.fromEnvironment('FORCE_STAGING', defaultValue: false);
@@ -54,11 +48,11 @@ bool get _isStagingHost {
   return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');
 }
 
-String _resolveBaseUrlForTenant(String tenantId) {
+String _resolveBaseUrlForEnvironment() {
   // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
   if (_isStagingHost) return _kStagingBaseUrl;
 
-  // Single-tenant Goodwin deployment: use the configured base URL.
+  // Organization-only deployment: use configured base URL.
   return _kDefaultBaseUrl;
 }
 /// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
@@ -66,7 +60,7 @@ String _resolveBaseUrlForTenant(String tenantId) {
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (SpeariaApi.baseUrl.contains('goodwin-neyvo-back.onrender.com')) return '757763';
+  if (NeyvoApi.baseUrl.contains('goodwin-neyvo-back.onrender.com')) return '757763';
   return '';
 }
 
@@ -82,36 +76,29 @@ String get _kFallbackAccountId {
     }
 
   FirebaseAuth.instance.authStateChanges().listen((User? user) {
-    SpeariaApi.setUserId(user?.uid);
+    NeyvoApi.setUserId(user?.uid);
     if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
   });
-  SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
+  NeyvoApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
   if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
-  // Resolve tenant + backend base URL.
-  final tenantId = _resolveTenantId();
-  final baseUrl = _resolveBaseUrlForTenant(tenantId.isNotEmpty ? tenantId : '');
+  final baseUrl = _resolveBaseUrlForEnvironment();
 
   // Configure backend base URL once. In dev you can override via:
   // flutter run -d chrome --web-port 9095 --dart-define=SPEARIA_BASE_URL=http://127.0.0.1:8000
-  SpeariaApi.setBaseUrl(baseUrl);
-  if (tenantId.isNotEmpty) {
-    SpeariaApi.setTenantId(tenantId);
-  }
-    SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
+  NeyvoApi.setBaseUrl(baseUrl);
+  NeyvoApi.setDefaultTimeout(const Duration(seconds: 15));
 
     tz.initializeTimeZones();
 
-    // Timeout so first paint is not blocked by slow/403 backend; use host-based default on failure.
-    const timeout = Duration(seconds: 5);
-    TenantConfig tenantConfig;
-    try {
-      tenantConfig = await TenantApi.fetchConfig().timeout(timeout);
-    } catch (_) {
-      tenantConfig = TenantConfig.defaultGoodwin;
-    }
+    // Organization-only theme bootstrap. Avoid tenant endpoint at startup.
+    const tenantConfig = TenantConfig.defaultGoodwin;
 
-    runApp(NeyvoPulseRoot(tenantConfig: tenantConfig));
+    runApp(
+      ProviderScope(
+        child: NeyvoPulseRoot(tenantConfig: tenantConfig),
+      ),
+    );
   }
 
   class NeyvoPulseRoot extends StatelessWidget {
@@ -169,11 +156,11 @@ String get _kFallbackAccountId {
 }
 
   /// After login: load account then show PulseShell (Goodwin-only; no tenant switching).
-  class _PostAuthGate extends StatefulWidget {
+  class _PostAuthGate extends ConsumerStatefulWidget {
     const _PostAuthGate();
 
     @override
-    State<_PostAuthGate> createState() => _PostAuthGateState();
+    ConsumerState<_PostAuthGate> createState() => _PostAuthGateState();
   }
 
   /// Paths that PulseShell can open as the initial tab (must match PulseRouteNames).
@@ -185,7 +172,6 @@ String get _kFallbackAccountId {
     PulseRouteNames.students,
     PulseRouteNames.campaigns,
     PulseRouteNames.team,
-    PulseRouteNames.auditLog,
     PulseRouteNames.analytics,
     PulseRouteNames.executiveDashboard,
     PulseRouteNames.billing,
@@ -209,7 +195,7 @@ String get _kFallbackAccountId {
     return null;
   }
 
-  class _PostAuthGateState extends State<_PostAuthGate> {
+  class _PostAuthGateState extends ConsumerState<_PostAuthGate> {
     bool _loaded = false;
     bool _onboardingCompleted = true;
 
@@ -235,6 +221,7 @@ String get _kFallbackAccountId {
           final settingsRes = await NeyvoPulseApi.getSettings();
           final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
           UserTimezoneService.setTimezone(tzStr);
+          ref.read(userTimezoneProvider.notifier).syncFromService();
         } catch (_) {}
         // If API says not completed, check local persistence (so we don't loop when backend doesn't persist)
         bool completed = onboardingFromApi == true;

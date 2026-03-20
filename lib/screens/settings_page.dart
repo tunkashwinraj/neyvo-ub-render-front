@@ -4,22 +4,24 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../api/spearia_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
+import '../core/providers/timezone_provider.dart';
 import '../services/user_timezone_service.dart';
 import '../utils/payment_result_dialog.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 
-class PulseSettingsPage extends StatefulWidget {
+class PulseSettingsPage extends ConsumerStatefulWidget {
   const PulseSettingsPage({super.key});
 
   @override
-  State<PulseSettingsPage> createState() => _PulseSettingsPageState();
+  ConsumerState<PulseSettingsPage> createState() => _PulseSettingsPageState();
 }
 
-class _PulseSettingsPageState extends State<PulseSettingsPage> {
+class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
   final _schoolName = TextEditingController();
   final _defaultLateFee = TextEditingController();
   final _currency = TextEditingController();
@@ -200,6 +202,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         callScript: _callScript.text.trim().isEmpty ? null : _callScript.text.trim(),
       );
       UserTimezoneService.setTimezone(_timezoneValue);
+      ref.read(userTimezoneProvider.notifier).syncFromService();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
         setState(() => _saving = false);

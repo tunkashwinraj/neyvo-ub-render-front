@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../neyvo_pulse_api.dart';
+import '../../../api/neyvo_api.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
@@ -16,6 +17,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
   String? _error;
 
   Map<String, dynamic> _slateConfig = {};
+  Map<String, dynamic> _calendlyConfig = {};
 
   @override
   void initState() {
@@ -31,9 +33,12 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     try {
       final slateRes = await NeyvoPulseApi.getSlateIntegration();
       final s = slateRes['config'] as Map<String, dynamic>? ?? slateRes;
+      final calendlyRes = await NeyvoPulseApi.getCalendlyIntegration();
+      final c = calendlyRes['config'] as Map<String, dynamic>? ?? calendlyRes;
       if (!mounted) return;
       setState(() {
         _slateConfig = Map<String, dynamic>.from(s);
+        _calendlyConfig = Map<String, dynamic>.from(c);
         _loading = false;
       });
     } catch (e) {
@@ -66,6 +71,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     final slateEnabled = _slateConfig['enabled'] == true;
     final slateLastSent = _slateConfig['last_sent_at']?.toString();
     final slateLastError = _slateConfig['last_error']?.toString();
+
+    final calendlyEnabled = _calendlyConfig['enabled'] == true;
+    final calendlyUpdatedAt = _calendlyConfig['updated_at']?.toString();
+    final calendlyLastError = _calendlyConfig['last_error']?.toString();
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -103,6 +112,28 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => SlateIntegrationPage(initialConfig: _slateConfig),
+                        ),
+                      );
+                      if (!mounted) return;
+                      await _load();
+                    },
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('Calendar integrations', style: NeyvoTextStyles.heading),
+                const SizedBox(height: 10),
+                NeyvoGlassPanel(
+                  child: _integrationCard(
+                    context,
+                    title: 'Calendly',
+                    subtitle: 'Let clients connect Calendly; book during calls via tools',
+                    enabled: calendlyEnabled,
+                    lastSentAt: calendlyUpdatedAt,
+                    lastError: calendlyLastError,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CalendlyIntegrationPage(initialConfig: _calendlyConfig),
                         ),
                       );
                       if (!mounted) return;
@@ -454,6 +485,286 @@ class _SlateIntegrationPageState extends State<SlateIntegrationPage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class CalendlyIntegrationPage extends StatefulWidget {
+  final Map<String, dynamic> initialConfig;
+
+  const CalendlyIntegrationPage({super.key, required this.initialConfig});
+
+  @override
+  State<CalendlyIntegrationPage> createState() => _CalendlyIntegrationPageState();
+}
+
+class _CalendlyIntegrationPageState extends State<CalendlyIntegrationPage> {
+  bool _loading = true;
+  String? _error;
+
+  Map<String, dynamic> _cfg = {};
+  bool _enabled = false;
+  bool _saving = false;
+  bool _fetchingTypes = false;
+
+  final _connectionId = TextEditingController();
+  final _eventTypeUri = TextEditingController();
+
+  List<Map<String, dynamic>> _eventTypes = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _apply(widget.initialConfig);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _connectionId.dispose();
+    _eventTypeUri.dispose();
+    super.dispose();
+  }
+
+  void _apply(Map<String, dynamic> cfg) {
+    _cfg = Map<String, dynamic>.from(cfg);
+    _enabled = _cfg['enabled'] == true;
+    _connectionId.text = ''; // no longer used (OAuth-based)
+    _eventTypeUri.text = _cfg['event_type_uri']?.toString() ?? '';
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await NeyvoPulseApi.getCalendlyIntegration();
+      final c = res['config'] as Map<String, dynamic>? ?? res;
+      if (!mounted) return;
+      setState(() {
+        _apply(c);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await NeyvoPulseApi.setCalendlyIntegration(
+        enabled: _enabled,
+        eventTypeUri: _eventTypeUri.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Calendly saved')));
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Calendly save failed: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _connect() async {
+    try {
+      final res = await NeyvoPulseApi.startCalendlyOAuth();
+      final url = (res['auth_url'] ?? res['authUrl'] ?? '').toString();
+      if (url.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No auth URL returned')));
+        return;
+      }
+      await NeyvoApi.launchExternal(url);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connect failed: $e')));
+    }
+  }
+
+  Future<void> _disconnect() async {
+    try {
+      await NeyvoPulseApi.disconnectCalendly();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Calendly disconnected')));
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Disconnect failed: $e')));
+    }
+  }
+
+  Future<void> _loadEventTypes() async {
+    setState(() => _fetchingTypes = true);
+    try {
+      final res = await NeyvoPulseApi.listCalendlyEventTypes();
+      final list = (res['event_types'] ?? res['eventTypes'] ?? res['data']) as List<dynamic>? ?? const [];
+      final parsed = <Map<String, dynamic>>[];
+      for (final item in list) {
+        if (item is Map) parsed.add(Map<String, dynamic>.from(item));
+      }
+      if (!mounted) return;
+      setState(() => _eventTypes = parsed);
+      if (parsed.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No event types returned')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Load event types failed: $e')));
+    } finally {
+      if (mounted) setState(() => _fetchingTypes = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final updatedAt = _cfg['updated_at']?.toString();
+    final lastError = _cfg['last_error']?.toString();
+    final connected = _cfg['connected'] == true;
+    return Scaffold(
+      backgroundColor: NeyvoTheme.bgPrimary,
+      appBar: AppBar(
+        backgroundColor: NeyvoTheme.bgSurface,
+        title: Text('Calendly', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+        actions: [
+          TextButton.icon(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Refresh'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          if (_loading) ...[
+            const Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+            const SizedBox(height: 16),
+          ],
+          if (_error != null && _error!.trim().isNotEmpty) ...[
+            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning)),
+            const SizedBox(height: 16),
+          ],
+          NeyvoGlassPanel(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Configuration', style: NeyvoTextStyles.heading),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    value: _enabled,
+                    onChanged: (v) => setState(() => _enabled = v),
+                    title: const Text('Enable Calendly'),
+                    subtitle: Text('Used for availability + booking during calls', style: NeyvoTextStyles.micro),
+                    activeColor: NeyvoColors.teal,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: FilledButton(
+                          onPressed: connected ? null : _connect,
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                          child: Text(connected ? 'Connected' : 'Connect Calendly'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 200,
+                        child: OutlinedButton(
+                          onPressed: connected ? _disconnect : null,
+                          child: const Text('Disconnect'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _eventTypeUri,
+                    decoration: const InputDecoration(
+                      labelText: 'Calendly event_type_uri',
+                      hintText: 'https://api.calendly.com/event_types/...',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        child: FilledButton(
+                          onPressed: _saving ? null : _save,
+                          style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Save'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 200,
+                        child: OutlinedButton(
+                          onPressed: _fetchingTypes ? null : _loadEventTypes,
+                          child: _fetchingTypes
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Text('Load event types'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Updated: ${updatedAt ?? '—'}${lastError != null && lastError.trim().isNotEmpty ? ' · Last error: $lastError' : ''}',
+                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_eventTypes.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            NeyvoGlassPanel(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Event types', style: NeyvoTextStyles.heading),
+                    const SizedBox(height: 10),
+                    for (final e in _eventTypes.take(20)) ...[
+                      Text(
+                        (e['name']?.toString() ?? 'Event type'),
+                        style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        e['uri']?.toString() ?? '',
+                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                      ),
+                      const Divider(height: 18),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

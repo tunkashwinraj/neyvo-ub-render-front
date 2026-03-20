@@ -4,7 +4,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
@@ -1213,8 +1213,8 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   Future<void> _downloadTemplate() async {
     // On web, prefer a real CSV download via the browser.
     if (kIsWeb) {
-      final url = '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
-      final ok = await SpeariaApi.launchExternal(url);
+      final url = '${NeyvoApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await NeyvoApi.launchExternal(url);
       if (ok) return;
       // Fall through to text fallback if launch fails.
     }
