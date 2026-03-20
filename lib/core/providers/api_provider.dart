@@ -8,7 +8,7 @@ export 'timezone_provider.dart';
 final apiBaseUrlProvider = Provider<String>((ref) {
   return const String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://fallback-url.onrender.com',
+    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
   );
 });
 

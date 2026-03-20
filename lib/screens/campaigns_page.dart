@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/campaigns_provider.dart';
 import '../core/providers/account_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
@@ -1263,6 +1264,13 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncValue = ref.watch(campaignsNotifierProvider);
+    if (_campaigns.isEmpty && asyncValue.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_campaigns.isEmpty && asyncValue.hasError) {
+      return Center(child: Text('Error: ${asyncValue.error}'));
+    }
     if (_showCreateWizard) {
       return _buildWizard();
     }

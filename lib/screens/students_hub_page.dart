@@ -5,11 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/students_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -19,14 +21,14 @@ import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
 import 'student_detail_page.dart';
 
-class StudentsHubPage extends StatefulWidget {
+class StudentsHubPage extends ConsumerStatefulWidget {
   const StudentsHubPage({super.key});
 
   @override
-  State<StudentsHubPage> createState() => _StudentsHubPageState();
+  ConsumerState<StudentsHubPage> createState() => _StudentsHubPageState();
 }
 
-class _StudentsHubPageState extends State<StudentsHubPage>
+class _StudentsHubPageState extends ConsumerState<StudentsHubPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final GlobalKey<_DirectoryTabState> _directoryKey = GlobalKey<_DirectoryTabState>();
@@ -49,7 +51,9 @@ class _StudentsHubPageState extends State<StudentsHubPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final asyncValue = ref.watch(studentsNotifierProvider);
+    return asyncValue.when(
+      data: (_) => Scaffold(
       appBar: AppBar(
         title: const Text('Students'),
         bottom: TabBar(
@@ -70,6 +74,9 @@ class _StudentsHubPageState extends State<StudentsHubPage>
         ],
       ),
       floatingActionButton: null,
+    ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, st) => Center(child: Text('Error: $e')),
     );
   }
 }

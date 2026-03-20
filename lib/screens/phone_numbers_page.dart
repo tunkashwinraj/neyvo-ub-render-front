@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
 import '../core/providers/account_provider.dart';
+import '../core/providers/numbers_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../tenant/tenant_brand.dart';
@@ -38,41 +39,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final results = await Future.wait([
-        ref.read(accountInfoProvider.future),
-        NeyvoPulseApi.listNumbers(),
-        ManagedProfileApiService.listProfiles(),
-      ]);
-
-      final account = results[0] as Map<String, dynamic>;
-      final numbersRes = results[1] as Map<String, dynamic>;
-      final profilesRes = results[2] as Map<String, dynamic>;
-
-      final raw = (numbersRes['numbers'] as List?) ?? (numbersRes['items'] as List?) ?? const [];
-      final numbers = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-      final profList = (profilesRes['profiles'] as List?)?.cast<dynamic>() ?? const [];
-      final profiles = profList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-      if (!mounted) return;
-      setState(() {
-        _account = account;
-        _numbers = numbers;
-        _profiles = profiles;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
+    ref.invalidate(numbersNotifierProvider);
   }
 
   Future<void> _syncFromVapi() async {
@@ -333,6 +300,18 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncValue = ref.watch(numbersNotifierProvider);
+    asyncValue.whenData((value) {
+      _account = value.account;
+      _numbers = value.numbers;
+      _profiles = value.profiles;
+      _loading = false;
+      _error = null;
+    });
+    if (asyncValue.hasError) {
+      _error = '${asyncValue.error}';
+      _loading = false;
+    }
     final primary = TenantBrand.primary(context);
     if (_loading) {
       return Center(child: CircularProgressIndicator(color: primary));

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/calls_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
@@ -9,16 +11,16 @@ import 'dialer_page.dart';
 
 enum CallsSection { calls, callbacks, dialer }
 
-class CallsPage extends StatefulWidget {
+class CallsPage extends ConsumerStatefulWidget {
   const CallsPage({super.key, this.initialSection = CallsSection.calls});
 
   final CallsSection initialSection;
 
   @override
-  State<CallsPage> createState() => _CallsPageState();
+  ConsumerState<CallsPage> createState() => _CallsPageState();
 }
 
-class _CallsPageState extends State<CallsPage> {
+class _CallsPageState extends ConsumerState<CallsPage> {
   late CallsSection _section;
 
   @override
@@ -46,7 +48,13 @@ class _CallsPageState extends State<CallsPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Expanded(child: _body()),
+        Expanded(
+          child: ref.watch(callsNotifierProvider).when(
+                data: (_) => _body(),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, st) => Center(child: Text('Error: $e')),
+              ),
+        ),
       ],
     );
   }

@@ -241,7 +241,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
               children: [
                 _bullet('Frontend loads: https://goodwin-neyvo.web.app'),
                 _bullet(
-                  'Backend health: GET ${const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://fallback-url.onrender.com')}/api/pulse/health',
+                  'Backend health: GET ${const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://goodwin-neyvo-back.onrender.com')}/api/pulse/health',
                 ),
                 _bullet('Slate config: GET /api/pulse/integrations/slate'),
               ],

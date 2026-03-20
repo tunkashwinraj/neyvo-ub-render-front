@@ -27,7 +27,7 @@ import 'widgets/neyvo_loading_screen.dart';
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
 const String _kDefaultBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://fallback-url.onrender.com',
+  defaultValue: 'https://goodwin-neyvo-back.onrender.com',
 );
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
   /// Build: flutter build web --dart-define=API_BASE_URL_STAGING=https://your-staging-back.onrender.com
