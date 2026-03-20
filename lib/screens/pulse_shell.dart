@@ -12,7 +12,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
+import '../core/models/user_role.dart';
 import '../core/providers/account_provider.dart';
+import '../core/providers/role_provider.dart';
+import '../core/widgets/role_guard.dart';
 import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
@@ -132,6 +135,19 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
   /// If staff has no permissions (empty list), show all tabs so the user is not locked out.
   List<_NavItem> get _navItems {
+    final enumRole = ref.watch(userRoleProvider);
+    if (enumRole == UserRole.owner) {
+      return List<_NavItem>.from(_allNavItems);
+    }
+    if (enumRole == UserRole.admin) {
+      return _allNavItems.where((n) => n.label != 'Billing').toList();
+    }
+    if (enumRole == UserRole.member) {
+      return _allNavItems
+          .where((n) =>
+              n.label != 'Billing' && n.label != 'Lines' && n.label != 'Campaigns')
+          .toList();
+    }
     final role = _myRole?.toLowerCase();
     final perms = _myPermissions;
     final isAdmin = role == 'admin';
@@ -927,14 +943,22 @@ extension on _PulseShellState {
       case PulseRouteNames.agents:
         return _buildManagedProfilesContent();
       case PulseRouteNames.phoneNumbers:
-        return const PhoneNumbersPage();
+        return RoleGuard(
+          allowedRoles: const [UserRole.owner, UserRole.admin],
+          fallback: const _AccessDeniedScreen(),
+          child: const PhoneNumbersPage(),
+        );
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
         return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls);
       case PulseRouteNames.students:
         return const StudentsHubPage();
       case PulseRouteNames.campaigns:
-        return const CampaignsPage();
+        return RoleGuard(
+          allowedRoles: const [UserRole.owner, UserRole.admin],
+          fallback: const _AccessDeniedScreen(),
+          child: const CampaignsPage(),
+        );
       case PulseRouteNames.team:
         return const TeamPage();
       case PulseRouteNames.testCall:
@@ -948,7 +972,11 @@ extension on _PulseShellState {
       case PulseRouteNames.integrations:
         return const IntegrationsPage();
       case PulseRouteNames.billing:
-        return const BillingPage();
+        return RoleGuard(
+          allowedRoles: const [UserRole.owner],
+          fallback: const _AccessDeniedScreen(),
+          child: const BillingPage(),
+        );
       case PulseRouteNames.wallet:
         return const WalletPage();
       case PulseRouteNames.voiceTier:
@@ -1123,6 +1151,19 @@ class _ProfileDetailRouter extends StatelessWidget {
         }
         return ManagedProfileDetailPage(profileId: profileId, embedded: false);
       },
+    );
+  }
+}
+
+class _AccessDeniedScreen extends StatelessWidget {
+  const _AccessDeniedScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Access denied'),
+      ),
     );
   }
 }
