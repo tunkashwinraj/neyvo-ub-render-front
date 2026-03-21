@@ -11,10 +11,19 @@ UserRole userRole(UserRoleRef ref) {
   return account.when(
     data: (data) {
       final roleRaw = (data['role'] ?? '').toString().trim().toLowerCase();
-      return UserRole.values.firstWhere(
-        (r) => r.name == roleRaw,
-        orElse: () => UserRole.unknown,
-      );
+      switch (roleRaw) {
+        case 'owner':
+        case 'super_admin':
+          return UserRole.owner;
+        case 'admin':
+          return UserRole.admin;
+        case 'staff':
+        case 'viewer':
+        case 'member':
+          return UserRole.member;
+        default:
+          return UserRole.unknown;
+      }
     },
     loading: () => UserRole.unknown,
     error: (_, __) => UserRole.unknown,
