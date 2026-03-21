@@ -13,6 +13,10 @@ import 'ui/screens/calls/test_call_page.dart';
 import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';
 import 'features/operators/universal_operator_wizard/universal_operator_wizard_screen.dart';
+import 'features/operators/aria_operators/operators_list_screen.dart';
+import 'features/operators/aria_operators/operators_create_screen.dart';
+import 'features/operators/aria_operators/operators_building_screen.dart';
+import 'features/operators/aria_operators/operators_detail_screen.dart';
 import 'ui/screens/internal/backup_rollback_page.dart';
 
 /// Maps legacy Pulse paths to canonical (tab-matching) route names for deep links.
@@ -151,6 +155,27 @@ class PulseRouter {
             builder: (_) => PulseShell(initialRouteName: canonical ?? name),
           );
         }
+        if ((settings.name ?? '').startsWith('/operators/')) {
+          final name = settings.name!;
+          final parts = name.split('/');
+          // ['','operators','new'] or ['','operators','building',id] or ['','operators',id]
+          if (name == PulseRouteNames.operatorsRoot) {
+            // Handled below (exact match not expected due to switch's default).
+            // Keep for completeness.
+            return _operatorsListRoute();
+          }
+          if (name == PulseRouteNames.operatorsNew) {
+            return _operatorsCreateRoute();
+          }
+          if (parts.length >= 4 && parts[2] == 'building') {
+            final operatorId = parts[3];
+            return _operatorsBuildingRoute(operatorId: operatorId);
+          }
+          if (parts.length >= 3 && parts[2].isNotEmpty) {
+            final operatorId = parts[2];
+            return _operatorsDetailRoute(operatorId: operatorId);
+          }
+        }
         return MaterialPageRoute(
           builder: (_) => Scaffold(
             body: Center(
@@ -159,5 +184,23 @@ class PulseRouter {
           ),
         );
     }
+  }
+
+  static Route<dynamic> _operatorsListRoute() {
+    // Lazy import helpers to avoid unused imports in non-operators builds.
+    // ignore: unnecessary_import
+    return MaterialPageRoute(builder: (_) => const OperatorsListScreen());
+  }
+
+  static Route<dynamic> _operatorsCreateRoute() {
+    return MaterialPageRoute(builder: (_) => const OperatorsCreateScreen());
+  }
+
+  static Route<dynamic> _operatorsBuildingRoute({required String operatorId}) {
+    return MaterialPageRoute(builder: (_) => OperatorsBuildingScreen(operatorId: operatorId));
+  }
+
+  static Route<dynamic> _operatorsDetailRoute({required String operatorId}) {
+    return MaterialPageRoute(builder: (_) => OperatorsDetailScreen(operatorId: operatorId));
   }
 }
