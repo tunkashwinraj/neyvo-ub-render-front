@@ -15,7 +15,6 @@ import '../pulse_route_names.dart';
 import '../core/models/user_role.dart';
 import '../core/providers/account_provider.dart';
 import '../core/providers/role_provider.dart';
-import '../core/widgets/role_guard.dart';
 import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
@@ -134,42 +133,38 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   ];
 
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
-  /// If staff has no permissions (empty list), show all tabs so the user is not locked out.
+  /// Team member navigation is permission-driven from /members/me.
   List<_NavItem> get _navItems {
     final enumRole = ref.watch(userRoleProvider);
+    final resolvedRole = (_myRole ?? '').trim().toLowerCase();
     if (enumRole == UserRole.owner) {
       return List<_NavItem>.from(_allNavItems);
     }
-    if (enumRole == UserRole.admin) {
-      final items = <_NavItem>[];
-      for (final n in _allNavItems) {
-        if (n.label == 'Billing') continue;
-        items.add(n);
-      }
-      if (_selectedIndex >= items.length) _selectedIndex = 0;
-      return items;
+    if (enumRole == UserRole.admin || resolvedRole == 'admin') {
+      return List<_NavItem>.from(_allNavItems);
     }
-    if (enumRole == UserRole.member) {
-      final items = <_NavItem>[];
-      for (final n in _allNavItems) {
-        if (n.label == 'Billing' || n.label == 'Lines' || n.label == 'Campaigns') continue;
-        items.add(n);
-      }
-      if (_selectedIndex >= items.length) _selectedIndex = 0;
-      return items;
-    }
-    final role = _myRole?.toLowerCase();
-    final perms = _myPermissions;
-    final isAdmin = role == 'admin';
-    List<_NavItem> items;
-    if (isAdmin || perms == null) {
-      items = List<_NavItem>.from(_allNavItems);
-    } else {
-      final filtered = _allNavItems.where((n) => perms.contains(n.permissionKey)).toList();
-      items = filtered.isEmpty ? List<_NavItem>.from(_allNavItems) : filtered;
-    }
+    final perms = (_myPermissions ?? const <String>[])
+        .map((p) => p.trim().toLowerCase())
+        .where((p) => p.isNotEmpty)
+        .toSet();
+    final items = _allNavItems.where((n) {
+      if (n.permissionKey == 'dashboard') return true;
+      return perms.contains(n.permissionKey);
+    }).toList();
     if (_selectedIndex >= items.length) _selectedIndex = 0;
-    return items;
+    return items.isEmpty ? <_NavItem>[_allNavItems.first] : items;
+  }
+
+  bool _canAccess(String permissionKey) {
+    final enumRole = ref.watch(userRoleProvider);
+    if (enumRole == UserRole.owner || enumRole == UserRole.admin) return true;
+    final resolvedRole = (_myRole ?? '').trim().toLowerCase();
+    if (resolvedRole == 'admin') return true;
+    final perms = (_myPermissions ?? const <String>[])
+        .map((p) => p.trim().toLowerCase())
+        .where((p) => p.isNotEmpty)
+        .toSet();
+    return perms.contains(permissionKey);
   }
 
   static const String _managedProfileDetailRoute = 'detail';
@@ -221,11 +216,12 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     _resolveAccountThenLoad();
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
-      final items = _navItems;
-      int idx = items.indexWhere((n) => n.route == name);
+      // Do not use ref.watch-derived nav items in initState.
+      // Role-filtered tabs are resolved in build; this initial index only seeds deep-link intent.
+      int idx = _allNavItems.indexWhere((n) => n.route == name);
       // Wallet is not in sidebar; it lives under Billing. Direct /pulse/wallet (e.g. View transactions) shows Wallet page with Billing tab selected in sidebar.
       if (idx < 0 && name == PulseRouteNames.wallet) {
-        idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
+        idx = _allNavItems.indexWhere((n) => n.route == PulseRouteNames.billing);
       }
       if (idx >= 0) _selectedIndex = idx;
     }
@@ -953,22 +949,14 @@ extension on _PulseShellState {
       case PulseRouteNames.agents:
         return _buildManagedProfilesContent();
       case PulseRouteNames.phoneNumbers:
-        return RoleGuard(
-          allowedRoles: const [UserRole.owner, UserRole.admin],
-          fallback: const AccessDeniedScreen(),
-          child: const PhoneNumbersPage(),
-        );
+        return _canAccess('operators') ? const PhoneNumbersPage() : const AccessDeniedScreen();
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
         return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls);
       case PulseRouteNames.students:
         return const StudentsHubPage();
       case PulseRouteNames.campaigns:
-        return RoleGuard(
-          allowedRoles: const [UserRole.owner, UserRole.admin],
-          fallback: const AccessDeniedScreen(),
-          child: const CampaignsPage(),
-        );
+        return _canAccess('campaigns') ? const CampaignsPage() : const AccessDeniedScreen();
       case PulseRouteNames.team:
         return const TeamPage();
       case PulseRouteNames.testCall:
@@ -982,11 +970,7 @@ extension on _PulseShellState {
       case PulseRouteNames.integrations:
         return const IntegrationsPage();
       case PulseRouteNames.billing:
-        return RoleGuard(
-          allowedRoles: const [UserRole.owner, UserRole.admin],
-          fallback: const AccessDeniedScreen(),
-          child: const BillingScreen(),
-        );
+        return _canAccess('billing') ? const BillingScreen() : const AccessDeniedScreen();
       case PulseRouteNames.wallet:
         return const WalletPage();
       case PulseRouteNames.voiceTier:
