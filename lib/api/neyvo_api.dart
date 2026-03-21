@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'spearia_api.dart';
 
-export 'spearia_api.dart' show ApiException, SpeariaApi;
+export 'spearia_api.dart' show ApiException, ApiTimeoutClass, SpeariaApi;
 
 /// Canonical API facade for Neyvo runtime.
 /// Static members are explicit forwards so call sites can use `NeyvoApi.*` like `SpeariaApi.*`.
@@ -22,6 +22,9 @@ class NeyvoApi extends SpeariaApi {
   static void setDefaultAccountId(String? id) => SpeariaApi.setDefaultAccountId(id);
 
   static void setDefaultTimeout(Duration d) => SpeariaApi.setDefaultTimeout(d);
+
+  static Duration timeoutForClass(ApiTimeoutClass timeoutClass) =>
+      SpeariaApi.timeoutForClass(timeoutClass);
 
   static void setNgrokSkipHeader(bool enabled) => SpeariaApi.setNgrokSkipHeader(enabled);
 

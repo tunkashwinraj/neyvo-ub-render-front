@@ -78,15 +78,23 @@ class NeyvoPulseApi {
     return null;
   }
 
-  static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
+  static Future<Map<String, dynamic>> _get(
+    String path, {
+    Map<String, dynamic>? params,
+    Duration? timeout,
+  }) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (_defaultAccountId.isNotEmpty) p['account_id'] = p['account_id'] ?? _defaultAccountId;
-    return SpeariaApi.getJsonMap(path, params: p);
+    return SpeariaApi.getJsonMap(path, params: p, timeout: timeout);
   }
 
-  static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+  static Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration? timeout,
+  }) async {
     if (_defaultAccountId.isNotEmpty) body['account_id'] = body['account_id'] ?? _defaultAccountId;
-    return SpeariaApi.postJsonMap(path, body: body);
+    return SpeariaApi.postJsonMap(path, body: body, timeout: timeout);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
@@ -95,8 +103,8 @@ class NeyvoPulseApi {
     return Map<String, dynamic>.from(v as Map);
   }
 
-  static Future<Map<String, dynamic>> health() async =>
-      SpeariaApi.getJsonMap('/api/pulse/health');
+  static Future<Map<String, dynamic>> health({Duration? timeout}) async =>
+      SpeariaApi.getJsonMap('/api/pulse/health', timeout: timeout);
 
   /// Inbound health check: validate Twilio webhook and Vapi endpoint wiring.
   /// GET /api/pulse/health/inbound
@@ -106,14 +114,14 @@ class NeyvoPulseApi {
   /// GET /api/pulse/account – account_id (short 6–8 digit, for display and API), account_name, onboarding_completed,
   /// surfaces_enabled, active_surface, wallet_credits. Optional: org_doc_id or business_doc_id (Firestore doc id for
   /// real-time listener), org_collection; primary_phone_e164, primary_phone_number_id (for Phone Numbers page).
-  static Future<Map<String, dynamic>> getAccountInfo() async {
+  static Future<Map<String, dynamic>> getAccountInfo({Duration? timeout}) async {
     final now = DateTime.now();
     if (_cachedAccountInfo != null &&
         _cachedAccountInfoAt != null &&
         now.difference(_cachedAccountInfoAt!) < _cacheTtl) {
       return _cachedAccountInfo!;
     }
-    final res = await _get('/api/pulse/account');
+    final res = await _get('/api/pulse/account', timeout: timeout);
     _cachedAccountInfo = res;
     _cachedAccountInfoAt = now;
     return res;
@@ -137,7 +145,8 @@ class NeyvoPulseApi {
   }
 
   /// GET /api/ub/status – UB model status. Returns: { ok, status, summary, departments, faqTopics, error? }
-  static Future<Map<String, dynamic>> getUbStatus() async => _get('/api/ub/status');
+  static Future<Map<String, dynamic>> getUbStatus({Duration? timeout}) async =>
+      _get('/api/ub/status', timeout: timeout);
 
   /// GET /api/pulse/account/orgs – list of orgs (account_id) the current user is a member of. For org switcher.
   static Future<Map<String, dynamic>> getAccountOrgs() async =>
@@ -150,13 +159,18 @@ class NeyvoPulseApi {
   }
 
   // Unified dashboard: agents (GET/POST /api/agents)
-  static Future<Map<String, dynamic>> listAgents({String? direction, String? industry, String? status}) async {
+  static Future<Map<String, dynamic>> listAgents({
+    String? direction,
+    String? industry,
+    String? status,
+    Duration? timeout,
+  }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
     if (direction != null && direction.isNotEmpty) params['direction'] = direction;
     if (industry != null && industry.isNotEmpty) params['industry'] = industry;
     if (status != null && status.isNotEmpty) params['status'] = status;
-    return SpeariaApi.getJsonMap('/api/agents', params: params);
+    return SpeariaApi.getJsonMap('/api/agents', params: params, timeout: timeout);
   }
 
   /// Create agent. Pass templateId only when using a seeded template (not for "Custom agent").
@@ -289,17 +303,25 @@ class NeyvoPulseApi {
       });
 
   // Analytics (unified dashboard)
-  static Future<Map<String, dynamic>> getAnalyticsOverview({String? from, String? to}) async {
+  static Future<Map<String, dynamic>> getAnalyticsOverview({
+    String? from,
+    String? to,
+    Duration? timeout,
+  }) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/analytics/overview', params: params.isEmpty ? null : params);
+    return _get('/api/analytics/overview', params: params.isEmpty ? null : params, timeout: timeout);
   }
-  static Future<Map<String, dynamic>> getAnalyticsComms({String? from, String? to}) async {
+  static Future<Map<String, dynamic>> getAnalyticsComms({
+    String? from,
+    String? to,
+    Duration? timeout,
+  }) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/analytics/comms', params: params.isEmpty ? null : params);
+    return _get('/api/analytics/comms', params: params.isEmpty ? null : params, timeout: timeout);
   }
   static Future<Map<String, dynamic>> getAnalyticsStudio({String? from, String? to}) async {
     final params = <String, dynamic>{};
@@ -525,6 +547,7 @@ class NeyvoPulseApi {
     String? q,
     bool syncFromVapi = true,
     bool noVapi = true,
+    Duration? timeout,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
@@ -537,7 +560,7 @@ class NeyvoPulseApi {
     if (noVapi) params['no_vapi'] = '1';
     final search = (q ?? '').trim();
     if (search.isNotEmpty) params['q'] = search;
-    return _get('/api/pulse/calls', params: params.isEmpty ? null : params);
+    return _get('/api/pulse/calls', params: params.isEmpty ? null : params, timeout: timeout);
   }
 
   /// Delete one or more call log entries by their ids (as returned in listCalls).
@@ -567,11 +590,15 @@ class NeyvoPulseApi {
       _get('/api/pulse/calls/by-id/${Uri.encodeComponent(callId)}');
 
   /// Phase D: Resolution/success summary for dashboard
-  static Future<Map<String, dynamic>> getCallsSuccessSummary({String? from, String? to}) async {
+  static Future<Map<String, dynamic>> getCallsSuccessSummary({
+    String? from,
+    String? to,
+    Duration? timeout,
+  }) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/pulse/calls/success-summary', params: params.isEmpty ? null : params);
+    return _get('/api/pulse/calls/success-summary', params: params.isEmpty ? null : params, timeout: timeout);
   }
 
   /// Callback analytics across students (scheduled/completed/exhausted/etc.).
@@ -1028,11 +1055,98 @@ class NeyvoPulseApi {
   // -------------------------------------------------------------------------
 
   /// List campaigns for the school. Pass [limit] to control how many are returned (default 100).
-  static Future<Map<String, dynamic>> listCampaigns({int limit = 100}) async {
+  static Future<Map<String, dynamic>> listCampaigns({
+    int limit = 100,
+    Duration? timeout,
+  }) async {
     try {
-      return await _get('/api/pulse/campaigns', params: {'limit': limit});
+      return await _get('/api/pulse/campaigns', params: {'limit': limit}, timeout: timeout);
     } catch (_) {
       return {'campaigns': []};
+    }
+  }
+
+  /// Compact dashboard payload for instant first paint.
+  static Future<Map<String, dynamic>> getDashboardSummary({
+    String? from,
+    String? to,
+    int recentCallsLimit = 8,
+    int recentCampaignsLimit = 8,
+    Duration? timeout,
+  }) async {
+    final params = <String, dynamic>{
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+      'recent_calls_limit': recentCallsLimit.clamp(1, 20),
+      'recent_campaigns_limit': recentCampaignsLimit.clamp(1, 20),
+    };
+    try {
+      return _get('/api/pulse/dashboard/summary', params: params, timeout: timeout);
+    } on ApiException catch (e) {
+      // Backward-compatible fallback for deployments that do not expose
+      // /api/pulse/dashboard/summary yet.
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final callsFuture = listCalls(
+        from: from,
+        to: to,
+        limit: recentCallsLimit.clamp(1, 20),
+        timeout: timeout,
+      ).catchError((_) => <String, dynamic>{'calls': const []});
+      final campaignsFuture = listCampaigns(
+        limit: recentCampaignsLimit.clamp(1, 20),
+        timeout: timeout,
+      ).catchError((_) => <String, dynamic>{'campaigns': const []});
+      final agentsFuture =
+          listAgents(timeout: timeout).catchError((_) => <String, dynamic>{'agents': const []});
+      final numbersFuture = listNumbers(timeout: timeout)
+          .catchError((_) => <String, dynamic>{'numbers': const [], 'items': const []});
+      final ubFuture = getUbStatus(timeout: timeout).catchError((_) => <String, dynamic>{});
+
+      final results = await Future.wait<dynamic>([
+        callsFuture,
+        campaignsFuture,
+        agentsFuture,
+        numbersFuture,
+        ubFuture,
+      ]);
+      final callsRes = Map<String, dynamic>.from(results[0] as Map);
+      final campaignsRes = Map<String, dynamic>.from(results[1] as Map);
+      final agentsRes = Map<String, dynamic>.from(results[2] as Map);
+      final numbersRes = Map<String, dynamic>.from(results[3] as Map);
+      final ubRes = Map<String, dynamic>.from(results[4] as Map);
+
+      final recentCalls = ((callsRes['calls'] as List?) ?? const <dynamic>[])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final recentCampaigns = ((campaignsRes['campaigns'] as List?) ?? const <dynamic>[])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final operators = ((agentsRes['agents'] as List?) ?? const <dynamic>[]);
+      final numbers = ((numbersRes['numbers'] as List?) ??
+              (numbersRes['items'] as List?) ??
+              const <dynamic>[])
+          .toList();
+      final completedCalls = recentCalls.where((c) {
+        final status = (c['status'] ?? c['result'] ?? '').toString().toLowerCase();
+        return status.contains('completed') || status.contains('success') || status.contains('answered');
+      }).length;
+
+      return {
+        'ok': true,
+        'setup': {
+          'business_configured': true,
+          'operator_count': operators.length,
+          'number_live': numbers.isNotEmpty,
+          'first_call_completed': completedCalls > 0,
+          'ub_status': (ubRes['status'] ?? 'missing').toString().toLowerCase(),
+          'training_number': (numbers.isNotEmpty ? (numbers.first['phone'] ?? numbers.first['number']) : null),
+        },
+        'kpi': {
+          'calls_total': recentCalls.length,
+        },
+        'recent_calls': recentCalls,
+        'recent_campaigns': recentCampaigns,
+      };
     }
   }
 
@@ -1057,14 +1171,18 @@ class NeyvoPulseApi {
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls', params: {'limit': limit});
 
   /// Real-time campaign runner metrics (pool status + counters).
-  static Future<Map<String, dynamic>> getCampaignMetrics(String campaignId) async =>
-      _get('/api/pulse/campaigns/$campaignId/metrics');
+  static Future<Map<String, dynamic>> getCampaignMetrics(
+    String campaignId, {
+    Duration? timeout,
+  }) async =>
+      _get('/api/pulse/campaigns/$campaignId/metrics', timeout: timeout);
 
   /// Per-target campaign call items (queued/in_progress/completed/failed).
   static Future<Map<String, dynamic>> getCampaignCallItems(
     String campaignId, {
     String? status,
     int limit = 200,
+    Duration? timeout,
   }) async =>
       _get(
         '/api/pulse/campaigns/$campaignId/call-items',
@@ -1072,6 +1190,7 @@ class NeyvoPulseApi {
           if (status != null && status.isNotEmpty) 'status': status,
           'limit': limit,
         },
+        timeout: timeout,
       );
 
   /// Verify campaign integrity and counters (backend auto-heals minor issues).
@@ -1328,14 +1447,14 @@ class NeyvoPulseApi {
   // Billing (wallet, tier, usage)
   // -------------------------------------------------------------------------
 
-  static Future<Map<String, dynamic>> getBillingWallet() async {
+  static Future<Map<String, dynamic>> getBillingWallet({Duration? timeout}) async {
     final now = DateTime.now();
     if (_cachedBillingWallet != null &&
         _cachedBillingWalletAt != null &&
         now.difference(_cachedBillingWalletAt!) < _cacheTtl) {
       return _cachedBillingWallet!;
     }
-    final res = await _get('/api/billing/wallet');
+    final res = await _get('/api/billing/wallet', timeout: timeout);
     _cachedBillingWallet = res;
     _cachedBillingWalletAt = now;
     return res;
@@ -1504,14 +1623,14 @@ class NeyvoPulseApi {
   // -------------------------------------------------------------------------
 
   /// GET /api/numbers – list owned numbers (includes attached primary from org). Sends account_id so backend returns merged list.
-  static Future<Map<String, dynamic>> listNumbers() async {
+  static Future<Map<String, dynamic>> listNumbers({Duration? timeout}) async {
     final now = DateTime.now();
     if (_cachedNumbers != null &&
         _cachedNumbersAt != null &&
         now.difference(_cachedNumbersAt!) < _cacheTtl) {
       return _cachedNumbers!;
     }
-    final res = await _get('/api/numbers', params: {'account_id': _defaultAccountId});
+    final res = await _get('/api/numbers', params: {'account_id': _defaultAccountId}, timeout: timeout);
     _cachedNumbers = res;
     _cachedNumbersAt = now;
     return res;

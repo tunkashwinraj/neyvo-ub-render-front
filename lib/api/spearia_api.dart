@@ -25,6 +25,8 @@ class ApiException implements Exception {
 /// Optional global hook so UI can show SnackBars, Sentry, etc.
 typedef ApiErrorHook = void Function(ApiException e);
 
+enum ApiTimeoutClass { fast, medium, heavy }
+
 /// Centralized HTTP/URL utility for the Flutter app.
 ///
 /// Configure once (usually in main()):
@@ -131,6 +133,20 @@ class SpeariaApi {
   /// Optional: adjust default request timeout
   static void setDefaultTimeout(Duration d) {
     _defaultTimeout = d;
+  }
+
+  /// Timeout buckets for endpoint classes.
+  /// Keep these explicit so critical identity calls fail fast while
+  /// heavy analytics/report endpoints can tolerate backend latency.
+  static Duration timeoutForClass(ApiTimeoutClass timeoutClass) {
+    switch (timeoutClass) {
+      case ApiTimeoutClass.fast:
+        return const Duration(seconds: 10);
+      case ApiTimeoutClass.medium:
+        return const Duration(seconds: 15);
+      case ApiTimeoutClass.heavy:
+        return const Duration(seconds: 45);
+    }
   }
 
   /// Optional: ngrok HTML splash avoidance header

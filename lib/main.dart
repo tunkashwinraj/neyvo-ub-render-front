@@ -19,7 +19,6 @@ import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
-import 'theme/neyvo_theme.dart';
 import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
 
@@ -116,27 +115,59 @@ String get _kFallbackAccountId {
       title: 'Neyvo',
       debugShowCheckedModeBanner: false,
       theme: theme,
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const NeyvoLoadingScreen();
-          }
-          if (snapshot.hasData && snapshot.data != null) {
-            return const InactivityDetector(
-              timeout: const Duration(hours: 1),
-              child: _PostAuthGate(),
-            );
-          }
-          return const PulseAuthPage();
-        },
-      ),
+      home: const _AuthBootstrapGate(),
     onGenerateRoute: (settings) {
       if (settings.name == PulseRouteNames.settings && settings.arguments is Map) {
         // Forward tab hint down to Settings page via PulseShell initialRouteName; SettingsPage reads arguments.
       }
       return PulseRouter.generateRoute(settings);
     },
+    );
+  }
+}
+
+class _AuthBootstrapGate extends StatefulWidget {
+  const _AuthBootstrapGate();
+
+  @override
+  State<_AuthBootstrapGate> createState() => _AuthBootstrapGateState();
+}
+
+class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
+  Timer? _authWaitTimer;
+  bool _authWaitTimedOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authWaitTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted) return;
+      setState(() => _authWaitTimedOut = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _authWaitTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !_authWaitTimedOut) {
+          return const NeyvoLoadingScreen();
+        }
+        if (snapshot.hasData && snapshot.data != null) {
+          return const InactivityDetector(
+            timeout: Duration(hours: 1),
+            child: _PostAuthGate(),
+          );
+        }
+        return const PulseAuthPage();
+      },
     );
   }
 }
@@ -183,7 +214,6 @@ String get _kFallbackAccountId {
 
   class _PostAuthGateState extends ConsumerState<_PostAuthGate> {
     bool _loaded = false;
-    bool _onboardingCompleted = true;
 
     @override
     void initState() {
@@ -193,7 +223,7 @@ String get _kFallbackAccountId {
 
     Future<void> _loadAccount() async {
       try {
-        final res = await ref.read(accountInfoProvider.future);
+        final res = await ref.read(accountInfoProvider.future).timeout(const Duration(seconds: 12));
         final ok = res['ok'] == true;
         final accountId = res['account_id'] as String?;
         final onboardingFromApi = res['onboarding_completed'];
@@ -204,7 +234,7 @@ String get _kFallbackAccountId {
         }
         // Load user timezone from settings for date display
         try {
-          final settingsRes = await NeyvoPulseApi.getSettings();
+          final settingsRes = await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 6));
           final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
           UserTimezoneService.setTimezone(tzStr);
           ref.read(userTimezoneProvider.notifier).syncFromService();
@@ -218,7 +248,6 @@ String get _kFallbackAccountId {
         if (mounted) {
           setState(() {
             _loaded = true;
-            _onboardingCompleted = completed;
           });
         }
       } on ApiException catch (e) {
@@ -249,12 +278,12 @@ String get _kFallbackAccountId {
         if (_kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
-        if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
+        if (mounted) setState(() { _loaded = true; });
       } catch (_) {
         if (_kFallbackAccountId.isNotEmpty) {
           NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
         }
-        if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
+        if (mounted) setState(() { _loaded = true; });
       }
     }
 
