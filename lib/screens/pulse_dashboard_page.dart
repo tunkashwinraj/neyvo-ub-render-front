@@ -13,6 +13,7 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
+import '../services/user_timezone_service.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
@@ -30,6 +31,9 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   String? _importantError;
   String? _heavyError;
   int _loadVersion = 0;
+  int? _criticalLatencyMs;
+  DateTime? _criticalLatencyAt;
+  bool _criticalLatencyDegraded = false;
 
   // When true, only the \"University of Bridgeport Voice OS\" hero metrics
   // (top-left summary card) are refreshing in response to the duration filter.
@@ -266,8 +270,12 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       _heavyError = null;
     });
 
+    final stopwatch = Stopwatch()..start();
     try {
-      final critical = await ref.read(pulseDashboardCriticalProvider(range).future);
+      final critical = await ref
+          .read(pulseDashboardCriticalProvider(range).future)
+          .timeout(const Duration(seconds: 8));
+      stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _businessConfigured = critical.businessConfigured;
@@ -278,17 +286,97 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
         _operatorCount = critical.operatorCount;
         _trainingNumber = critical.trainingNumber;
         _perf = critical.kpi;
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = false;
         _loading = false;
       });
       unawaited(_loadImportantSection(range, version: version));
       unawaited(_loadHeavySection(range, version: version));
+    } on TimeoutException {
+      stopwatch.stop();
+      if (!mounted || version != _loadVersion) return;
+      // Fail-open: render dashboard shell quickly with safe defaults, then continue background loads.
+      setState(() {
+        _loading = false;
+        _error = null;
+        _importantError = 'Dashboard data is slow to respond. Showing partial view.';
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = true;
+      });
+      unawaited(_loadImportantSection(range, version: version));
+      unawaited(_loadHeavySection(range, version: version));
     } catch (e) {
+      stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = e.toString();
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = true;
         _loading = false;
       });
     }
+  }
+
+  Widget _buildBackendLatencyBadge() {
+    final ms = _criticalLatencyMs;
+    final degraded = _criticalLatencyDegraded;
+    final color = degraded
+        ? NeyvoColors.error
+        : (ms == null || ms > 2500)
+            ? NeyvoColors.warning
+            : NeyvoColors.success;
+    final label = degraded
+        ? 'Backend degraded'
+        : ms == null
+            ? 'Backend latency: —'
+            : 'Backend latency: ${ms}ms';
+    final updated = _criticalLatencyAt == null
+        ? 'No sample yet'
+        : 'sample ${UserTimezoneService.formatShort(_criticalLatencyAt!.toIso8601String())}';
+
+    final diagnosticText = [
+      'dashboard_endpoint=/api/pulse/dashboard/summary',
+      'latency_ms=${ms?.toString() ?? 'n/a'}',
+      'status=${degraded ? 'degraded' : 'ok'}',
+      'sample_at=${_criticalLatencyAt?.toIso8601String() ?? 'n/a'}',
+      'range_from=${_currentIsoRange()['from'] ?? 'n/a'}',
+      'range_to=${_currentIsoRange()['to'] ?? 'n/a'}',
+      if ((_error ?? '').isNotEmpty) 'error=$_error',
+      if ((_importantError ?? '').isNotEmpty) 'important_error=$_importantError',
+      if ((_heavyError ?? '').isNotEmpty) 'heavy_error=$_heavyError',
+    ].join('\n');
+
+    return Tooltip(
+      message: 'Critical dashboard request latency ($updated)\nTap to copy diagnostics.',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: diagnosticText));
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dashboard diagnostics copied'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Text(
+            label,
+            style: NeyvoTextStyles.micro.copyWith(color: color, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Reload only the live call statistics used by the hero "Live calls" card.
@@ -780,6 +868,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
                   style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
                 ),
               ),
+              _buildBackendLatencyBadge(),
               if (_ubHeroLoading) ...[
                 const SizedBox(width: 8),
                 const SizedBox(

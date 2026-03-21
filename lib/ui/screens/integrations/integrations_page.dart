@@ -236,11 +236,9 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                     final statusAsync = connected
                         ? ref.watch(sendgridSenderStatusPollingProvider)
                         : null;
-                    final hint = tenantSender
-                        ? 'Using your organization SendGrid key (stored encrypted).'
-                        : (connected
-                              ? 'Using platform SendGrid defaults from the server. You can connect your own key below.'
-                              : 'Connect your SendGrid API key and verified sender, or ask your admin to set server env vars.');
+                    final hint = connected
+                        ? 'Using platform-managed SendGrid credentials. Configure sender identity (email + name) for your organization.'
+                        : 'Email is unavailable because platform SendGrid is not configured on the server. Ask your admin to set server SendGrid env vars.';
                     return NeyvoGlassPanel(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
@@ -415,47 +413,6 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                               spacing: 10,
                               runSpacing: 8,
                               children: [
-                                OutlinedButton.icon(
-                                  onPressed: () {
-                                    showModalBottomSheet<void>(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      backgroundColor: NeyvoColors.bgBase,
-                                      builder: (ctx) => Padding(
-                                        padding: EdgeInsets.only(
-                                          bottom: MediaQuery.viewInsetsOf(
-                                            ctx,
-                                          ).bottom,
-                                        ),
-                                        child: _ConnectSendGridSheet(
-                                          onDone: () {
-                                            Navigator.of(ctx).pop();
-                                            ref.invalidate(
-                                              sendgridConfigProvider,
-                                            );
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'SendGrid connected',
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.link, size: 18),
-                                  label: Text(
-                                    tenantSender
-                                        ? 'Update key'
-                                        : 'Connect API key',
-                                  ),
-                                ),
                                 if (connected)
                                   OutlinedButton.icon(
                                     onPressed: () {
@@ -512,7 +469,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                             'Disconnect SendGrid?',
                                           ),
                                           content: const Text(
-                                            'Removes your organization key. The platform default will be used if the server has one.',
+                                            'Removes organization-level SendGrid overrides and uses platform defaults.',
                                           ),
                                           actions: [
                                             TextButton(
@@ -523,7 +480,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                             TextButton(
                                               onPressed: () =>
                                                   Navigator.pop(ctx, true),
-                                              child: const Text('Disconnect'),
+                                              child: const Text('Use platform default'),
                                             ),
                                           ],
                                         ),
@@ -540,7 +497,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                         ).showSnackBar(
                                           const SnackBar(
                                             content: Text(
-                                              'SendGrid disconnected for this organization',
+                                              'Organization SendGrid override removed',
                                             ),
                                           ),
                                         );
@@ -1508,15 +1465,6 @@ class _CalendlyIntegrationPageState extends State<CalendlyIntegrationPage> {
   }
 }
 
-class _ConnectSendGridSheet extends StatefulWidget {
-  final VoidCallback onDone;
-
-  const _ConnectSendGridSheet({required this.onDone});
-
-  @override
-  State<_ConnectSendGridSheet> createState() => _ConnectSendGridSheetState();
-}
-
 class _VerifySendGridSenderSheet extends StatefulWidget {
   final VoidCallback onDone;
   final String initialFromEmail;
@@ -1630,137 +1578,6 @@ class _VerifySendGridSenderSheetState
                       ),
                     )
                   : const Text('Send verification email'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConnectSendGridSheetState extends State<_ConnectSendGridSheet> {
-  final _apiKey = TextEditingController();
-  final _fromEmail = TextEditingController();
-  bool _busy = false;
-  String? _validateNote;
-
-  @override
-  void dispose() {
-    _apiKey.dispose();
-    _fromEmail.dispose();
-    super.dispose();
-  }
-
-  Future<void> _validate() async {
-    setState(() {
-      _busy = true;
-      _validateNote = null;
-    });
-    final r = await SendgridApi.validateApiKey(_apiKey.text);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _validateNote = r.valid
-          ? 'Key looks valid.'
-          : (r.errorMessage ?? 'Invalid');
-    });
-  }
-
-  Future<void> _connect() async {
-    setState(() {
-      _busy = true;
-      _validateNote = null;
-    });
-    try {
-      await SendgridApi.connect(
-        apiKey: _apiKey.text,
-        fromEmail: _fromEmail.text,
-      );
-      if (!mounted) return;
-      widget.onDone();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('SendGrid connected')));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _validateNote = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Connect SendGrid', style: NeyvoTextStyles.heading),
-            const SizedBox(height: 8),
-            Text(
-              'Your API key is encrypted and stored per organization. The server must have SENDGRID_ENC_KEY set.',
-              style: NeyvoTextStyles.micro.copyWith(
-                color: NeyvoColors.textMuted,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _apiKey,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'SendGrid API key',
-                hintText: 'SG....',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _fromEmail,
-              decoration: const InputDecoration(
-                labelText: 'Verified sender (from email)',
-                hintText: 'notifications@yourdomain.com',
-              ),
-            ),
-            if (_validateNote != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _validateNote!,
-                style: NeyvoTextStyles.micro.copyWith(
-                  color: NeyvoColors.warning,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy ? null : _validate,
-                    child: const Text('Validate key'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _busy ? null : _connect,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: NeyvoColors.teal,
-                    ),
-                    child: _busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Save'),
-                  ),
-                ),
-              ],
             ),
           ],
         ),

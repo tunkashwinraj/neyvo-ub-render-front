@@ -1080,7 +1080,74 @@ class NeyvoPulseApi {
       'recent_calls_limit': recentCallsLimit.clamp(1, 20),
       'recent_campaigns_limit': recentCampaignsLimit.clamp(1, 20),
     };
-    return _get('/api/pulse/dashboard/summary', params: params, timeout: timeout);
+    try {
+      return _get('/api/pulse/dashboard/summary', params: params, timeout: timeout);
+    } on ApiException catch (e) {
+      // Backward-compatible fallback for deployments that do not expose
+      // /api/pulse/dashboard/summary yet.
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final callsFuture = listCalls(
+        from: from,
+        to: to,
+        limit: recentCallsLimit.clamp(1, 20),
+        timeout: timeout,
+      ).catchError((_) => <String, dynamic>{'calls': const []});
+      final campaignsFuture = listCampaigns(
+        limit: recentCampaignsLimit.clamp(1, 20),
+        timeout: timeout,
+      ).catchError((_) => <String, dynamic>{'campaigns': const []});
+      final agentsFuture =
+          listAgents(timeout: timeout).catchError((_) => <String, dynamic>{'agents': const []});
+      final numbersFuture = listNumbers(timeout: timeout)
+          .catchError((_) => <String, dynamic>{'numbers': const [], 'items': const []});
+      final ubFuture = getUbStatus(timeout: timeout).catchError((_) => <String, dynamic>{});
+
+      final results = await Future.wait<dynamic>([
+        callsFuture,
+        campaignsFuture,
+        agentsFuture,
+        numbersFuture,
+        ubFuture,
+      ]);
+      final callsRes = Map<String, dynamic>.from(results[0] as Map);
+      final campaignsRes = Map<String, dynamic>.from(results[1] as Map);
+      final agentsRes = Map<String, dynamic>.from(results[2] as Map);
+      final numbersRes = Map<String, dynamic>.from(results[3] as Map);
+      final ubRes = Map<String, dynamic>.from(results[4] as Map);
+
+      final recentCalls = ((callsRes['calls'] as List?) ?? const <dynamic>[])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final recentCampaigns = ((campaignsRes['campaigns'] as List?) ?? const <dynamic>[])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final operators = ((agentsRes['agents'] as List?) ?? const <dynamic>[]);
+      final numbers = ((numbersRes['numbers'] as List?) ??
+              (numbersRes['items'] as List?) ??
+              const <dynamic>[])
+          .toList();
+      final completedCalls = recentCalls.where((c) {
+        final status = (c['status'] ?? c['result'] ?? '').toString().toLowerCase();
+        return status.contains('completed') || status.contains('success') || status.contains('answered');
+      }).length;
+
+      return {
+        'ok': true,
+        'setup': {
+          'business_configured': true,
+          'operator_count': operators.length,
+          'number_live': numbers.isNotEmpty,
+          'first_call_completed': completedCalls > 0,
+          'ub_status': (ubRes['status'] ?? 'missing').toString().toLowerCase(),
+          'training_number': (numbers.isNotEmpty ? (numbers.first['phone'] ?? numbers.first['number']) : null),
+        },
+        'kpi': {
+          'calls_total': recentCalls.length,
+        },
+        'recent_calls': recentCalls,
+        'recent_campaigns': recentCampaigns,
+      };
+    }
   }
 
   /// Get a single campaign by id (full details).

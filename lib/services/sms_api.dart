@@ -5,6 +5,7 @@ import '../neyvo_pulse_api.dart';
 
 class SmsApi {
   SmsApi._();
+  static bool _smsConfigUnsupported = false;
 
   static Map<String, dynamic> _idParams() {
     final id = NeyvoPulseApi.defaultAccountId.trim();
@@ -40,28 +41,39 @@ class SmsApi {
   }
 
   static Future<SmsConfig> getConfig() async {
+    if (_smsConfigUnsupported) {
+      return const SmsConfig(configured: false);
+    }
+    // Prefer legacy endpoint first on environments where /api/sms/config is not deployed,
+    // so we avoid noisy 404s during normal page navigation.
+    try {
+      final legacy = await NeyvoApi.getJsonMap(
+        '/api/integrations/twilio',
+        params: _idParams(),
+        timeout: const Duration(seconds: 6),
+      );
+      final from = legacy['default_number']?.toString();
+      return SmsConfig(
+        configured: (from != null && from.isNotEmpty),
+        fromMasked: from,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        _smsConfigUnsupported = true;
+      }
+      // Fall through to new endpoint.
+    }
     try {
       final m = await NeyvoApi.getJsonMap(
         '/api/sms/config',
         params: _idParams(),
+        timeout: const Duration(seconds: 6),
       );
       return SmsConfig.fromJson(m);
     } on ApiException catch (e) {
-      // Fallback for environments that still expose Twilio integration only.
       if (e.statusCode == 404) {
-        try {
-          final m = await NeyvoApi.getJsonMap(
-            '/api/integrations/twilio',
-            params: _idParams(),
-          );
-          final from = m['default_number']?.toString();
-          return SmsConfig(
-            configured: (from != null && from.isNotEmpty),
-            fromMasked: from,
-          );
-        } on ApiException {
-          return const SmsConfig(configured: false);
-        }
+        _smsConfigUnsupported = true;
+        return const SmsConfig(configured: false);
       }
       return const SmsConfig(configured: false);
     }
