@@ -37,7 +37,7 @@ import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
 import '../ui/screens/calls/calls_section.dart';
 import '../ui/screens/calls/test_call_page.dart';
-import '../ui/screens/billing/billing_page.dart';
+import '../features/billing/billing_screen.dart';
 import '../ui/screens/billing/wallet_page.dart';
 import '../ui/screens/billing/voice_tier_page.dart';
 import '../ui/screens/billing/plan_selector_page.dart';
@@ -955,7 +955,7 @@ extension on _PulseShellState {
       case PulseRouteNames.phoneNumbers:
         return RoleGuard(
           allowedRoles: const [UserRole.owner, UserRole.admin],
-          fallback: const _AccessDeniedScreen(),
+          fallback: const AccessDeniedScreen(),
           child: const PhoneNumbersPage(),
         );
       case PulseRouteNames.calls:
@@ -966,7 +966,7 @@ extension on _PulseShellState {
       case PulseRouteNames.campaigns:
         return RoleGuard(
           allowedRoles: const [UserRole.owner, UserRole.admin],
-          fallback: const _AccessDeniedScreen(),
+          fallback: const AccessDeniedScreen(),
           child: const CampaignsPage(),
         );
       case PulseRouteNames.team:
@@ -983,9 +983,9 @@ extension on _PulseShellState {
         return const IntegrationsPage();
       case PulseRouteNames.billing:
         return RoleGuard(
-          allowedRoles: const [UserRole.owner],
-          fallback: const _AccessDeniedScreen(),
-          child: const BillingPage(),
+          allowedRoles: const [UserRole.owner, UserRole.admin],
+          fallback: const AccessDeniedScreen(),
+          child: const BillingScreen(),
         );
       case PulseRouteNames.wallet:
         return const WalletPage();
@@ -1165,8 +1165,8 @@ class _ProfileDetailRouter extends StatelessWidget {
   }
 }
 
-class _AccessDeniedScreen extends StatelessWidget {
-  const _AccessDeniedScreen();
+class AccessDeniedScreen extends StatelessWidget {
+  const AccessDeniedScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

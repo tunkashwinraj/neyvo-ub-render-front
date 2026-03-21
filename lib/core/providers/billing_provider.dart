@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../neyvo_pulse_api.dart';
 import 'api_provider.dart';
+import '../models/billing_model.dart';
 
 part 'billing_provider.g.dart';
 
@@ -49,4 +50,27 @@ class BillingNotifier extends _$BillingNotifier {
     await NeyvoPulseApi.setBillingTier(tier);
     ref.invalidateSelf();
   }
+}
+
+@riverpod
+Future<BillingSummaryModel> billingSummary(BillingSummaryRef ref) async {
+  final api = ref.watch(speariaApiProvider);
+  final response = await api.dio.get('/api/billing/summary');
+  return BillingSummaryModel.fromJson(response.data as Map<String, dynamic>);
+}
+
+@riverpod
+Future<List<CallUsagePoint>> callUsageChart(CallUsageChartRef ref) async {
+  final api = ref.watch(speariaApiProvider);
+  final response = await api.dio.get('/api/billing/usage');
+  return (response.data as List)
+      .map((e) => CallUsagePoint.fromJson(e as Map<String, dynamic>))
+      .toList();
+}
+
+@riverpod
+Future<String> stripeCheckoutUrl(StripeCheckoutUrlRef ref) async {
+  final api = ref.watch(speariaApiProvider);
+  final response = await api.dio.get('/api/billing/upgrade');
+  return response.data['checkout_url'] as String;
 }

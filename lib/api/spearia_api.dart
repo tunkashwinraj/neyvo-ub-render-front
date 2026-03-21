@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart' as ul;
 
@@ -42,6 +43,49 @@ class SpeariaApi {
   static bool _sendNgrokSkipHeader = false;
   static bool _autoAdminForAdminPaths = true; // add X-Admin-Token for /admin/*
   static ApiErrorHook? _errorHook;
+
+  static Dio? _dio;
+  static String _dioBaseUrl = "";
+
+  /// Dio client mirroring the behavior of the SpeariaApi HTTP helpers.
+  /// This is used by some Riverpod providers (e.g. billing) that call
+  /// `api.dio.get(...)` per feature spec.
+  Dio get dio {
+    _ensureBaseUrlOrThrow();
+    if (_dio == null || _dioBaseUrl != _baseUrl) {
+      _dioBaseUrl = _baseUrl;
+      _dio = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: _defaultTimeout,
+          receiveTimeout: _defaultTimeout,
+        ),
+      );
+      _dio!.interceptors.clear();
+      _dio!.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            // Inject default account_id (same behavior as _withAccountId in HTTP helpers).
+            if (_defaultAccountId != null && _defaultAccountId!.isNotEmpty) {
+              options.queryParameters.putIfAbsent('account_id', () => _defaultAccountId!);
+            }
+
+            // Inject headers (Authorization, X-Admin-Token, X-User-Id, Accept, CORS helper header).
+            final h = _headers(
+              headers: null,
+              adminAuth: false,
+              path: options.path,
+              includeJsonContentType: false,
+            );
+            options.headers.addAll(h);
+
+            handler.next(options);
+          },
+        ),
+      );
+    }
+    return _dio!;
+  }
 
   /// Read-only getter (handy for building absolute links)
   static String get baseUrl => _baseUrl;
