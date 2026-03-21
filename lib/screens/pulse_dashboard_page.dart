@@ -26,7 +26,8 @@ class PulseDashboardPage extends ConsumerStatefulWidget {
 }
 
 class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
-  bool _loading = true;
+  bool _loading = false;
+  bool _criticalLoading = false;
   String? _error;
   String? _importantError;
   String? _heavyError;
@@ -105,6 +106,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   void initState() {
     super.initState();
     _applyPresetWithoutReload('this_week');
+    _criticalLoading = true;
     _load();
     _loadLiveCallStats();
   }
@@ -264,17 +266,26 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       to: _currentIsoRange()['to'],
     );
     setState(() {
-      _loading = true;
+      // Do not block the whole dashboard on network.
+      // Render the shell immediately and hydrate sections asynchronously.
+      _loading = false;
+      _criticalLoading = true;
       _error = null;
       _importantError = null;
       _heavyError = null;
     });
 
+    unawaited(_loadCriticalSection(range, version: version));
+    unawaited(_loadImportantSection(range, version: version));
+    unawaited(_loadHeavySection(range, version: version));
+  }
+
+  Future<void> _loadCriticalSection(PulseDashboardRange range, {required int version}) async {
     final stopwatch = Stopwatch()..start();
     try {
       final critical = await ref
           .read(pulseDashboardCriticalProvider(range).future)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 5));
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
@@ -289,24 +300,18 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
         _criticalLatencyMs = stopwatch.elapsedMilliseconds;
         _criticalLatencyAt = DateTime.now();
         _criticalLatencyDegraded = false;
-        _loading = false;
+        _criticalLoading = false;
       });
-      unawaited(_loadImportantSection(range, version: version));
-      unawaited(_loadHeavySection(range, version: version));
     } on TimeoutException {
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
-      // Fail-open: render dashboard shell quickly with safe defaults, then continue background loads.
       setState(() {
-        _loading = false;
-        _error = null;
         _importantError = 'Dashboard data is slow to respond. Showing partial view.';
         _criticalLatencyMs = stopwatch.elapsedMilliseconds;
         _criticalLatencyAt = DateTime.now();
         _criticalLatencyDegraded = true;
+        _criticalLoading = false;
       });
-      unawaited(_loadImportantSection(range, version: version));
-      unawaited(_loadHeavySection(range, version: version));
     } catch (e) {
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
@@ -315,7 +320,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
         _criticalLatencyMs = stopwatch.elapsedMilliseconds;
         _criticalLatencyAt = DateTime.now();
         _criticalLatencyDegraded = true;
-        _loading = false;
+        _criticalLoading = false;
       });
     }
   }
@@ -323,6 +328,20 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   Widget _buildBackendLatencyBadge() {
     final ms = _criticalLatencyMs;
     final degraded = _criticalLatencyDegraded;
+    if (_criticalLoading) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: NeyvoColors.info.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: NeyvoColors.info.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          'Loading dashboard…',
+          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.info, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
     final color = degraded
         ? NeyvoColors.error
         : (ms == null || ms > 2500)
@@ -599,9 +618,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
-    }
     if (_error != null) {
       return Center(
         child: Column(
