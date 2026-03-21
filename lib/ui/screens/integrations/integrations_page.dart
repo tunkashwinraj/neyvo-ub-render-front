@@ -1,18 +1,24 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-import '../../../neyvo_pulse_api.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../api/neyvo_api.dart';
+import '../../../neyvo_pulse_api.dart';
+import '../../../providers/sendgrid_providers.dart';
+import '../../../providers/sms_providers.dart';
+import '../../../services/sendgrid_api.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
-class IntegrationsPage extends StatefulWidget {
+class IntegrationsPage extends ConsumerStatefulWidget {
   const IntegrationsPage({super.key});
 
   @override
-  State<IntegrationsPage> createState() => _IntegrationsPageState();
+  ConsumerState<IntegrationsPage> createState() => _IntegrationsPageState();
 }
 
-class _IntegrationsPageState extends State<IntegrationsPage> {
+class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
   bool _loading = true;
   String? _error;
 
@@ -41,6 +47,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
         _calendlyConfig = Map<String, dynamic>.from(c);
         _loading = false;
       });
+      ref.invalidate(sendgridConfigProvider);
+      ref.invalidate(smsConfigProvider);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -76,6 +84,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     final calendlyUpdatedAt = _calendlyConfig['updated_at']?.toString();
     final calendlyLastError = _calendlyConfig['last_error']?.toString();
 
+    final sendgridAsync = ref.watch(sendgridConfigProvider);
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -91,7 +101,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       child: Text('Integrations', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                     ),
                     TextButton.icon(
-                      onPressed: _load,
+                      onPressed: () {
+                        ref.invalidate(sendgridConfigProvider);
+                        ref.invalidate(smsConfigProvider);
+                        _load();
+                      },
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('Refresh'),
                     ),
@@ -108,6 +122,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     enabled: slateEnabled,
                     lastSentAt: slateLastSent,
                     lastError: slateLastError,
+                    leadingLetter: 'S',
                     onTap: () async {
                       await Navigator.of(context).push(
                         MaterialPageRoute(
@@ -130,6 +145,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                     enabled: calendlyEnabled,
                     lastSentAt: calendlyUpdatedAt,
                     lastError: calendlyLastError,
+                    leadingLetter: 'C',
                     onTap: () async {
                       await Navigator.of(context).push(
                         MaterialPageRoute(
@@ -140,6 +156,270 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
                       await _load();
                     },
                   ),
+                ),
+                const SizedBox(height: 18),
+                Text('Email delivery', style: NeyvoTextStyles.heading),
+                const SizedBox(height: 10),
+                sendgridAsync.when(
+                  loading: () => const NeyvoGlassPanel(
+                    child: Padding(
+                      padding: EdgeInsets.all(18),
+                      child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+                    ),
+                  ),
+                  error: (e, _) => NeyvoGlassPanel(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Text(
+                        'SendGrid: $e',
+                        style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
+                      ),
+                    ),
+                  ),
+                  data: (cfg) {
+                    final connected = cfg.connected;
+                    final from = cfg.fromEmail ?? '';
+                    return NeyvoGlassPanel(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        NeyvoColors.ubPurple.withOpacity(0.95),
+                                        NeyvoColors.ubLightBlue.withOpacity(0.95),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.email_outlined, color: Colors.white, size: 22),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              'SendGrid',
+                                              style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: connected
+                                                  ? const Color(0xFF22C55E).withOpacity(0.14)
+                                                  : NeyvoColors.borderSubtle.withOpacity(0.4),
+                                              borderRadius: BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: connected
+                                                    ? const Color(0xFF22C55E).withOpacity(0.45)
+                                                    : NeyvoColors.borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              connected ? 'Connected' : 'Not connected',
+                                              style: NeyvoTextStyles.micro.copyWith(
+                                                color: connected ? const Color(0xFF22C55E) : NeyvoColors.textMuted,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Transactional email for voice tools (sendEmail)',
+                                        style: NeyvoTextStyles.micro,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        connected ? 'From: ${from.isEmpty ? '—' : from}' : 'Connect your SendGrid API key',
+                                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                FilledButton(
+                                  onPressed: () async {
+                                    await showModalBottomSheet<void>(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: NeyvoTheme.bgSurface,
+                                      builder: (ctx) => ConnectSendGridSheet(
+                                        onDone: () {
+                                          ref.invalidate(sendgridConfigProvider);
+                                          Navigator.pop(ctx);
+                                        },
+                                      ),
+                                    );
+                                  },
+                                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                                  child: Text(connected ? 'Update connection' : 'Connect'),
+                                ),
+                                if (connected)
+                                  OutlinedButton(
+                                    onPressed: () async {
+                                      final ok = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Disconnect SendGrid?'),
+                                          content: const Text('Voice email tools will stop until you connect again.'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Disconnect')),
+                                          ],
+                                        ),
+                                      );
+                                      if (ok == true && context.mounted) {
+                                        try {
+                                          await SendgridApi.disconnect();
+                                          ref.invalidate(sendgridConfigProvider);
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                          }
+                                        }
+                                      }
+                                    },
+                                    child: const Text('Disconnect'),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
+                Text('Messaging', style: NeyvoTextStyles.heading),
+                const SizedBox(height: 10),
+                ref.watch(smsConfigProvider).when(
+                  loading: () => const NeyvoGlassPanel(
+                    child: Padding(
+                      padding: EdgeInsets.all(18),
+                      child: Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
+                    ),
+                  ),
+                  error: (e, _) => NeyvoGlassPanel(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Text(
+                        'SMS (Twilio): $e',
+                        style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
+                      ),
+                    ),
+                  ),
+                  data: (smsCfg) {
+                    final active = smsCfg.configured;
+                    final masked = smsCfg.fromMasked ?? '';
+                    return NeyvoGlassPanel(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    NeyvoColors.teal.withOpacity(0.9),
+                                    NeyvoColors.ubLightBlue.withOpacity(0.9),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.sms_outlined, color: Colors.white, size: 22),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'SMS via Twilio',
+                                          style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: active
+                                              ? const Color(0xFF22C55E).withOpacity(0.14)
+                                              : NeyvoColors.borderSubtle.withOpacity(0.4),
+                                          borderRadius: BorderRadius.circular(999),
+                                          border: Border.all(
+                                            color: active
+                                                ? const Color(0xFF22C55E).withOpacity(0.45)
+                                                : NeyvoColors.borderSubtle,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          active ? 'Active' : 'Setup required',
+                                          style: NeyvoTextStyles.micro.copyWith(
+                                            color: active ? const Color(0xFF22C55E) : NeyvoColors.textMuted,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Outbound SMS for ARIA operators (sendSMS tool)',
+                                    style: NeyvoTextStyles.micro,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    active
+                                        ? 'From: ${masked.isEmpty ? 'configured' : masked}'
+                                        : 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER on the API server.',
+                                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -157,6 +437,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
     required String? lastSentAt,
     required String? lastError,
     required VoidCallback onTap,
+    String leadingLetter = 'S',
   }) {
     final theme = Theme.of(context);
     final hasErr = lastError != null && lastError.trim().isNotEmpty;
@@ -183,7 +464,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> {
               ),
               child: Center(
                 child: Text(
-                  'S',
+                  leadingLetter,
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -766,6 +1047,168 @@ class _CalendlyIntegrationPageState extends State<CalendlyIntegrationPage> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet: API key (obscured) + from email, 1s debounced SendGrid key validation, inline errors only.
+class ConnectSendGridSheet extends StatefulWidget {
+  final VoidCallback onDone;
+
+  const ConnectSendGridSheet({super.key, required this.onDone});
+
+  @override
+  State<ConnectSendGridSheet> createState() => _ConnectSendGridSheetState();
+}
+
+class _ConnectSendGridSheetState extends State<ConnectSendGridSheet> {
+  final _apiKey = TextEditingController();
+  final _fromEmail = TextEditingController();
+  bool _obscure = true;
+  bool _validating = false;
+  bool? _keyOk;
+  String? _keyInlineError;
+  Timer? _debounce;
+  bool _saving = false;
+  String? _formError;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _apiKey.dispose();
+    _fromEmail.dispose();
+    super.dispose();
+  }
+
+  void _scheduleValidate() {
+    _debounce?.cancel();
+    setState(() {
+      _keyOk = null;
+      _keyInlineError = null;
+    });
+    final v = _apiKey.text.trim();
+    if (v.isEmpty) return;
+    _debounce = Timer(const Duration(seconds: 1), () async {
+      if (!mounted) return;
+      setState(() {
+        _validating = true;
+        _keyInlineError = null;
+      });
+      final r = await SendgridApi.validateApiKey(v);
+      if (!mounted) return;
+      setState(() {
+        _validating = false;
+        _keyOk = r.valid;
+        _keyInlineError = r.valid ? null : (r.errorMessage ?? 'Invalid key');
+      });
+    });
+  }
+
+  Future<void> _connect() async {
+    setState(() => _formError = null);
+    final key = _apiKey.text.trim();
+    final from = _fromEmail.text.trim();
+    if (key.isEmpty || from.isEmpty) {
+      setState(() => _formError = 'API key and from email are required.');
+      return;
+    }
+    if (from.contains('@') == false) {
+      setState(() => _formError = 'Enter a valid from email.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await SendgridApi.connect(apiKey: key, fromEmail: from);
+      if (!mounted) return;
+      widget.onDone();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _formError = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text('Connect SendGrid', style: NeyvoTextStyles.heading),
+                const Spacer(),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _fromEmail,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'From email (verified sender)',
+                hintText: 'hello@yourdomain.com',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKey,
+              obscureText: _obscure,
+              onChanged: (_) => _scheduleValidate(),
+              decoration: InputDecoration(
+                labelText: 'SendGrid API key',
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_validating)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else if (_keyOk == true)
+                      const Icon(Icons.check_circle, color: Color(0xFF22C55E))
+                    else if (_keyOk == false)
+                      const Icon(Icons.cancel, color: Color(0xFFEF4444)),
+                    IconButton(
+                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_keyInlineError != null && _keyInlineError!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(_keyInlineError!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+            ],
+            if (_formError != null && _formError!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(_formError!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning)),
+            ],
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: _saving ? null : _connect,
+              style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+              child: _saving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save connection'),
+            ),
+          ],
+        ),
       ),
     );
   }

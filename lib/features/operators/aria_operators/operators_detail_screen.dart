@@ -4,8 +4,14 @@ import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/email_models.dart';
+import '../../../models/sms_models.dart';
 import '../../../neyvo_pulse_api.dart';
+import '../../../providers/sendgrid_providers.dart';
+import '../../../providers/sms_providers.dart';
+import '../../../services/sms_api.dart';
 import '../../../pulse_route_names.dart';
+import '../../../services/email_templates_api.dart';
 import 'aria_operator_api_service.dart';
 import 'aria_operator_providers.dart';
 import 'aria_vapi_iframe.dart';
@@ -35,6 +41,11 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Operator')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openTemplateSheet(context, ref, null),
+        icon: const Icon(Icons.add),
+        label: const Text('Email template'),
+      ),
       body: detailAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Center(child: Text('Failed to load operator: $e')),
@@ -213,9 +224,54 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                     ],
                   ),
                 ),
+
+                const SizedBox(height: 14),
+                _EmailTemplatesSection(
+                  operatorId: widget.operatorId,
+                  onAdd: () => _openTemplateSheet(context, ref, null),
+                  onEditTemplate: (t) => _openTemplateSheet(context, ref, t),
+                ),
+                const SizedBox(height: 14),
+                _SmsTemplatesSection(
+                  operatorId: widget.operatorId,
+                  onAdd: () => _openSmsTemplateSheet(context, ref, null),
+                  onEditTemplate: (t) => _openSmsTemplateSheet(context, ref, t),
+                ),
               ],
             ),
           );
+        },
+      ),
+    );
+  }
+
+  void _openSmsTemplateSheet(BuildContext context, WidgetRef ref, SmsTemplate? existing) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1225),
+      builder: (ctx) => CreateEditSmsTemplateSheet(
+        operatorId: widget.operatorId,
+        existing: existing,
+        onSaved: () {
+          ref.invalidate(smsTemplatesForOperatorProvider(widget.operatorId));
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+  }
+
+  void _openTemplateSheet(BuildContext context, WidgetRef ref, EmailTemplate? existing) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1225),
+      builder: (ctx) => CreateEditEmailTemplateSheet(
+        operatorId: widget.operatorId,
+        existing: existing,
+        onSaved: () {
+          ref.invalidate(emailTemplatesForOperatorProvider(widget.operatorId));
+          Navigator.pop(ctx);
         },
       ),
     );
@@ -265,6 +321,677 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _EmailTemplatesSection extends ConsumerWidget {
+  final String operatorId;
+  final VoidCallback onAdd;
+  final void Function(EmailTemplate t) onEditTemplate;
+
+  const _EmailTemplatesSection({
+    required this.operatorId,
+    required this.onAdd,
+    required this.onEditTemplate,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(emailTemplatesForOperatorProvider(operatorId));
+
+    return Card(
+      color: const Color(0xFF0B1225),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Email Templates', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                ),
+                TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add, size: 18), label: const Text('Add')),
+              ],
+            ),
+            const SizedBox(height: 8),
+            async.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+              error: (e, _) => Text(
+                'Could not load templates: $e',
+                style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13),
+              ),
+              data: (list) {
+                if (list.isEmpty) {
+                  return const Text(
+                    'No templates yet. Use Add or the floating button to create one.',
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  );
+                }
+                return Column(
+                  children: list.map((t) {
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      color: const Color(0xFF111827),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    t.name.isEmpty ? '(unnamed)' : t.name,
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Edit',
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  onPressed: () => onEditTemplate(t),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete',
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: Color(0xFFEF4444)),
+                                  onPressed: () async {
+                                    final ok = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Delete template?'),
+                                        content: Text('Delete "${t.name}"?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                                        ],
+                                      ),
+                                    );
+                                    if (ok == true && context.mounted) {
+                                      try {
+                                        await EmailTemplatesApi.deleteTemplate(
+                                          operatorId: operatorId,
+                                          templateId: t.id,
+                                        );
+                                        ref.invalidate(emailTemplatesForOperatorProvider(operatorId));
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                        }
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              t.subject,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                            ),
+                            if (t.variables.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: t.variables
+                                    .map(
+                                      (v) => Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text('{{$v}}', style: const TextStyle(fontSize: 11)),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Create or update an operator email template; debounced variable detection for `{{var}}`.
+class CreateEditEmailTemplateSheet extends StatefulWidget {
+  final String operatorId;
+  final EmailTemplate? existing;
+  final VoidCallback onSaved;
+
+  const CreateEditEmailTemplateSheet({
+    super.key,
+    required this.operatorId,
+    this.existing,
+    required this.onSaved,
+  });
+
+  @override
+  State<CreateEditEmailTemplateSheet> createState() => _CreateEditEmailTemplateSheetState();
+}
+
+class _CreateEditEmailTemplateSheetState extends State<CreateEditEmailTemplateSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _subject;
+  late final TextEditingController _body;
+  late final TextEditingController _html;
+  Timer? _debounce;
+  List<String> _detected = [];
+  bool _htmlOpen = false;
+  bool _saving = false;
+  String? _error;
+
+  static final _varRe = RegExp(r'\{\{(\w+)\}\}');
+
+  static List<String> _extractVars(String a, String b, String c) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final m in _varRe.allMatches('$a\n$b\n$c')) {
+      final n = m.group(1)!;
+      if (seen.add(n)) out.add(n);
+    }
+    return out;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _name = TextEditingController(text: e?.name ?? '');
+    _subject = TextEditingController(text: e?.subject ?? '');
+    _body = TextEditingController(text: e?.body ?? '');
+    _html = TextEditingController(text: e?.htmlBody ?? '');
+    _detected = _extractVars(_name.text, _subject.text, '${_body.text}\n${_html.text}');
+    for (final c in [_name, _subject, _body, _html]) {
+      c.addListener(_scheduleDetect);
+    }
+  }
+
+  void _scheduleDetect() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _detected = _extractVars(_name.text, _subject.text, '${_body.text}\n${_html.text}');
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _name.dispose();
+    _subject.dispose();
+    _body.dispose();
+    _html.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _error = null);
+    final name = _name.text.trim();
+    final subject = _subject.text;
+    final body = _body.text;
+    final html = _html.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Template name is required.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final ex = widget.existing;
+      if (ex == null) {
+        await EmailTemplatesApi.createTemplate(
+          operatorId: widget.operatorId,
+          name: name,
+          subject: subject,
+          body: body,
+          htmlBody: html.isEmpty ? null : html,
+        );
+      } else {
+        await EmailTemplatesApi.updateTemplate(
+          operatorId: widget.operatorId,
+          templateId: ex.id,
+          name: name,
+          subject: subject,
+          body: body,
+          htmlBody: html,
+        );
+      }
+      if (!mounted) return;
+      widget.onSaved();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final title = widget.existing == null ? 'New email template' : 'Edit template';
+    return Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: bottom + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                const Spacer(),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Template name')),
+            const SizedBox(height: 10),
+            TextField(controller: _subject, decoration: const InputDecoration(labelText: 'Subject')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _body,
+              minLines: 4,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                labelText: 'Body',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              title: const Text('HTML body (optional)'),
+              initiallyExpanded: _htmlOpen,
+              onExpansionChanged: (v) => setState(() => _htmlOpen = v),
+              children: [
+                TextField(
+                  controller: _html,
+                  minLines: 3,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    hintText: 'Optional HTML version',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text('Detected variables', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 6),
+            if (_detected.isEmpty)
+              const Text('None yet — use {{name}} style placeholders.', style: TextStyle(color: Colors.white38, fontSize: 12))
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: _detected.map((v) => Chip(label: Text('{{$v}}', style: const TextStyle(fontSize: 11)))).toList(),
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: const TextStyle(color: Color(0xFFF59E0B))),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save template'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmsTemplatesSection extends ConsumerWidget {
+  final String operatorId;
+  final VoidCallback onAdd;
+  final void Function(SmsTemplate t) onEditTemplate;
+
+  const _SmsTemplatesSection({
+    required this.operatorId,
+    required this.onAdd,
+    required this.onEditTemplate,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(smsTemplatesForOperatorProvider(operatorId));
+
+    return Card(
+      color: const Color(0xFF0B1225),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('SMS Templates', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                ),
+                TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add, size: 18), label: const Text('Add')),
+              ],
+            ),
+            const SizedBox(height: 8),
+            async.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+              error: (e, _) => Text(
+                'Could not load SMS templates: $e',
+                style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13),
+              ),
+              data: (list) {
+                if (list.isEmpty) {
+                  return const Text(
+                    'No SMS templates yet. Add one for the sendSMS tool (Twilio).',
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  );
+                }
+                return Column(
+                  children: list.map((t) {
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      color: const Color(0xFF111827),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    t.name.isEmpty ? '(unnamed)' : t.name,
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Edit',
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  onPressed: () => onEditTemplate(t),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete',
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: Color(0xFFEF4444)),
+                                  onPressed: () async {
+                                    final ok = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Delete SMS template?'),
+                                        content: Text('Delete "${t.name}"?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                                        ],
+                                      ),
+                                    );
+                                    if (ok == true && context.mounted) {
+                                      try {
+                                        await SmsApi.deleteTemplate(
+                                          operatorId: operatorId,
+                                          templateId: t.id,
+                                        );
+                                        ref.invalidate(smsTemplatesForOperatorProvider(operatorId));
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                        }
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              t.body,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '~${t.charCount} chars · ${t.segments} segment(s)',
+                              style: const TextStyle(color: Colors.white38, fontSize: 11),
+                            ),
+                            if (t.variables.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: t.variables
+                                    .map(
+                                      (v) => Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text('{{$v}}', style: const TextStyle(fontSize: 11)),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+int _smsEstimatedLen(String body) {
+  return body.replaceAllMapped(RegExp(r'\{\{\w+\}\}'), (_) => 'X' * 10).length;
+}
+
+int _smsEstimatedSegments(String body) {
+  final n = _smsEstimatedLen(body);
+  if (n <= 160) return 1;
+  return (n + 152) ~/ 153;
+}
+
+/// Create or update an operator SMS template; live segment meter + debounced {{var}} detection.
+class CreateEditSmsTemplateSheet extends StatefulWidget {
+  final String operatorId;
+  final SmsTemplate? existing;
+  final VoidCallback onSaved;
+
+  const CreateEditSmsTemplateSheet({
+    super.key,
+    required this.operatorId,
+    this.existing,
+    required this.onSaved,
+  });
+
+  @override
+  State<CreateEditSmsTemplateSheet> createState() => _CreateEditSmsTemplateSheetState();
+}
+
+class _CreateEditSmsTemplateSheetState extends State<CreateEditSmsTemplateSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _body;
+  Timer? _debounce;
+  List<String> _detected = [];
+  bool _saving = false;
+  String? _error;
+
+  static final _varRe = RegExp(r'\{\{(\w+)\}\}');
+
+  static List<String> _extractVars(String name, String body) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final m in _varRe.allMatches('$name\n$body')) {
+      final n = m.group(1)!;
+      if (seen.add(n)) out.add(n);
+    }
+    return out;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _name = TextEditingController(text: e?.name ?? '');
+    _body = TextEditingController(text: e?.body ?? '');
+    _detected = _extractVars(_name.text, _body.text);
+    _name.addListener(_scheduleDetect);
+    _body.addListener(_scheduleDetect);
+    _body.addListener(() => setState(() {}));
+  }
+
+  void _scheduleDetect() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _detected = _extractVars(_name.text, _body.text);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _name.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _error = null);
+    final name = _name.text.trim();
+    final body = _body.text;
+    if (name.isEmpty) {
+      setState(() => _error = 'Template name is required.');
+      return;
+    }
+    if (body.trim().isEmpty) {
+      setState(() => _error = 'Message body is required.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final ex = widget.existing;
+      if (ex == null) {
+        await SmsApi.createTemplate(
+          operatorId: widget.operatorId,
+          name: name,
+          body: body,
+        );
+      } else {
+        await SmsApi.updateTemplate(
+          operatorId: widget.operatorId,
+          templateId: ex.id,
+          name: name,
+          body: body,
+        );
+      }
+      if (!mounted) return;
+      widget.onSaved();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final title = widget.existing == null ? 'New SMS template' : 'Edit SMS template';
+    final estLen = _smsEstimatedLen(_body.text);
+    final segs = _smsEstimatedSegments(_body.text);
+    return Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: bottom + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                const Spacer(),
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              ],
+            ),
+            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Template name')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _body,
+              minLines: 5,
+              maxLines: 12,
+              decoration: const InputDecoration(
+                labelText: 'Message body',
+                alignLabelWithHint: true,
+                hintText: 'Hi {{name}}, thanks for calling…',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '~$estLen characters · $segs SMS segment(s) (estimated after filling {{variables}})',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Tip: recipients can reply STOP to opt out of SMS; keep messages concise and include your business name when appropriate.',
+              style: TextStyle(color: Colors.white38, fontSize: 11.5, height: 1.35),
+            ),
+            const SizedBox(height: 10),
+            const Text('Detected variables', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 6),
+            if (_detected.isEmpty)
+              const Text('None yet — use {{name}} style placeholders.', style: TextStyle(color: Colors.white38, fontSize: 12))
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: _detected.map((v) => Chip(label: Text('{{$v}}', style: const TextStyle(fontSize: 11)))).toList(),
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: const TextStyle(color: Color(0xFFF59E0B))),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save SMS template'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
