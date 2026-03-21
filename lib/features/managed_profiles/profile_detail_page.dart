@@ -47,6 +47,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _voicemailCtrl = TextEditingController();
   final _aiSuggestMessageCtrl = TextEditingController();
   final _vapiJsonImportController = TextEditingController();
+  final _emailToCtrl = TextEditingController();
+  final _emailSubjectCtrl = TextEditingController();
+  final _emailBodyCtrl = TextEditingController();
+  final _emailHtmlCtrl = TextEditingController();
+  final _emailFromNameCtrl = TextEditingController();
+  final _smsToCtrl = TextEditingController();
+  final _smsBodyCtrl = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
@@ -67,6 +74,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   List<Map<String, dynamic>> _variableMetadata = [];
   List<Map<String, dynamic>> _openVariables = [];
   bool _variableMetadataLoading = false;
+  bool _messagingDefaultsSaving = false;
+  String? _messagingDefaultsError;
 
   @override
   void initState() {
@@ -84,6 +93,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _voicemailCtrl.dispose();
     _aiSuggestMessageCtrl.dispose();
     _vapiJsonImportController.dispose();
+    _emailToCtrl.dispose();
+    _emailSubjectCtrl.dispose();
+    _emailBodyCtrl.dispose();
+    _emailHtmlCtrl.dispose();
+    _emailFromNameCtrl.dispose();
+    _smsToCtrl.dispose();
+    _smsBodyCtrl.dispose();
     super.dispose();
   }
 
@@ -154,6 +170,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _variableDefaults = Map<String, String>.from(variableDefaults);
         _loading = false;
       });
+      await _loadMessagingDefaults();
       await _loadVariableMetadata();
       // After wallet is available, load curated voices for the effective tier.
       await _loadVoiceCatalogForTier();
@@ -186,6 +203,58 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _openVariables = [];
         _variableMetadataLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadMessagingDefaults() async {
+    try {
+      final res = await ManagedProfileApiService.getMessagingDefaults(widget.profileId);
+      final email = (res['email'] is Map)
+          ? Map<String, dynamic>.from(res['email'] as Map)
+          : const <String, dynamic>{};
+      final sms =
+          (res['sms'] is Map) ? Map<String, dynamic>.from(res['sms'] as Map) : const <String, dynamic>{};
+      _emailToCtrl.text = (email['to'] ?? '').toString();
+      _emailSubjectCtrl.text = (email['subject'] ?? '').toString();
+      _emailBodyCtrl.text = (email['body'] ?? '').toString();
+      _emailHtmlCtrl.text = (email['html_body'] ?? '').toString();
+      _emailFromNameCtrl.text = (email['from_name'] ?? '').toString();
+      _smsToCtrl.text = (sms['to'] ?? '').toString();
+      _smsBodyCtrl.text = (sms['body'] ?? '').toString();
+    } catch (_) {
+      // Keep page usable even if endpoint is unavailable on older deployments.
+    }
+  }
+
+  Future<void> _saveMessagingDefaults() async {
+    setState(() {
+      _messagingDefaultsSaving = true;
+      _messagingDefaultsError = null;
+    });
+    try {
+      await ManagedProfileApiService.saveMessagingDefaults(
+        widget.profileId,
+        email: {
+          'to': _emailToCtrl.text.trim(),
+          'subject': _emailSubjectCtrl.text,
+          'body': _emailBodyCtrl.text,
+          'html_body': _emailHtmlCtrl.text,
+          'from_name': _emailFromNameCtrl.text.trim(),
+        },
+        sms: {
+          'to': _smsToCtrl.text.trim(),
+          'body': _smsBodyCtrl.text,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Messaging defaults saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _messagingDefaultsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _messagingDefaultsSaving = false);
     }
   }
 
@@ -1804,6 +1873,74 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   runSpacing: 10,
                   children: allowed.map((t) => _metric('Tool', t)).toList(),
                 ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Messaging defaults (Email + SMS)', style: NeyvoTextStyles.heading),
+              const SizedBox(height: 8),
+              Text(
+                'Used by sendEmail/sendSMS when tool arguments are missing. You can use variables like {{name}}, {{date}}, {{time}}.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              Text('Email defaults', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              TextField(controller: _emailToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailFromNameCtrl, decoration: const InputDecoration(labelText: 'From name helper (optional)')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailSubjectCtrl, decoration: const InputDecoration(labelText: 'Default subject')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailBodyCtrl,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailHtmlCtrl,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 12),
+              Text('SMS defaults', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              TextField(controller: _smsToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _smsBodyCtrl,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              if (_messagingDefaultsError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _messagingDefaultsError!,
+                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingDefaultsSaving ? null : _saveMessagingDefaults,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  child: _messagingDefaultsSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save messaging defaults'),
+                ),
+              ),
             ],
           ),
         ),
