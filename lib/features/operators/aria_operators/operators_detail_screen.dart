@@ -403,7 +403,8 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
   final _smsBody = TextEditingController();
 
   bool _loaded = false;
-  bool _saving = false;
+  bool _savingEmail = false;
+  bool _savingSms = false;
   String? _error;
 
   @override
@@ -430,13 +431,13 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
     _smsBody.text = (sms['body'] ?? '').toString();
   }
 
-  Future<void> _save() async {
+  Future<void> _saveEmail() async {
     setState(() {
-      _saving = true;
+      _savingEmail = true;
       _error = null;
     });
     try {
-      await AriaOperatorApiService.saveMessagingDefaults(
+      await AriaOperatorApiService.saveEmailDefaults(
         widget.operatorId,
         email: {
           'to': _emailTo.text.trim(),
@@ -445,6 +446,29 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
           'html_body': _emailHtml.text,
           'from_name': _emailFromName.text.trim(),
         },
+      );
+      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email defaults saved')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _savingEmail = false);
+    }
+  }
+
+  Future<void> _saveSms() async {
+    setState(() {
+      _savingSms = true;
+      _error = null;
+    });
+    try {
+      await AriaOperatorApiService.saveSmsDefaults(
+        widget.operatorId,
         sms: {
           'to': _smsTo.text.trim(),
           'body': _smsBody.text,
@@ -453,14 +477,14 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
       ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Integration defaults saved')),
+          const SnackBar(content: Text('SMS defaults saved')),
         );
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _savingSms = false);
     }
   }
 
@@ -531,6 +555,16 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                   maxLines: 6,
                   decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _savingEmail ? null : _saveEmail,
+                    child: _savingEmail
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Save Email Defaults'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -558,6 +592,16 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                   'You can use variables like {{name}}, {{date}}, {{time}}. They are filled from tool call `variables`.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _savingSms ? null : _saveSms,
+                    child: _savingSms
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Save SMS Defaults'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -566,13 +610,6 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
           const SizedBox(height: 8),
           Text(_error!, style: const TextStyle(color: Color(0xFFF59E0B))),
         ],
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Save Integration Defaults'),
-        ),
       ],
     );
   }

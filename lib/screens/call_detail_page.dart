@@ -20,6 +20,30 @@ class CallDetailPage extends ConsumerStatefulWidget {
 }
 
 class _CallDetailPageState extends ConsumerState<CallDetailPage> {
+  late String _providerKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _providerKey = callDetailProviderKey(widget.call);
+    // Avoid provider writes during build lifecycle.
+    Future<void>.microtask(_ensureInitializedSafe);
+  }
+
+  @override
+  void didUpdateWidget(covariant CallDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextKey = callDetailProviderKey(widget.call);
+    if (nextKey != _providerKey) {
+      _providerKey = nextKey;
+      Future<void>.microtask(_ensureInitializedSafe);
+    }
+  }
+
+  void _ensureInitializedSafe() {
+    if (!mounted) return;
+    ref.read(callDetailUiCtrlProvider(_providerKey).notifier).ensureInitialized(widget.call);
+  }
 
   static String formatDuration(dynamic c) {
     final sec = c['duration_seconds'];
@@ -38,9 +62,7 @@ class _CallDetailPageState extends ConsumerState<CallDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final key = callDetailProviderKey(widget.call);
-    ref.read(callDetailUiCtrlProvider(key).notifier).ensureInitialized(widget.call);
-    final ui = ref.watch(callDetailUiCtrlProvider(key));
+    final ui = ref.watch(callDetailUiCtrlProvider(_providerKey));
     if (!ui.initialized) {
       return Scaffold(
         backgroundColor: NeyvoTheme.bgPrimary,

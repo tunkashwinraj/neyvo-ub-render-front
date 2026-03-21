@@ -74,7 +74,8 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   List<Map<String, dynamic>> _variableMetadata = [];
   List<Map<String, dynamic>> _openVariables = [];
   bool _variableMetadataLoading = false;
-  bool _messagingDefaultsSaving = false;
+  bool _messagingEmailSaving = false;
+  bool _messagingSmsSaving = false;
   String? _messagingDefaultsError;
 
   @override
@@ -226,13 +227,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     }
   }
 
-  Future<void> _saveMessagingDefaults() async {
+  Future<void> _saveEmailDefaults() async {
     setState(() {
-      _messagingDefaultsSaving = true;
+      _messagingEmailSaving = true;
       _messagingDefaultsError = null;
     });
     try {
-      await ManagedProfileApiService.saveMessagingDefaults(
+      await ManagedProfileApiService.saveEmailDefaults(
         widget.profileId,
         email: {
           'to': _emailToCtrl.text.trim(),
@@ -241,6 +242,27 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           'html_body': _emailHtmlCtrl.text,
           'from_name': _emailFromNameCtrl.text.trim(),
         },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email defaults saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _messagingDefaultsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _messagingEmailSaving = false);
+    }
+  }
+
+  Future<void> _saveSmsDefaults() async {
+    setState(() {
+      _messagingSmsSaving = true;
+      _messagingDefaultsError = null;
+    });
+    try {
+      await ManagedProfileApiService.saveSmsDefaults(
+        widget.profileId,
         sms: {
           'to': _smsToCtrl.text.trim(),
           'body': _smsBodyCtrl.text,
@@ -248,13 +270,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Messaging defaults saved')),
+        const SnackBar(content: Text('SMS defaults saved')),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _messagingDefaultsError = e.toString());
     } finally {
-      if (mounted) setState(() => _messagingDefaultsSaving = false);
+      if (mounted) setState(() => _messagingSmsSaving = false);
     }
   }
 
@@ -1910,6 +1932,20 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
               ),
               const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingEmailSaving ? null : _saveEmailDefaults,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  child: _messagingEmailSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save email defaults'),
+                ),
+              ),
+              const SizedBox(height: 12),
               Text('SMS defaults', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(controller: _smsToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
@@ -1920,6 +1956,20 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 maxLines: 5,
                 decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingSmsSaving ? null : _saveSmsDefaults,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  child: _messagingSmsSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save SMS defaults'),
+                ),
+              ),
               if (_messagingDefaultsError != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -1927,20 +1977,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
                 ),
               ],
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: _messagingDefaultsSaving ? null : _saveMessagingDefaults,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: NeyvoColors.white,
-                  ),
-                  child: _messagingDefaultsSaving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Save messaging defaults'),
-                ),
-              ),
             ],
           ),
         ),

@@ -6,6 +6,7 @@ import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
+  static const String _integrationBaseUrl = 'https://neyvoub-back.onrender.com';
   static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
@@ -93,8 +94,22 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> getProfile(String profileId) async =>
       _get('/api/managed-profiles/$profileId');
 
-  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async =>
-      _get('/api/operators/$profileId/integrations/messaging-defaults');
+  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async {
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    try {
+      return _get(path);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final params = <String, dynamic>{};
+      if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+        params['account_id'] = NeyvoPulseApi.defaultAccountId;
+      }
+      final v = await SpeariaApi.getJson('$_integrationBaseUrl$path', params: params);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      throw ApiException('Unexpected messaging-defaults response');
+    }
+  }
 
   static Future<Map<String, dynamic>> saveMessagingDefaults(
     String profileId, {
@@ -102,16 +117,43 @@ class ManagedProfileApiService {
     required Map<String, dynamic> sms,
   }) async {
     final body = <String, dynamic>{'email': email, 'sms': sms};
+    return _saveMessagingDefaultsBody(profileId, body);
+  }
+
+  static Future<Map<String, dynamic>> saveEmailDefaults(
+    String profileId, {
+    required Map<String, dynamic> email,
+  }) async {
+    return _saveMessagingDefaultsBody(profileId, <String, dynamic>{'email': email});
+  }
+
+  static Future<Map<String, dynamic>> saveSmsDefaults(
+    String profileId, {
+    required Map<String, dynamic> sms,
+  }) async {
+    return _saveMessagingDefaultsBody(profileId, <String, dynamic>{'sms': sms});
+  }
+
+  static Future<Map<String, dynamic>> _saveMessagingDefaultsBody(
+    String profileId,
+    Map<String, dynamic> body,
+  ) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = NeyvoPulseApi.defaultAccountId;
     }
-    final v = await SpeariaApi.putJson(
-      '/api/operators/$profileId/integrations/messaging-defaults',
-      body: body,
-    );
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return Map<String, dynamic>.from(v);
-    throw ApiException('Unexpected messaging-defaults response');
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    try {
+      final v = await SpeariaApi.putJson(path, body: body);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      throw ApiException('Unexpected messaging-defaults response');
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await SpeariaApi.putJson('$_integrationBaseUrl$path', body: body);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      throw ApiException('Unexpected messaging-defaults response');
+    }
   }
 
   /// Duplicate an operator: backend clones the VAPI assistant and creates a new profile (name + " (copy)").

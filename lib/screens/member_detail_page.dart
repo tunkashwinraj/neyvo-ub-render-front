@@ -37,11 +37,29 @@ class MemberDetailPage extends ConsumerStatefulWidget {
 class _MemberDetailPageState extends ConsumerState<MemberDetailPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late String _providerKey;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
+    _providerKey = memberDetailKey(widget.member);
+    Future<void>.microtask(_ensureInitializedSafe);
+  }
+
+  @override
+  void didUpdateWidget(covariant MemberDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextKey = memberDetailKey(widget.member);
+    if (nextKey != _providerKey) {
+      _providerKey = nextKey;
+      Future<void>.microtask(_ensureInitializedSafe);
+    }
+  }
+
+  void _ensureInitializedSafe() {
+    if (!mounted) return;
+    ref.read(memberDetailCtrlProvider(_providerKey).notifier).ensureInitialized(widget.member);
   }
 
   @override
@@ -117,8 +135,7 @@ class _MemberDetailPageState extends ConsumerState<MemberDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final key = memberDetailKey(widget.member);
-    ref.read(memberDetailCtrlProvider(key).notifier).ensureInitialized(widget.member);
+    final key = _providerKey;
     final ui = ref.watch(memberDetailCtrlProvider(key));
     final member = ui.member;
     final name = (member['name'] ?? '').toString().trim();
