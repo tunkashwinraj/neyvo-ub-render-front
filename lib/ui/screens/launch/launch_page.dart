@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/account_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
@@ -11,14 +13,14 @@ import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../features/managed_profiles/managed_profile_api_service.dart';
 import '../../../features/setup/setup_api_service.dart';
 
-class LaunchPage extends StatefulWidget {
+class LaunchPage extends ConsumerStatefulWidget {
   const LaunchPage({super.key});
 
   @override
-  State<LaunchPage> createState() => _LaunchPageState();
+  ConsumerState<LaunchPage> createState() => _LaunchPageState();
 }
 
-class _LaunchPageState extends State<LaunchPage> {
+class _LaunchPageState extends ConsumerState<LaunchPage> {
   bool _loading = true;
   String? _error;
 
@@ -47,7 +49,7 @@ class _LaunchPageState extends State<LaunchPage> {
         ManagedProfileApiService.listProfiles(),
         NeyvoPulseApi.listNumbers(),
         NeyvoPulseApi.listCalls(),
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
       ]);
 
       final wallet = results[0] as Map<String, dynamic>;

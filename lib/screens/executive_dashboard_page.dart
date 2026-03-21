@@ -5,8 +5,10 @@
 import 'dart:async';
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../core/providers/account_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
@@ -15,14 +17,14 @@ import 'pulse_shell.dart';
 
 enum _DateRange { today, yesterday, thisWeek, thisMonth, thisYear, custom }
 
-class ExecutiveDashboardPage extends StatefulWidget {
+class ExecutiveDashboardPage extends ConsumerStatefulWidget {
   const ExecutiveDashboardPage({super.key});
 
   @override
-  State<ExecutiveDashboardPage> createState() => _ExecutiveDashboardPageState();
+  ConsumerState<ExecutiveDashboardPage> createState() => _ExecutiveDashboardPageState();
 }
 
-class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with SingleTickerProviderStateMixin {
+class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage> with SingleTickerProviderStateMixin {
   int _selectedTabIndex = 0;
   _DateRange _dateRange = _DateRange.thisWeek;
   DateTime? _customFrom;
@@ -174,7 +176,7 @@ class _ExecutiveDashboardPageState extends State<ExecutiveDashboardPage> with Si
         _loadCampaignData(),
         NeyvoPulseApi.health(),
         NeyvoPulseApi.getUbStatus(),
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
         _loadOperatorsCount(),
       ]);
       if (!mounted) return;

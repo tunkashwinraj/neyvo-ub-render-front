@@ -821,6 +821,17 @@ class NeyvoPulseApi {
         if (callScript != null) 'call_script': callScript,
       });
 
+  static Future<Map<String, dynamic>> patchSettings(
+    Map<String, dynamic> payload,
+  ) async {
+    return _patch('/api/pulse/settings', payload);
+  }
+
+  static Future<bool> sendTestEmail() async {
+    final res = await _post('/api/pulse/settings/test-email', {});
+    return res['ok'] == true;
+  }
+
   // Reports
   static Future<Map<String, dynamic>> reportsSummary() async =>
       _get('/api/pulse/reports/summary');

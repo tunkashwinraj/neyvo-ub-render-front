@@ -6,8 +6,11 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/campaigns_provider.dart';
+import '../core/providers/account_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
@@ -19,14 +22,14 @@ import '../utils/export_csv.dart';
 import '../widgets/neyvo_empty_state.dart';
 import 'call_detail_page.dart';
 
-class CampaignsPage extends StatefulWidget {
+class CampaignsPage extends ConsumerStatefulWidget {
   const CampaignsPage({super.key});
 
   @override
-  State<CampaignsPage> createState() => _CampaignsPageState();
+  ConsumerState<CampaignsPage> createState() => _CampaignsPageState();
 }
 
-class _CampaignsPageState extends State<CampaignsPage> {
+class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   List<Map<String, dynamic>> _campaigns = [];
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _agents = [];
@@ -121,7 +124,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       // Ensure account context so operator list (managed profiles) is scoped to current org
       if (NeyvoPulseApi.defaultAccountId.isEmpty) {
         try {
-          final accountRes = await NeyvoPulseApi.getAccountInfo();
+          final accountRes = await ref.read(accountInfoProvider.future);
           final accountId = (accountRes['id'] ?? accountRes['account_id'] ?? '').toString().trim();
           if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
         } catch (_) {}
@@ -178,7 +181,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       // Check if account has a number: from account info (primary) or from GET /api/numbers
       bool hasNumber = false;
       try {
-        final accountRes = await NeyvoPulseApi.getAccountInfo();
+        final accountRes = await ref.read(accountInfoProvider.future);
         final pid = (accountRes['primary_phone_number_id'] ?? accountRes['vapi_phone_number_id'] ?? '').toString().trim();
         if (pid.isNotEmpty) {
           hasNumber = true;
@@ -1261,6 +1264,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncValue = ref.watch(campaignsNotifierProvider);
+    if (_campaigns.isEmpty && asyncValue.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_campaigns.isEmpty && asyncValue.hasError) {
+      return Center(child: Text('Error: ${asyncValue.error}'));
+    }
     if (_showCreateWizard) {
       return _buildWizard();
     }

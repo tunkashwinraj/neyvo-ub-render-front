@@ -3,7 +3,9 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers/account_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
@@ -23,14 +25,14 @@ const List<MapEntry<String, String>> kTeamPermissions = [
   MapEntry('billing', 'Billing'),
 ];
 
-class TeamPage extends StatefulWidget {
+class TeamPage extends ConsumerStatefulWidget {
   const TeamPage({super.key});
 
   @override
-  State<TeamPage> createState() => _TeamPageState();
+  ConsumerState<TeamPage> createState() => _TeamPageState();
 }
 
-class _TeamPageState extends State<TeamPage> {
+class _TeamPageState extends ConsumerState<TeamPage> {
   String? _myRole;
   String? _myEmail;
   String? _myName;
@@ -78,7 +80,7 @@ class _TeamPageState extends State<TeamPage> {
       final results = await Future.wait([
         NeyvoPulseApi.getMyRole(),
         NeyvoPulseApi.listMembers(),
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
         NeyvoPulseApi.getAccountOrgs(),
       ]);
       final roleRes = results[0] as Map<String, dynamic>;

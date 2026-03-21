@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+<<<<<<< HEAD
+=======
+import '../../../features/settings/settings_screen.dart';
+import '../../../neyvo_pulse_api.dart';
+>>>>>>> origin/Twinkle
 import '../../../api/neyvo_api.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../providers/sendgrid_providers.dart';
@@ -112,6 +117,32 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                NeyvoGlassPanel(
+                  child: ListTile(
+                    leading: Icon(Icons.settings_suggest_outlined, color: NeyvoColors.teal),
+                    title: const Text('Pulse integration settings'),
+                    subtitle: Text(
+                      'Calendly URL, SMTP, and test email',
+                      style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textSecondary, fontSize: 13),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => Scaffold(
+                            backgroundColor: NeyvoColors.bgVoid,
+                            appBar: AppBar(
+                              title: const Text('Integration settings'),
+                              backgroundColor: NeyvoColors.bgBase,
+                            ),
+                            body: const SettingsScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
                 Text('CRM integrations', style: NeyvoTextStyles.heading),
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(

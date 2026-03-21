@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
   import 'package:timezone/data/latest.dart' as tz;
 
 import 'api/neyvo_api.dart';
+import 'core/providers/account_provider.dart';
 import 'core/providers/timezone_provider.dart';
 import 'services/user_timezone_service.dart';
 import 'firebase_options.dart';
@@ -24,17 +25,16 @@ import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
-const String _kProductionBackendUrl = 'https://goodwin-neyvo-back.onrender.com';
-  const String _kDefaultBaseUrl = String.fromEnvironment(
-    'SPEARIA_BASE_URL',
-  defaultValue: _kProductionBackendUrl,
-  );
+const String _kDefaultBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://goodwin-neyvo-back.onrender.com',
+);
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
-  /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
+  /// Build: flutter build web --dart-define=API_BASE_URL_STAGING=https://your-staging-back.onrender.com
   /// If not set, staging uses the same URL as prod (single Render service).
   const String _kStagingBaseUrl = String.fromEnvironment(
-    'SPEARIA_BASE_URL_STAGING',
-  defaultValue: _kProductionBackendUrl,
+    'API_BASE_URL_STAGING',
+  defaultValue: _kDefaultBaseUrl,
   );
 
 /// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
@@ -60,7 +60,7 @@ String _resolveBaseUrlForEnvironment() {
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (NeyvoApi.baseUrl.contains('goodwin-neyvo-back.onrender.com')) return '757763';
+  if (NeyvoApi.baseUrl.contains(Uri.parse(_kDefaultBaseUrl).host)) return '757763';
   return '';
 }
 
@@ -85,7 +85,7 @@ String get _kFallbackAccountId {
   final baseUrl = _resolveBaseUrlForEnvironment();
 
   // Configure backend base URL once. In dev you can override via:
-  // flutter run -d chrome --web-port 9095 --dart-define=SPEARIA_BASE_URL=http://127.0.0.1:8000
+  // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000
   NeyvoApi.setBaseUrl(baseUrl);
   NeyvoApi.setDefaultTimeout(const Duration(seconds: 15));
 
@@ -207,7 +207,7 @@ String get _kFallbackAccountId {
 
     Future<void> _loadAccount() async {
       try {
-        final res = await NeyvoPulseApi.getAccountInfo();
+        final res = await ref.read(accountInfoProvider.future);
         final ok = res['ok'] == true;
         final accountId = res['account_id'] as String?;
         final onboardingFromApi = res['onboarding_completed'];

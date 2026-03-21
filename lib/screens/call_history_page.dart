@@ -7,18 +7,15 @@
 // Extra Vapi fields may be absent when FF_SINGLE_CALLS_PATH is on server.
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../neyvo_pulse_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/providers/call_history_provider.dart';
 import '../services/user_timezone_service.dart';
 import '../tenant/tenant_brand.dart';
 import '../utils/export_csv.dart';
 import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
 
-/// Sort options: date desc/asc, duration desc/asc (when backend provides duration)
-enum _CallSort { dateNewest, dateOldest, durationLongest, durationShortest }
-
-class CallHistoryPage extends StatefulWidget {
+class CallHistoryPage extends ConsumerStatefulWidget {
   const CallHistoryPage({
     super.key,
     this.initialDirection = 'outbound', // all | inbound | outbound
@@ -27,112 +24,29 @@ class CallHistoryPage extends StatefulWidget {
   final String initialDirection;
 
   @override
-  State<CallHistoryPage> createState() => _CallHistoryPageState();
+  ConsumerState<CallHistoryPage> createState() => _CallHistoryPageState();
 }
 
-class _CallHistoryPageState extends State<CallHistoryPage> {
-  List<dynamic> _allCalls = [];
-  List<dynamic> _filteredCalls = [];
-  bool _loading = true;
-  String? _error;
+class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
   final _searchController = TextEditingController();
-  String _filterStatus = 'all'; // all, completed, failed, pending
-  String _filterOutcome = 'all'; // all, callback, booked, handoff, missed, completed
-  String _filterDirection = 'outbound'; // all, inbound, outbound (default to outbound)
-  String _dateRange = 'all'; // all, 7d, 30d
-  _CallSort _sortBy = _CallSort.dateNewest;
-  /// User-selectable number of call logs to fetch per page (20, 50, 100, 200, 500).
-  int _fetchSize = 50;
-  bool _hasMore = true;
-  bool _loadingMore = false;
-  static const List<int> _fetchSizeOptions = [20, 50, 100, 200, 500];
 
   @override
   void initState() {
     super.initState();
-    _filterDirection = (widget.initialDirection).toLowerCase().trim();
-    if (_filterDirection != 'inbound' && _filterDirection != 'outbound' && _filterDirection != 'all') {
-      _filterDirection = 'outbound';
-    }
-    _searchController.addListener(_filterCalls);
-    _load();
+    _searchController.addListener(() {
+      ref.read(callHistoryNotifierProvider.notifier).setSearchQuery(_searchController.text);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final n = ref.read(callHistoryNotifierProvider.notifier);
+      n.seedInitialDirection(widget.initialDirection);
+      await n.reload();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  /// Build from/to date params for API (YYYY-MM-DD). Returns null for 'all'.
-  (String? fromStr, String? toStr) _dateRangeParams() {
-    if (_dateRange == 'all') return (null, null);
-    final now = DateTime.now();
-    final toStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    if (_dateRange == '7d') {
-      final from = now.subtract(const Duration(days: 7));
-      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
-      return (fromStr, toStr);
-    }
-    if (_dateRange == '30d') {
-      final from = now.subtract(const Duration(days: 30));
-      final fromStr = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
-      return (fromStr, toStr);
-    }
-    return (null, null);
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final (fromStr, toStr) = _dateRangeParams();
-      final res = await NeyvoPulseApi.listCalls(
-        limit: _fetchSize,
-        offset: 0,
-        from: fromStr,
-        to: toStr,
-      );
-      if (!mounted) return;
-      final list = res['calls'];
-      final calls = list is List ? List<dynamic>.from(list) : <dynamic>[];
-      setState(() {
-        _allCalls = calls;
-        _hasMore = calls.length >= _fetchSize;
-        _loading = false;
-        if (res['ok'] != true && _error == null) {
-          _error = res['error']?.toString() ?? 'Failed to load call logs';
-        }
-      });
-      _filterCalls();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _allCalls = [];
-          _filteredCalls = [];
-          _hasMore = false;
-          _loading = false;
-          _error = e.toString();
-        });
-        _filterCalls();
-      }
-    }
-  }
-
-  bool _isInDateRange(dynamic call) {
-    if (_dateRange == 'all') return true;
-    final created = call['started_at'] ?? call['created_at'] ?? call['date'] ?? call['timestamp'];
-    if (created == null) return true;
-    DateTime? dt;
-    if (created is String) dt = DateTime.tryParse(created);
-    if (created is int) dt = DateTime.fromMillisecondsSinceEpoch(created);
-    if (dt == null) return true;
-    final now = DateTime.now();
-    if (_dateRange == '7d') return now.difference(dt).inDays <= 7;
-    if (_dateRange == '30d') return now.difference(dt).inDays <= 30;
-    return true;
   }
 
   /// Duration in seconds (int) or duration string from backend
@@ -149,122 +63,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     return d?.isNotEmpty == true ? d! : '?';
   }
 
-  static int _durationSeconds(dynamic c) {
-    final sec = c['duration_seconds'];
-    if (sec is int) return sec;
-    if (sec != null) return int.tryParse(sec.toString()) ?? 0;
-    return 0;
-  }
-
-  /// Date used for display/fallback.
-  static DateTime? _parseDate(dynamic raw) {
-    if (raw == null) return null;
-    if (raw is String) return DateTime.tryParse(raw);
-    if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
-    return null;
-  }
-
-  /// Date used for sorting and filtering; prefer same source as display.
-  static DateTime? _callDate(dynamic c) {
-    final raw = c['started_at'] ?? c['created_at'] ?? c['date'] ?? c['timestamp'];
-    return _parseDate(raw);
-  }
-
-  /// Latest activity time (max of started/created/ended/updated) so "Date (newest)" shows recently ended calls first.
-  static DateTime _callDateForSort(dynamic c) {
-    final dates = [
-      _parseDate(c['ended_at']),
-      _parseDate(c['updated_at']),
-      _parseDate(c['started_at']),
-      _parseDate(c['created_at']),
-      _parseDate(c['date']),
-      _parseDate(c['timestamp']),
-    ].whereType<DateTime>().toList();
-    if (dates.isEmpty) return DateTime(0);
-    return dates.reduce((a, b) => a.isAfter(b) ? a : b);
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    setState(() {});
-    _filterCalls();
-  }
-
-  void _filterCalls() {
-    // Search only in current page: filter by name/phone + date, direction, status, outcome.
-    final query = _searchController.text.trim().toLowerCase();
-    setState(() {
-      var list = _allCalls.where((c) {
-        if (!_isInDateRange(c)) return false;
-        if (_filterDirection != 'all') {
-          final dir = (c['direction'] as String?)?.toLowerCase();
-          if (dir != _filterDirection) return false;
-        }
-        final contactName = (c['student_name'] ?? c['contact_name'] ?? c['customer_name'] ?? c['agent_name'] ?? '').toString().toLowerCase();
-        final phone = (c['student_phone'] ?? c['to'] ?? c['phone_number'] ?? '').toString().toLowerCase();
-        if (query.isNotEmpty && !contactName.contains(query) && !phone.contains(query)) return false;
-        if (_filterStatus != 'all') {
-          final status = (c['status']?.toString() ?? '').toLowerCase();
-          if (status != _filterStatus) return false;
-        }
-        if (_filterOutcome != 'all') {
-          final outcome = (c['outcome'] ?? c['status'] ?? '').toString().toLowerCase();
-          if (outcome != _filterOutcome) return false;
-        }
-        return true;
-      }).toList();
-      // Sort
-      list = List.from(list);
-      list.sort((a, b) {
-        switch (_sortBy) {
-          case _CallSort.dateNewest:
-            final da = _callDateForSort(a);
-            final db = _callDateForSort(b);
-            return db.compareTo(da);
-          case _CallSort.dateOldest:
-            final da = _callDateForSort(a);
-            final db = _callDateForSort(b);
-            return da.compareTo(db);
-          case _CallSort.durationLongest:
-            return _durationSeconds(b).compareTo(_durationSeconds(a));
-          case _CallSort.durationShortest:
-            return _durationSeconds(a).compareTo(_durationSeconds(b));
-        }
-      });
-      _filteredCalls = list;
-    });
-  }
-
-  Future<void> _loadMore() async {
-    if (!_hasMore || _loadingMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final (fromStr, toStr) = _dateRangeParams();
-      final res = await NeyvoPulseApi.listCalls(
-        limit: _fetchSize,
-        offset: _allCalls.length,
-        from: fromStr,
-        to: toStr,
-      );
-      if (!mounted) return;
-      final list = res['calls'];
-      final newCalls = list is List ? List<dynamic>.from(list) : <dynamic>[];
-      setState(() {
-        _allCalls = [..._allCalls, ...newCalls];
-        _hasMore = newCalls.length >= _fetchSize;
-        _loadingMore = false;
-      });
-      _filterCalls();
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
-
-  Future<void> _exportCsv() async {
+  Future<void> _exportCsv(CallHistoryState s) async {
     final sb = StringBuffer();
     sb.writeln('Contact Name,Phone,Date,Status,Duration,Recording URL,Transcript');
-    for (final c in _filteredCalls) {
-      final map = c as Map<String, dynamic>;
+    for (final c in s.filteredCalls) {
+      final map = c;
       final name = (map['student_name']?.toString() ?? '').replaceAll(',', ';');
       final phone = map['student_phone']?.toString() ?? '';
       final date = (map['created_at_display'] ?? map['created_at'] ?? map['date'] ?? '').toString();
@@ -315,13 +118,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     }
   }
 
-  /// Show delete confirmation for a single call log (Goodwin: hold to delete).
-  static Future<void> _showDeleteCallLogDialog(
+  Future<void> _showDeleteCallLogDialog(
     BuildContext context,
     String callId,
     String studentName,
     String date,
-    VoidCallback onDeleted,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -347,17 +148,16 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
     );
     if (confirmed != true) return;
     try {
-      final res = await NeyvoPulseApi.deleteCalls([callId]);
+      final ok = await ref.read(callHistoryNotifierProvider.notifier).deleteCallLog(callId);
       if (!context.mounted) return;
-      if (res['ok'] == true) {
-        onDeleted();
+      if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Call log deleted'), backgroundColor: NeyvoTheme.success),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['message']?.toString() ?? res['error']?.toString() ?? 'Failed to delete call log'),
+          const SnackBar(
+            content: Text('Failed to delete call log'),
             backgroundColor: NeyvoTheme.error,
           ),
         );
@@ -373,10 +173,12 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    final s = ref.watch(callHistoryNotifierProvider);
+    final n = ref.read(callHistoryNotifierProvider.notifier);
+    if (s.loading && s.allCalls.isEmpty) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_error != null) {
+    if (s.error != null && s.allCalls.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Call History')),
         body: Center(
@@ -387,29 +189,30 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
               children: [
                 Text('Something went wrong', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
                 const SizedBox(height: NeyvoSpacing.sm),
-                Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary), textAlign: TextAlign.center),
+                Text(s.error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary), textAlign: TextAlign.center),
                 const SizedBox(height: NeyvoSpacing.lg),
-                FilledButton(onPressed: _load, child: const Text('Retry')),
+                FilledButton(onPressed: () => n.reload(), child: const Text('Retry')),
               ],
             ),
           ),
         ),
       );
     }
-    
+
+    final filtered = s.filteredCalls;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Call History'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-            tooltip: 'Refresh (load latest $_fetchSize calls)',
+            onPressed: s.loading ? null : () => n.reload(),
+            tooltip: 'Refresh (load latest ${s.fetchSize} calls)',
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => n.reload(),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -427,26 +230,34 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search in current page (name or phone)',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 20),
-                                  onPressed: _clearSearch,
-                                )
-                              : null,
-                        ),
+                      child: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _searchController,
+                        builder: (context, tv, _) {
+                          return TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search in current page (name or phone)',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: tv.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 20),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        n.clearSearch();
+                                      },
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: NeyvoSpacing.md),
                     IconButton(
                       icon: const Icon(Icons.download),
-                      onPressed: _filteredCalls.isEmpty ? null : _exportCsv,
+                      onPressed: filtered.isEmpty ? null : () => _exportCsv(s),
                       tooltip: 'Export CSV',
                     ),
                   ],
@@ -461,7 +272,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         SizedBox(
                           width: 150,
                           child: DropdownButtonFormField<String>(
-                            value: _filterDirection,
+                            value: s.filterDirection,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
@@ -473,14 +284,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               DropdownMenuItem(value: 'inbound', child: Text('Inbound', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'outbound', child: Text('Outbound', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _filterDirection = v ?? 'all'; _filterCalls(); }); },
+                            onChanged: (v) => n.setFilterDirection(v ?? 'all'),
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
                           width: 160,
                           child: DropdownButtonFormField<String>(
-                            value: _dateRange,
+                            value: s.dateRange,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
@@ -492,29 +303,38 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               DropdownMenuItem(value: '7d', child: Text('Last 7 days', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: '30d', child: Text('Last 30 days', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _dateRange = v ?? 'all'; }); _load(); },
+                            onChanged: (v) async {
+                              n.setDateRange(v ?? 'all');
+                              await n.reload();
+                            },
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
                           width: 140,
                           child: DropdownButtonFormField<int>(
-                            value: _fetchSize,
+                            value: s.fetchSize,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               labelText: 'Show',
                             ),
-                            items: _fetchSizeOptions.map((n) => DropdownMenuItem(value: n, child: Text('$n calls', overflow: TextOverflow.ellipsis))).toList(),
-                            onChanged: (v) { if (v != null) { setState(() { _fetchSize = v; }); _load(); } },
+                            items: CallHistoryState.fetchSizeOptions
+                                .map((sz) => DropdownMenuItem(value: sz, child: Text('$sz calls', overflow: TextOverflow.ellipsis)))
+                                .toList(),
+                            onChanged: (v) async {
+                              if (v == null) return;
+                              n.setFetchSize(v);
+                              await n.reload();
+                            },
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
                           width: 150,
                           child: DropdownButtonFormField<String>(
-                            value: _filterStatus,
+                            value: s.filterStatus,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
@@ -527,14 +347,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               DropdownMenuItem(value: 'failed', child: Text('Failed', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'pending', child: Text('Pending', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _filterStatus = v ?? 'all'; _filterCalls(); }); },
+                            onChanged: (v) => n.setFilterStatus(v ?? 'all'),
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
                           width: 140,
                           child: DropdownButtonFormField<String>(
-                            value: _filterOutcome,
+                            value: s.filterOutcome,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
@@ -549,14 +369,14 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               DropdownMenuItem(value: 'missed', child: Text('Missed', overflow: TextOverflow.ellipsis)),
                               DropdownMenuItem(value: 'completed', child: Text('Completed', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _filterOutcome = v ?? 'all'; _filterCalls(); }); },
+                            onChanged: (v) => n.setFilterOutcome(v ?? 'all'),
                           ),
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
                         SizedBox(
                           width: 190,
-                          child: DropdownButtonFormField<_CallSort>(
-                            value: _sortBy,
+                          child: DropdownButtonFormField<CallHistorySort>(
+                            value: s.sortBy,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               isDense: true,
@@ -564,12 +384,12 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               labelText: 'Sort',
                             ),
                             items: const [
-                              DropdownMenuItem(value: _CallSort.dateNewest, child: Text('Date (newest)', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: _CallSort.dateOldest, child: Text('Date (oldest)', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: _CallSort.durationLongest, child: Text('Duration (longest)', overflow: TextOverflow.ellipsis)),
-                              DropdownMenuItem(value: _CallSort.durationShortest, child: Text('Duration (shortest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: CallHistorySort.dateNewest, child: Text('Date (newest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: CallHistorySort.dateOldest, child: Text('Date (oldest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: CallHistorySort.durationLongest, child: Text('Duration (longest)', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: CallHistorySort.durationShortest, child: Text('Duration (shortest)', overflow: TextOverflow.ellipsis)),
                             ],
-                            onChanged: (v) { setState(() { _sortBy = v ?? _CallSort.dateNewest; _filterCalls(); }); },
+                            onChanged: (v) => n.setSortBy(v ?? CallHistorySort.dateNewest),
                           ),
                         ),
                       ],
@@ -581,7 +401,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
               ),
               
               // Calls List (single page scroll: list does not scroll independently)
-              if (_filteredCalls.isEmpty)
+              if (filtered.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(NeyvoSpacing.xl),
                   child: Column(
@@ -590,7 +410,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                       Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
                       const SizedBox(height: NeyvoSpacing.md),
                       Text(
-                        _allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
+                        s.allCalls.isEmpty ? 'No calls yet. Assign a phone number to an agent to start receiving calls.' : 'No calls found',
                         style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
                         textAlign: TextAlign.center,
                       ),
@@ -605,7 +425,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                   ),
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _filteredCalls.length + 1,
+                  itemCount: filtered.length + 1,
                   itemBuilder: (context, i) {
                         if (i == 0) {
                           return Padding(
@@ -617,18 +437,16 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Calls (${_filteredCalls.length})',
+                                  'Calls (${filtered.length})',
                                   style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
                                 ),
-                                if (_filteredCalls.length != _allCalls.length)
+                                if (filtered.length != s.allCalls.length)
                                   TextButton(
                                     onPressed: () {
                                       _searchController.clear();
-                                      setState(() {
-                                        _filterStatus = 'all';
-                                        _filterOutcome = 'all';
-                                      });
-                                      _filterCalls();
+                                      n.clearSearch();
+                                      n.setFilterStatus('all');
+                                      n.setFilterOutcome('all');
                                     },
                                     child: const Text('Clear filters'),
                                   ),
@@ -637,7 +455,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                           );
                         }
                         final idx = i - 1;
-                        final call = _filteredCalls[idx] as Map<String, dynamic>;
+                        final call = filtered[idx];
                         final status = call['status']?.toString() ?? 'unknown';
                         final studentName = (call['student_name'] ?? call['contact_name'] ?? call['caller'] ?? 'Unknown').toString();
                         final studentPhone = (call['student_phone'] ?? call['to'] ?? call['phone_number'] ?? '').toString();
@@ -675,7 +493,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                           child: GestureDetector(
                             onLongPress: canDelete
-                                ? () => _showDeleteCallLogDialog(context, callId, studentName, date, () => _load())
+                                ? () => _showDeleteCallLogDialog(context, callId, studentName, date)
                                 : null,
                             child: ExpansionTile(
                               onExpansionChanged: (expanded) {
@@ -846,7 +664,7 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                         );
                   },
                 ),
-                if (_hasMore)
+                if (s.hasMore)
                   Padding(
                     padding: const EdgeInsets.only(
                       left: NeyvoSpacing.md,
@@ -854,8 +672,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
                       bottom: NeyvoSpacing.lg,
                     ),
                     child: OutlinedButton(
-                      onPressed: _loadingMore ? null : _loadMore,
-                      child: _loadingMore
+                      onPressed: s.loadingMore ? null : () => n.loadMore(),
+                      child: s.loadingMore
                           ? const SizedBox(
                               width: 18,
                               height: 18,
@@ -869,31 +687,6 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label, style: NeyvoType.bodySmall.copyWith(color: selected ? NeyvoTheme.teal : NeyvoTheme.textSecondary)),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: NeyvoTheme.teal.withOpacity(0.2),
-      checkmarkColor: NeyvoTheme.teal,
-      backgroundColor: NeyvoTheme.bgCard,
-      side: BorderSide(color: selected ? NeyvoTheme.teal : NeyvoTheme.border),
     );
   }
 }
