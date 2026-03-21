@@ -7,7 +7,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/providers/account_provider.dart';
+import '../api/neyvo_api.dart';
+import '../core/providers/pulse_dashboard_sections_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
@@ -15,8 +16,6 @@ import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
-import '../features/managed_profiles/managed_profile_api_service.dart';
-import '../features/setup/setup_api_service.dart';
 
 class PulseDashboardPage extends ConsumerStatefulWidget {
   const PulseDashboardPage({super.key});
@@ -28,10 +27,9 @@ class PulseDashboardPage extends ConsumerStatefulWidget {
 class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   bool _loading = true;
   String? _error;
-
-  // When true, only the Voice OS KPIs / analytics section is refreshing.
-  // This avoids showing a full-page loader when the date filter changes.
-  bool _kpiLoading = false;
+  String? _importantError;
+  String? _heavyError;
+  int _loadVersion = 0;
 
   // When true, only the \"University of Bridgeport Voice OS\" hero metrics
   // (top-left summary card) are refreshing in response to the duration filter.
@@ -181,8 +179,12 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     setState(() {
       _applyPresetWithoutReload('custom', customRange: range);
     });
-    // Refresh only the UB hero metrics for the new custom range
-    // without reloading the rest of the dashboard.
+    final sectionRange = PulseDashboardRange(
+      from: _currentIsoRange()['from'],
+      to: _currentIsoRange()['to'],
+    );
+    _loadImportantSection(sectionRange, version: _loadVersion);
+    _loadLiveCallStats();
     await _loadUbHeroSection();
   }
 
@@ -252,91 +254,36 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   }
 
   Future<void> _load() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
+    final version = ++_loadVersion;
+    final range = PulseDashboardRange(
+      from: _currentIsoRange()['from'],
+      to: _currentIsoRange()['to'],
+    );
     setState(() {
       _loading = true;
       _error = null;
+      _importantError = null;
+      _heavyError = null;
     });
+
     try {
-      final results = await Future.wait([
-        SetupStatusApiService.getStatus(), // 0
-        ManagedProfileApiService.listProfiles(), // 1
-        NeyvoPulseApi.listNumbers(), // 2
-        NeyvoPulseApi.listCalls(from: from, to: to), // 3
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 4
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 5
-        ref.read(accountInfoProvider.future), // 6
-        NeyvoPulseApi.getUbStatus(), // 7
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 8
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 9
-      ]);
-
-      final setup = results[0] as Map<String, dynamic>;
-      final profiles = results[1] as Map<String, dynamic>;
-      final numbersRes = results[2] as Map<String, dynamic>;
-      final callsRes = results[3] as Map<String, dynamic>;
-      final perf = results[4] as Map<String, dynamic>;
-      final perfPrev = results[5] as Map<String, dynamic>;
-      final account = results[6] as Map<String, dynamic>;
-      final ubRes = results[7] as Map<String, dynamic>;
-      final successSummary = results[8] as Map<String, dynamic>;
-      final successSummaryPrev = results[9] as Map<String, dynamic>;
-      final campaignsRes = await NeyvoPulseApi.listCampaigns();
-
-      final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
-      final numbers = (numbersRes['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final profList = (profiles['profiles'] as List?)?.cast<dynamic>() ?? const [];
-      final ubStatus = (ubRes['status'] as String?)?.toLowerCase() ?? 'missing';
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final campaigns =
-          (campaignsRes['campaigns'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
-      final businessConfigured =
-          (business['status'] as String? ?? '').toLowerCase() == 'ready';
-
-      final numberLive = numbers.isNotEmpty ||
-          ((account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim().isNotEmpty == true);
-
-      final attached = profList.any((p) {
-        final m = Map<String, dynamic>.from(p as Map);
-        return (m['attached_phone_number_id']?.toString().trim().isNotEmpty == true) ||
-            (m['attached_vapi_phone_number_id']?.toString().trim().isNotEmpty == true);
-      });
-
-      final trainingNumber = (account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim();
-
-      if (!mounted) return;
+      final critical = await ref.read(pulseDashboardCriticalProvider(range).future);
+      if (!mounted || version != _loadVersion) return;
       setState(() {
-        _businessConfigured = businessConfigured;
-        _agentAttached = attached;
-        _numberLive = numberLive;
-        _firstCallCompleted = firstCallCompleted;
-        _ubStatus = ubStatus;
-        _operatorCount = profList.length;
-        _trainingNumber = trainingNumber != null && trainingNumber.isNotEmpty ? trainingNumber : null;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _ubModel = ubRes is Map ? Map<String, dynamic>.from(ubRes as Map) : null;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
-        _recentCampaigns = campaigns.take(8).cast<Map<String, dynamic>>().toList();
+        _businessConfigured = critical.businessConfigured;
+        _agentAttached = critical.operatorCount > 0;
+        _numberLive = critical.numberLive;
+        _firstCallCompleted = critical.firstCallCompleted;
+        _ubStatus = critical.ubStatus;
+        _operatorCount = critical.operatorCount;
+        _trainingNumber = critical.trainingNumber;
+        _perf = critical.kpi;
         _loading = false;
       });
+      unawaited(_loadImportantSection(range, version: version));
+      unawaited(_loadHeavySection(range, version: version));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -357,7 +304,12 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     });
 
     try {
-      final res = await NeyvoPulseApi.listCalls(from: from, to: to);
+      final res = await NeyvoPulseApi.listCalls(
+        from: from,
+        to: to,
+        limit: 80,
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+      );
       final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       if (!mounted) return;
       _updateLiveCallStatsFromCalls(calls);
@@ -452,56 +404,29 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   /// Reload only the date-scoped Voice OS analytics (KPIs, charts, recent calls, success summary)
   /// without triggering the full-page loading spinner.
   Future<void> _loadKpiSection() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-
     setState(() {
-      _kpiLoading = true;
-      _error = null;
+      _heavyError = null;
     });
 
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.listCalls(from: from, to: to), // 0
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
-      ]);
-
-      final callsRes = results[0] as Map<String, dynamic>;
-      final perf = results[1] as Map<String, dynamic>;
-      final perfPrev = results[2] as Map<String, dynamic>;
-      final successSummary = results[3] as Map<String, dynamic>;
-      final successSummaryPrev = results[4] as Map<String, dynamic>;
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
+      final sectionRange = PulseDashboardRange(
+        from: _currentIsoRange()['from'],
+        to: _currentIsoRange()['to'],
+      );
+      ref.invalidate(pulseDashboardHeavyProvider(sectionRange));
+      final heavy = await ref.read(pulseDashboardHeavyProvider(sectionRange).future);
       if (!mounted) return;
       setState(() {
-        _firstCallCompleted = firstCallCompleted;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
-        _kpiLoading = false;
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _kpiLoading = false;
+        _heavyError = e.toString();
       });
     }
   }
@@ -510,56 +435,70 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   /// This is used by the duration filter so that changing the time range
   /// does not refresh the entire dashboard, only the top summary card.
   Future<void> _loadUbHeroSection() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-
     setState(() {
       _ubHeroLoading = true;
-      _error = null;
+      _heavyError = null;
     });
 
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.listCalls(from: from, to: to), // 0
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
-      ]);
-
-      final callsRes = results[0] as Map<String, dynamic>;
-      final perf = results[1] as Map<String, dynamic>;
-      final perfPrev = results[2] as Map<String, dynamic>;
-      final successSummary = results[3] as Map<String, dynamic>;
-      final successSummaryPrev = results[4] as Map<String, dynamic>;
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
+      final sectionRange = PulseDashboardRange(
+        from: _currentIsoRange()['from'],
+        to: _currentIsoRange()['to'],
+      );
+      ref.invalidate(pulseDashboardHeavyProvider(sectionRange));
+      final heavy = await ref.read(pulseDashboardHeavyProvider(sectionRange).future);
       if (!mounted) return;
       setState(() {
-        _firstCallCompleted = firstCallCompleted;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
         _ubHeroLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _heavyError = e.toString();
         _ubHeroLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadImportantSection(PulseDashboardRange range, {required int version}) async {
+    try {
+      final important = await ref.read(pulseDashboardImportantProvider(range).future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _recentCalls = important.recentCalls;
+        _recentCampaigns = important.recentCampaigns;
+        _importantError = null;
+      });
+      _updateLiveCallStatsFromCalls(_recentCalls);
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _importantError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _loadHeavySection(PulseDashboardRange range, {required int version}) async {
+    try {
+      final heavy = await ref.read(pulseDashboardHeavyProvider(range).future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
+        _heavyError = null;
+      });
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _heavyError = e.toString();
       });
     }
   }
@@ -698,6 +637,10 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (_importantError != null || _heavyError != null) ...[
+                          _buildSectionStatusBanner(),
+                          const SizedBox(height: 12),
+                        ],
                         _buildHeroSection(context, orbState, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
@@ -712,6 +655,68 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionStatusBanner() {
+    final items = <Widget>[];
+    if (_importantError != null) {
+      items.add(
+        Row(
+          children: [
+            const Icon(Icons.info_outline, size: 16, color: NeyvoColors.warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Recent activity is delayed. You can keep working while it refreshes.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final range = PulseDashboardRange(
+                  from: _currentIsoRange()['from'],
+                  to: _currentIsoRange()['to'],
+                );
+                _loadImportantSection(range, version: _loadVersion);
+              },
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_heavyError != null) {
+      items.add(
+        Row(
+          children: [
+            const Icon(Icons.analytics_outlined, size: 16, color: NeyvoColors.warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Advanced analytics are still loading. Core dashboard remains available.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+              ),
+            ),
+            TextButton(
+              onPressed: _loadKpiSection,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _SimpleCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            items[i],
+          ],
+        ],
       ),
     );
   }
@@ -743,7 +748,13 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
           setState(() {
             _applyPresetWithoutReload(preset);
           });
+          final range = PulseDashboardRange(
+            from: _currentIsoRange()['from'],
+            to: _currentIsoRange()['to'],
+          );
+          _loadImportantSection(range, version: _loadVersion);
           _loadUbHeroSection();
+          _loadLiveCallStats();
         },
         onCustomTap: () async {
           await _pickCustomRange();

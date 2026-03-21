@@ -95,6 +95,13 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   int? _walletCredits;
   int? _creditsPerMinute;
   bool _useTemplate = false;
+  // Campaign diagnostics (one-click troubleshooting panel).
+  String? _diagEndpoint;
+  int? _diagStatusCode;
+  String? _diagBackendCode;
+  String? _diagBackendMessage;
+  DateTime? _diagLastStartSuccessAt;
+  DateTime? _diagLastStartFailedAt;
   // Audience selection via CSV upload (Search by excel and selection).
   String _audienceCsvText = '';
   Set<String> _audienceCsvMatchedStudentIds = {};
@@ -226,12 +233,76 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         _creditsPerMinute = creditsPerMinute ?? 25;
         _loading = false;
       });
+    } on ApiException catch (e) {
+      String msg = e.message;
+      final uri = e.uri?.toString() ?? '';
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns',
+        statusCode: e.statusCode,
+        backendCode: _extractBackendCode(e.payload),
+        backendMessage: _extractBackendMessage(e.payload, fallback: e.message),
+        success: false,
+      );
+      if ((e.statusCode == 404 || e.statusCode == 405) &&
+          uri.contains('/api/pulse/campaigns')) {
+        msg =
+            'Campaign API is not available on the current backend (${e.statusCode}). '
+            'You are likely connected to a write-only/partial service. '
+            'Point API_BASE_URL to the full Neyvo backend that exposes GET /api/pulse/campaigns.';
+      }
+      if (mounted) {
+        setState(() {
+          _error = msg;
+          _loading = false;
+        });
+      }
     } catch (e) {
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns',
+        backendMessage: e.toString(),
+        success: false,
+      );
       if (mounted) setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
+  }
+
+  String? _extractBackendCode(dynamic payload) {
+    if (payload is Map) {
+      return (payload['code'] ?? payload['error_code'] ?? payload['error'])?.toString();
+    }
+    return null;
+  }
+
+  String? _extractBackendMessage(dynamic payload, {String? fallback}) {
+    if (payload is Map) {
+      final value = (payload['message'] ?? payload['detail'] ?? payload['error'])?.toString();
+      if (value != null && value.trim().isNotEmpty) return value;
+    }
+    return fallback;
+  }
+
+  void _recordCampaignDiagnostic({
+    required String endpoint,
+    int? statusCode,
+    String? backendCode,
+    String? backendMessage,
+    required bool success,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _diagEndpoint = endpoint;
+      _diagStatusCode = statusCode;
+      _diagBackendCode = backendCode;
+      _diagBackendMessage = backendMessage;
+      if (success) {
+        _diagLastStartSuccessAt = DateTime.now();
+      } else {
+        _diagLastStartFailedAt = DateTime.now();
+      }
+    });
   }
 
   Future<void> _loadPreviewAudience() async {
@@ -398,8 +469,15 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       final res = await NeyvoPulseApi.listCallTemplates();
       final list = res['templates'] as List? ?? [];
       return list.cast<Map<String, dynamic>>();
-    } catch (_) {
-      return [];
+    } on ApiException catch (e) {
+      throw ApiException(
+        'Failed to load campaigns: ${e.message}',
+        statusCode: e.statusCode,
+        uri: e.uri,
+        payload: e.payload,
+      );
+    } catch (e) {
+      throw ApiException('Failed to load campaigns: $e');
     }
   }
 
@@ -867,8 +945,75 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
   bool _ensureHasPhoneNumber() {
     if (_hasPhoneNumber) return true;
-    // Alert removed: no snackbar for missing phone number.
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Campaign cannot start because no outbound phone number is configured. Add one in Phone Numbers.',
+          ),
+          backgroundColor: NeyvoTheme.error,
+          duration: Duration(seconds: 6),
+        ),
+      );
+    }
     return false;
+  }
+
+  String _formatDiagTs(DateTime? value) {
+    if (value == null) return '—';
+    return UserTimezoneService.format(value.toIso8601String());
+  }
+
+  Widget _buildCampaignDiagnosticsPanel() {
+    final hasData = _diagEndpoint != null ||
+        _diagStatusCode != null ||
+        (_diagBackendCode?.isNotEmpty ?? false) ||
+        (_diagBackendMessage?.isNotEmpty ?? false) ||
+        _diagLastStartSuccessAt != null ||
+        _diagLastStartFailedAt != null;
+    return Card(
+      color: NeyvoTheme.bgCard,
+      child: Padding(
+        padding: const EdgeInsets.all(NeyvoSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.monitor_heart_outlined, size: 18),
+                const SizedBox(width: NeyvoSpacing.sm),
+                Text('Campaign diagnostics', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+              ],
+            ),
+            const SizedBox(height: NeyvoSpacing.sm),
+            if (!hasData)
+              Text(
+                'No campaign start diagnostics yet. Start a campaign to capture endpoint/status details.',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              )
+            else ...[
+              SelectableText(
+                'Endpoint: ${_diagEndpoint ?? '—'}',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text('Status code: ${_diagStatusCode?.toString() ?? '—'}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+              const SizedBox(height: 4),
+              Text('Backend code: ${_diagBackendCode ?? '—'}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
+              const SizedBox(height: 4),
+              SelectableText(
+                'Backend message: ${_diagBackendMessage ?? '—'}',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              ),
+              const SizedBox(height: NeyvoSpacing.sm),
+              Text('Last start success: ${_formatDiagTs(_diagLastStartSuccessAt)}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.success)),
+              const SizedBox(height: 4),
+              Text('Last start failure: ${_formatDiagTs(_diagLastStartFailedAt)}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   bool get _hasCreditsToRun => (_walletCredits ?? 0) >= (_creditsPerMinute ?? 25);
@@ -953,12 +1098,35 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       if (!ready || !mounted) return;
     }
     try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Starting campaign...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      final endpoint = '/api/pulse/campaigns/$id/start';
       final res = await NeyvoPulseApi.startCampaign(id, phoneNumberId: _selectedStartPhoneNumberId);
+      _recordCampaignDiagnostic(
+        endpoint: endpoint,
+        statusCode: 200,
+        backendCode: (res['code'] ?? res['error_code'])?.toString(),
+        backendMessage: (res['message'] ?? 'Campaign started successfully').toString(),
+        success: true,
+      );
       if (mounted) {
         _showCampaignStartResult(res, isRerun: isRerun);
         _load();
       }
     } on ApiException catch (e) {
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns/$id/start',
+        statusCode: e.statusCode,
+        backendCode: _extractBackendCode(e.payload),
+        backendMessage: _extractBackendMessage(e.payload, fallback: e.message),
+        success: false,
+      );
       if (mounted) {
         final payload = e.payload;
         final campaignCode = NeyvoPulseApi.campaignErrorCodeFrom(e);
@@ -985,6 +1153,11 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         }
       }
     } catch (e) {
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns/$id/start',
+        backendMessage: e.toString(),
+        success: false,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
@@ -1182,14 +1355,34 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
     if (confirm != true || !mounted) return;
     try {
+      final endpoint = '/api/pulse/campaigns/$campaignId/start';
       final res = await NeyvoPulseApi.startCampaign(campaignId, studentIds: selected.toList(), phoneNumberId: _selectedStartPhoneNumberId);
+      _recordCampaignDiagnostic(
+        endpoint: endpoint,
+        statusCode: 200,
+        backendCode: (res['code'] ?? res['error_code'])?.toString(),
+        backendMessage: (res['message'] ?? 'Campaign subset started successfully').toString(),
+        success: true,
+      );
       if (mounted) {
         _showCampaignStartResult(res, isRerun: false);
         setState(() => _campaignDetailRefreshKey++);
       }
     } on ApiException catch (e) {
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns/$campaignId/start',
+        statusCode: e.statusCode,
+        backendCode: _extractBackendCode(e.payload),
+        backendMessage: _extractBackendMessage(e.payload, fallback: e.message),
+        success: false,
+      );
       if (mounted) _showInsufficientCreditsSnackBar(e);
     } catch (e) {
+      _recordCampaignDiagnostic(
+        endpoint: '/api/pulse/campaigns/$campaignId/start',
+        backendMessage: e.toString(),
+        success: false,
+      );
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
     }
   }
@@ -1334,7 +1527,17 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           backgroundColor: NeyvoTheme.bgSurface,
           foregroundColor: NeyvoTheme.textPrimary,
         ),
-        body: buildNeyvoErrorState(onRetry: _load),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(NeyvoSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildCampaignDiagnosticsPanel(),
+              const SizedBox(height: NeyvoSpacing.lg),
+              buildNeyvoErrorState(onRetry: _load),
+            ],
+          ),
+        ),
       );
     }
 
@@ -1378,6 +1581,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
               Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
               const SizedBox(height: NeyvoSpacing.md),
             ],
+            _buildCampaignDiagnosticsPanel(),
+            const SizedBox(height: NeyvoSpacing.lg),
             Text('Campaigns', style: NeyvoType.titleLarge.copyWith(color: NeyvoTheme.textPrimary)),
             const SizedBox(height: NeyvoSpacing.sm),
             Text(

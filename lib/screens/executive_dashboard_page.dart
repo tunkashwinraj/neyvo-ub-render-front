@@ -8,8 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../core/providers/account_provider.dart';
-import '../neyvo_pulse_api.dart';
+import '../core/providers/executive_launch_sections_provider.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
@@ -26,15 +25,16 @@ class ExecutiveDashboardPage extends ConsumerStatefulWidget {
 
 class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage> with SingleTickerProviderStateMixin {
   int _selectedTabIndex = 0;
-  _DateRange _dateRange = _DateRange.thisWeek;
+  final _DateRange _dateRange = _DateRange.thisWeek;
   DateTime? _customFrom;
   DateTime? _customTo;
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
+  String? _deferredError;
+  int _loadVersion = 0;
 
   List<Map<String, dynamic>> _calls = [];
-  List<Map<String, dynamic>> _priorCalls = [];
   List<Map<String, dynamic>> _recentCalls = [];
 
   String? _runningCampaignId;
@@ -42,10 +42,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   Map<String, dynamic>? _campaignMetrics;
 
   Map<String, dynamic>? _successSummary;
-  Map<String, dynamic>? _health;
-  Map<String, dynamic>? _ubStatus;
-  Map<String, dynamic>? _accountInfo;
-  int _activeOperatorsCount = 0;
 
   Timer? _refreshTimer;
   late AnimationController _pulseController;
@@ -145,119 +141,68 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
+      _deferredError = null;
     });
-    await _fetchAll();
+    await _fetchCritical(version: version);
     if (mounted) setState(() => _loading = false);
+    unawaited(_fetchDeferred(version: version));
   }
 
   Future<void> _refresh() async {
     if (_loading || _selectedTabIndex != 0) return;
     if (!mounted) return;
     setState(() => _refreshing = true);
-    await _fetchAll();
+    ref.invalidate(executiveCriticalProvider(_rangeModel()));
+    ref.invalidate(executiveDeferredProvider(_rangeModel()));
+    await _fetchCritical(version: _loadVersion);
+    unawaited(_fetchDeferred(version: _loadVersion));
     if (mounted) setState(() => _refreshing = false);
   }
 
-  Future<void> _fetchAll() async {
-    final from = _fromIso;
-    final to = _toIso;
+  ExecutiveRange _rangeModel() {
     final prior = _priorRange();
+    return ExecutiveRange(
+      from: _fromIso,
+      to: _toIso,
+      priorFrom: prior.from,
+      priorTo: prior.to,
+    );
+  }
+
+  Future<void> _fetchCritical({required int version}) async {
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getAnalyticsComms(from: from, to: to),
-        NeyvoPulseApi.listCalls(from: from, to: to, limit: 500),
-        NeyvoPulseApi.listCalls(from: prior.from, to: prior.to, limit: 500),
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to),
-        NeyvoPulseApi.listCalls(limit: 5),
-        _loadCampaignData(),
-        NeyvoPulseApi.health(),
-        NeyvoPulseApi.getUbStatus(),
-        ref.read(accountInfoProvider.future),
-        _loadOperatorsCount(),
-      ]);
-      if (!mounted) return;
-      final callsRes = results[1] as Map<String, dynamic>;
-      final priorRes = results[2] as Map<String, dynamic>;
-      final successRes = results[3] as Map<String, dynamic>;
-      final recentRes = results[4] as Map<String, dynamic>;
-      // ignore: unnecessary_cast - record type from Future.wait
-      final campaignData = results[5] as ({String? id, List<Map<String, dynamic>> items, Map<String, dynamic>? metrics});
-      final health = results[6] as Map<String, dynamic>?;
-      final ubStatus = results[7] as Map<String, dynamic>?;
-      final accountInfo = results[8] as Map<String, dynamic>?;
-      final operatorsCount = results[9] as int;
-
-      final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final priorCalls = (priorRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final recent = (recentRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-
+      final critical = await ref.read(executiveCriticalProvider(_rangeModel()).future);
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = null;
-        _calls = calls;
-        _priorCalls = priorCalls;
-        _recentCalls = recent;
-        _successSummary = successRes != null && successRes['ok'] == true ? Map<String, dynamic>.from(successRes) : null;
-        _health = health != null ? Map<String, dynamic>.from(health) : null;
-        _ubStatus = ubStatus != null ? Map<String, dynamic>.from(ubStatus) : null;
-        _accountInfo = accountInfo != null ? Map<String, dynamic>.from(accountInfo) : null;
-        _runningCampaignId = campaignData.id;
-        _campaignItems = campaignData.items;
-        _campaignMetrics = campaignData.metrics;
-        _activeOperatorsCount = operatorsCount;
+        _calls = critical.calls;
+        _recentCalls = critical.recentCalls;
+        _successSummary = critical.successSummary;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted && version == _loadVersion) setState(() => _error = e.toString());
     }
   }
 
-  Future<({String? id, List<Map<String, dynamic>> items, Map<String, dynamic>? metrics})> _loadCampaignData() async {
+  Future<void> _fetchDeferred({required int version}) async {
     try {
-      final res = await NeyvoPulseApi.listCampaigns();
-      final campaigns = (res['campaigns'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final running = campaigns.cast<Map<String, dynamic>?>().where((c) {
-        final s = (c!['status'] as String?)?.toLowerCase() ?? '';
-        return s == 'running' || s == 'active';
-      }).toList();
-      if (running.isEmpty) return (id: null, items: <Map<String, dynamic>>[], metrics: null);
-      final c = running.first as Map<String, dynamic>;
-      final id = c['id'] as String?;
-      if (id == null) return (id: null, items: <Map<String, dynamic>>[], metrics: null);
-      final itemsRes = await NeyvoPulseApi.getCampaignCallItems(id, limit: 500);
-      final metricsRes = await NeyvoPulseApi.getCampaignMetrics(id);
-      final items = (itemsRes['items'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final metrics = metricsRes['metrics'] as Map<String, dynamic>?;
-      return (id: id, items: items, metrics: metrics != null ? Map<String, dynamic>.from(metrics) : null);
-    } catch (_) {
-      return (id: null, items: <Map<String, dynamic>>[], metrics: null);
+      final deferred = await ref.read(executiveDeferredProvider(_rangeModel()).future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _runningCampaignId = deferred.runningCampaignId;
+        _campaignItems = deferred.campaignItems;
+        _campaignMetrics = deferred.campaignMetrics;
+        _deferredError = null;
+      });
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() => _deferredError = e.toString());
     }
-  }
-
-  Future<int> _loadOperatorsCount() async {
-    try {
-      final res = await NeyvoPulseApi.listAgents();
-      final list = (res['agents'] as List?) ?? [];
-      int n = 0;
-      for (final a in list) {
-        final m = a is Map ? Map<String, dynamic>.from(a as Map) : null;
-        if (m != null && ((m['status'] as String?) ?? '').toLowerCase() == 'active') n++;
-      }
-      return n;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  void _applyCustomRange(DateTime from, DateTime to) {
-    setState(() {
-      _customFrom = from;
-      _customTo = to;
-      _dateRange = _DateRange.custom;
-      _load();
-    });
   }
 
   @override
@@ -337,71 +282,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     );
   }
 
-  static const double _kFilterBarHeight = 52;
-
   /// Fixed height for all three KPI cards (Live Call Activity, Call Resolution, CSAT)
   /// so they stay aligned and same size; content scrolls inside if needed.
   static const double _kTopPanelHeight = 340;
-
-  Widget _buildDateFilterBar() {
-    final labels = {
-      _DateRange.today: 'Today',
-      _DateRange.yesterday: 'Yesterday',
-      _DateRange.thisWeek: 'This Week',
-      _DateRange.thisMonth: 'This Month',
-      _DateRange.thisYear: 'This Year',
-      _DateRange.custom: 'Custom',
-    };
-    return Container(
-      height: _kFilterBarHeight,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: NeyvoColors.bgRaised,
-        border: Border(bottom: BorderSide(color: NeyvoTheme.borderSubtle)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final e in _DateRange.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: TextButton(
-                        onPressed: e == _DateRange.custom
-                            ? () async {
-                                final from = _customFrom ?? DateTime.now();
-                                final to = _customTo ?? DateTime.now();
-                                final picked = await showDialog<({DateTime from, DateTime to})>(
-                                  context: context,
-                                  builder: (ctx) => _CustomDateRangeDialog(initialFrom: from, initialTo: to),
-                                );
-                                if (picked != null && mounted) _applyCustomRange(picked.from, picked.to);
-                              }
-                            : () => setState(() {
-                                  _dateRange = e;
-                                  _load();
-                                }),
-                        style: TextButton.styleFrom(
-                          foregroundColor: _dateRange == e ? NeyvoColors.ubLightBlue : NeyvoTheme.textSecondary,
-                        ),
-                        child: Text(labels[e]!),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          if (_refreshing)
-            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(width: 12),
-          _LiveBadge(pulse: _pulseController),
-        ],
-      ),
-    );
-  }
 
   Widget _buildTopPanel({
     required Widget child,
@@ -463,6 +346,21 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_deferredError != null) ...[
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: NeyvoTheme.borderSubtle),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.info_outline, color: NeyvoColors.warning),
+              title: const Text('Some advanced metrics are delayed. Core dashboard remains available.'),
+              trailing: TextButton(onPressed: () => _fetchDeferred(version: _loadVersion), child: const Text('Retry')),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         // Two rows, two columns: [Quick Actions | Live Call Activity], [Call Resolution | CSAT]
         LayoutBuilder(
           builder: (context, constraints) {
@@ -527,50 +425,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     );
   }
 
-  ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) _computeKpis(List<Map<String, dynamic>> calls) {
-    int total = calls.length;
-    final answeredList = calls.where((c) {
-      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
-      return o == 'answered' || o == 'completed' || o == 'goal_achieved' || o == 'success';
-    }).toList();
-    int answered = answeredList.length;
-    int abandoned = calls.where((c) {
-      final o = ((c['outcome'] ?? c['status']) as String?)?.toLowerCase() ?? '';
-      return o == 'dropped' || o == 'no_answer';
-    }).length;
-
-    int? asaSec;
-    int? ahtSec;
-    int asaSum = 0;
-    int ahtSum = 0;
-    int asaCount = 0;
-    for (final c in answeredList) {
-      final start = _parseDate(c['created_at'] ?? c['start_time'] ?? c['date']);
-      final answer = _parseDate(c['answered_at'] ?? c['answer_time']);
-      if (start != null && answer != null) {
-        asaSum += answer.difference(start).inSeconds;
-        asaCount++;
-      }
-      final dur = c['duration_seconds'] ?? c['duration_sec'];
-      if (dur != null) {
-        final s = dur is int ? dur : int.tryParse(dur.toString());
-        if (s != null) ahtSum += s;
-      }
-    }
-    if (asaCount > 0) asaSec = (asaSum / asaCount).round();
-    if (answeredList.isNotEmpty && ahtSum > 0) ahtSec = (ahtSum / answeredList.length).round();
-
-    return (total: total, answered: answered, abandoned: abandoned, asaSec: asaSec, ahtSec: ahtSec);
-  }
-
-  DateTime? _parseDate(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    if (v is String) return DateTime.tryParse(v);
-    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
-    return null;
-  }
-
   static String _formatDuration(dynamic call) {
     final sec = call['duration_seconds'] ?? call['duration_sec'];
     if (sec != null) {
@@ -584,105 +438,12 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     return d?.isNotEmpty == true ? d! : '—';
   }
 
-  Widget _buildKpiRow({
-    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) kpi,
-    required ({int total, int answered, int abandoned, int? asaSec, int? ahtSec}) priorKpi,
-  }) {
-    final total = kpi.total;
-    final answerRate = total > 0 ? (kpi.answered / total * 100) : 0.0;
-    final abandonRate = total > 0 ? (kpi.abandoned / total * 100) : 0.0;
-
-    String trendTotal = '';
-    if (priorKpi.total > 0) {
-      final d = kpi.total - priorKpi.total;
-      trendTotal = d >= 0 ? '+$d' : '$d';
-    }
-    String trendAnswered = '';
-    if (priorKpi.total > 0) {
-      final pctNow = total > 0 ? (kpi.answered / total * 100) : 0.0;
-      final pctPrev = priorKpi.answered / priorKpi.total * 100;
-      final d = pctNow - pctPrev;
-      trendAnswered = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
-    }
-    String trendAbandon = '';
-    if (priorKpi.total > 0 && total > 0) {
-      final pctNow = kpi.abandoned / total * 100;
-      final pctPrev = priorKpi.abandoned / priorKpi.total * 100;
-      final d = pctNow - pctPrev;
-      trendAbandon = d >= 0 ? '+${d.toStringAsFixed(1)}%' : '${d.toStringAsFixed(1)}%';
-    }
-    String trendAsa = '';
-    if (kpi.asaSec != null && priorKpi.asaSec != null) {
-      final d = kpi.asaSec! - priorKpi.asaSec!;
-      trendAsa = d >= 0 ? '+${d}s' : '${d}s';
-    }
-    String trendAht = '';
-    if (kpi.ahtSec != null && priorKpi.ahtSec != null) {
-      final d = kpi.ahtSec! - priorKpi.ahtSec!;
-      trendAht = d >= 0 ? '+${d}s' : '${d}s';
-    }
-
-    final cards = [
-      _KpiCard(
-        title: 'TOTAL CALLS',
-        value: total > 0 ? NumberFormat('#,###').format(total) : '--',
-        trend: trendTotal,
-        topBorderColor: Colors.blue,
-        icon: Icons.phone_outlined,
-        iconColor: Colors.blue,
-      ),
-      _KpiCard(
-        title: 'CALLS ANSWERED',
-        value: total > 0 ? NumberFormat('#,###').format(kpi.answered) : '--',
-        subtitle: total > 0 ? '${answerRate.toStringAsFixed(1)}%' : null,
-        trend: trendAnswered,
-        topBorderColor: Colors.green,
-        icon: Icons.check_circle_outline,
-        iconColor: Colors.green,
-      ),
-      _KpiCard(
-        title: 'ABANDON CALLS',
-        value: total > 0 ? NumberFormat('#,###').format(kpi.abandoned) : '--',
-        subtitle: total > 0 ? '${abandonRate.toStringAsFixed(1)}%' : null,
-        trend: trendAbandon,
-        topBorderColor: Colors.red,
-        icon: Icons.phone_disabled_outlined,
-        iconColor: Colors.red,
-      ),
-      _KpiCard(
-        title: 'ASA (Sec)',
-        value: kpi.asaSec != null ? '${kpi.asaSec}' : '--',
-        trend: trendAsa,
-        topBorderColor: Colors.orange,
-        icon: Icons.timer_outlined,
-        iconColor: Colors.orange,
-        tooltip: 'Average Speed of Answer',
-      ),
-      _KpiCard(
-        title: 'AHT (Sec)',
-        value: kpi.ahtSec != null ? '${kpi.ahtSec}' : '--',
-        trend: trendAht,
-        topBorderColor: Colors.purple,
-        icon: Icons.headset_outlined,
-        iconColor: Colors.purple,
-        tooltip: 'Average Handle Time',
-      ),
-    ];
-    return IntrinsicHeight(
-      child: Row(
-        children: [
-          Expanded(child: cards[0]),
-          const SizedBox(width: 12),
-          Expanded(child: cards[1]),
-          const SizedBox(width: 12),
-          Expanded(child: cards[2]),
-          const SizedBox(width: 12),
-          Expanded(child: cards[3]),
-          const SizedBox(width: 12),
-          Expanded(child: cards[4]),
-        ],
-      ),
-    );
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    return null;
   }
 
   Widget _buildLiveCallActivityPanel() {
@@ -1083,36 +844,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 }
 
-class _StickyFilterBarDelegate extends SliverPersistentHeaderDelegate {
-  final double barHeight;
-  final Widget child;
-  final Color backgroundColor;
-
-  _StickyFilterBarDelegate({
-    required this.barHeight,
-    required this.child,
-    required this.backgroundColor,
-  });
-
-  @override
-  double get minExtent => barHeight;
-
-  @override
-  double get maxExtent => barHeight;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: backgroundColor,
-      child: child,
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _StickyFilterBarDelegate oldDelegate) =>
-      oldDelegate.barHeight != barHeight;
-}
-
 class _CustomDateRangeDialog extends StatefulWidget {
   final DateTime initialFrom;
   final DateTime initialTo;
@@ -1176,136 +907,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
           child: const Text('Apply'),
         ),
       ],
-    );
-  }
-}
-
-class _LiveBadge extends StatelessWidget {
-  final Animation<double> pulse;
-
-  const _LiveBadge({required this.pulse});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: pulse,
-      builder: (context, child) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: Colors.green,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.3 + pulse.value * 0.4), blurRadius: 4, spreadRadius: 1)],
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text('Live · Refreshes every 5s', style: NeyvoTextStyles.micro),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String? subtitle;
-  final String trend;
-  final Color topBorderColor;
-  final IconData icon;
-  final Color iconColor;
-  final String? tooltip;
-
-  const _KpiCard({
-    required this.title,
-    required this.value,
-    this.subtitle,
-    required this.trend,
-    required this.topBorderColor,
-    required this.icon,
-    required this.iconColor,
-    this.tooltip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip ?? title,
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: NeyvoTheme.borderSubtle),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border(top: BorderSide(color: topBorderColor, width: 3)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: NeyvoTextStyles.label.copyWith(fontSize: 10, letterSpacing: 0.5),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: iconColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                      child: Icon(icon, color: iconColor, size: 20),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        value,
-                        style: NeyvoTextStyles.title.copyWith(fontSize: 22),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                    if (trend.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          trend,
-                          style: NeyvoTextStyles.micro.copyWith(color: trend.startsWith('+') ? Colors.green : Colors.red),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(subtitle!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoTheme.textMuted), overflow: TextOverflow.ellipsis, maxLines: 1),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1643,9 +1244,9 @@ class _OutcomePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.2),
+        color: _color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _color.withOpacity(0.5)),
+        border: Border.all(color: _color.withValues(alpha: 0.5)),
       ),
       child: Text(label, style: NeyvoTextStyles.micro.copyWith(color: _color)),
     );
