@@ -5,12 +5,18 @@ class SendgridConfig {
   final bool connected;
   final String? fromEmail;
   final String? updatedAt;
+  /// True when using server env defaults (no per-tenant Firestore key).
+  final bool platformManaged;
+  /// Backend hint: tenant | platform | none
+  final String? source;
 
   const SendgridConfig({
     required this.enabled,
     required this.connected,
     this.fromEmail,
     this.updatedAt,
+    this.platformManaged = true,
+    this.source,
   });
 
   factory SendgridConfig.fromJson(Map<String, dynamic> json) {
@@ -19,6 +25,8 @@ class SendgridConfig {
       connected: json['connected'] == true,
       fromEmail: json['from_email']?.toString(),
       updatedAt: json['updated_at']?.toString(),
+      platformManaged: json['platform_managed'] != false,
+      source: json['source']?.toString(),
     );
   }
 }

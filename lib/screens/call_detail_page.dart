@@ -3,80 +3,23 @@
 // (businesses/{accountId}/calls). Server strips Vapi rounds/messages/history when sanitized.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../neyvo_pulse_api.dart';
+
+import '../core/providers/call_detail_provider.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 
-class CallDetailPage extends StatefulWidget {
+class CallDetailPage extends ConsumerStatefulWidget {
   final Map<String, dynamic> call;
 
   const CallDetailPage({super.key, required this.call});
 
   @override
-  State<CallDetailPage> createState() => _CallDetailPageState();
+  ConsumerState<CallDetailPage> createState() => _CallDetailPageState();
 }
 
-class _CallDetailPageState extends State<CallDetailPage> {
-  late Map<String, dynamic> _merged;
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _merged = Map<String, dynamic>.from(widget.call);
-    _loadRich();
-  }
-
-  static String _safeStr(dynamic v) => (v ?? '').toString().trim();
-
-  String _resolveVapiCallId(Map<String, dynamic> c) {
-    final v = _safeStr(c['vapi_call_id']);
-    if (v.isNotEmpty) return v;
-    final v2 = _safeStr(c['vapiCallId']);
-    if (v2.isNotEmpty) return v2;
-    // In unified schema, doc id is often the vapi_call_id.
-    final id = _safeStr(c['id']);
-    if (id.isNotEmpty) return id;
-    final cid = _safeStr(c['call_id']);
-    if (cid.isNotEmpty) return cid;
-    return '';
-  }
-
-  Future<void> _loadRich() async {
-    final vapiId = _resolveVapiCallId(_merged);
-    if (vapiId.isEmpty) {
-      setState(() => _loading = false);
-      return;
-    }
-    try {
-      final res = await NeyvoPulseApi.getCallById(vapiId);
-      final ok = res['ok'] == true;
-      final call = res['call'];
-      if (ok && call is Map) {
-        final rich = Map<String, dynamic>.from(call as Map);
-        if (!mounted) return;
-        setState(() {
-          // Prefer rich fields, but keep any list-provided labels if missing.
-          _merged = {..._merged, ...rich};
-          _loading = false;
-        });
-        return;
-      }
-      if (!mounted) return;
-      setState(() {
-        _error = (res['error'] ?? 'Failed to load call details').toString();
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
+class _CallDetailPageState extends ConsumerState<CallDetailPage> {
 
   static String formatDuration(dynamic c) {
     final sec = c['duration_seconds'];
@@ -95,7 +38,24 @@ class _CallDetailPageState extends State<CallDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final merged = _merged;
+    final key = callDetailProviderKey(widget.call);
+    ref.read(callDetailUiCtrlProvider(key).notifier).ensureInitialized(widget.call);
+    final ui = ref.watch(callDetailUiCtrlProvider(key));
+    if (!ui.initialized) {
+      return Scaffold(
+        backgroundColor: NeyvoTheme.bgPrimary,
+        appBar: AppBar(
+          backgroundColor: NeyvoTheme.bgSurface,
+          title: Text('Call details', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final merged = ui.merged;
     final fromVal = (merged['from'] ?? merged['customer_phone'] ?? merged['student_phone'] ?? '').toString().trim();
     final toVal = (merged['to'] ?? '').toString().trim();
     final name = (merged['customer_name'] ?? merged['student_name'] ?? '').toString().trim();
@@ -127,7 +87,7 @@ class _CallDetailPageState extends State<CallDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(NeyvoSpacing.lg),
         children: [
-          if (_loading) ...[
+          if (ui.loading) ...[
             Row(
               children: [
                 const SizedBox(
@@ -141,8 +101,8 @@ class _CallDetailPageState extends State<CallDetailPage> {
             ),
             const SizedBox(height: NeyvoSpacing.lg),
           ],
-          if (_error != null && _error!.trim().isNotEmpty) ...[
-            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
+          if (ui.error != null && ui.error!.trim().isNotEmpty) ...[
+            Text(ui.error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
             const SizedBox(height: NeyvoSpacing.lg),
           ],
           _heroCard(

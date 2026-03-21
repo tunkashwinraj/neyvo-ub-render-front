@@ -25,6 +25,20 @@ class SmsApi {
     };
   }
 
+  /// Persist Twilio sending number for this business, or pass empty string to use platform default.
+  static Future<SmsConfig> saveTwilioFromNumber(String fromNumber) async {
+    final v = await SpeariaApi.putJson(
+      '/api/sms/integration',
+      body: {
+        ..._idBody(),
+        'from_number': fromNumber.trim(),
+      },
+    );
+    if (v is Map<String, dynamic>) return SmsConfig.fromJson(v);
+    if (v is Map) return SmsConfig.fromJson(Map<String, dynamic>.from(v));
+    throw ApiException('Unexpected SMS integration response');
+  }
+
   static Future<SmsConfig> getConfig() async {
     try {
       final m = await NeyvoApi.getJsonMap(

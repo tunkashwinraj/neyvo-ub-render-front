@@ -149,6 +149,17 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                     ),
                     const SizedBox(width: 12),
                     OutlinedButton(
+                      onPressed: status == 'live'
+                          ? () {
+                              Navigator.of(context).pushNamed(
+                                PulseRouteNames.operatorsOptimization(widget.operatorId),
+                              );
+                            }
+                          : null,
+                      child: const Text('Optimization'),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFEF4444),
                         side: const BorderSide(color: Color(0xFFEF4444)),

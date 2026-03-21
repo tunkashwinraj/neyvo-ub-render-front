@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../features/business_intelligence/bi_wizard_api_service.dart';
@@ -13,7 +14,7 @@ import '../ui/components/glass/neyvo_glass_panel.dart';
 
 enum SaveState { idleSaved, saving, failed }
 
-class BusinessSetupPage extends StatefulWidget {
+class BusinessSetupPage extends ConsumerStatefulWidget {
   const BusinessSetupPage({
     super.key,
     this.initialBi,
@@ -35,10 +36,10 @@ class BusinessSetupPage extends StatefulWidget {
   final void Function(Map<String, dynamic>)? onBiSnapshot;
 
   @override
-  State<BusinessSetupPage> createState() => _BusinessSetupPageState();
+  ConsumerState<BusinessSetupPage> createState() => _BusinessSetupPageState();
 }
 
-class _BusinessSetupPageState extends State<BusinessSetupPage> {
+class _BusinessSetupPageState extends ConsumerState<BusinessSetupPage> {
   int _step = 0; // 0: category, 1: confirm, 2: done
   bool _loading = true;
   bool _saving = false;

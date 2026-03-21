@@ -1,34 +1,24 @@
 // UB-only onboarding: 3 slides, then initialize from UB website and go to UB Model Overview.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
+import '../../../core/providers/ub_onboarding_provider.dart';
 import '../../../theme/neyvo_theme.dart';
-import 'ub_model_overview_page.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/backgrounds/neyvo_neural_background.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
-class UbOnboardingPage extends StatefulWidget {
+class UbOnboardingPage extends ConsumerStatefulWidget {
   const UbOnboardingPage({super.key});
 
   @override
-  State<UbOnboardingPage> createState() => _UbOnboardingPageState();
+  ConsumerState<UbOnboardingPage> createState() => _UbOnboardingPageState();
 }
 
-class _UbOnboardingPageState extends State<UbOnboardingPage> {
+class _UbOnboardingPageState extends ConsumerState<UbOnboardingPage> {
   final PageController _pageController = PageController();
-  int _pageIndex = 0;
-  bool _initializing = false;
-  String? _error;
   final _websiteController = TextEditingController(text: 'https://www.bridgeport.edu');
-
-  static const List<String> _initMessages = [
-    'Initializing UB Voice OS…',
-    'Analyzing bridgeport.edu…',
-    'Building University Model…',
-  ];
-  int _initStepIndex = 0;
 
   @override
   void dispose() {
@@ -37,49 +27,8 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
     super.dispose();
   }
 
-  Future<void> _initializeAndGoToOverview() async {
-    if (_initializing) return;
-    final website = _websiteController.text.trim();
-    if (website.isEmpty) {
-      setState(() => _error = 'Please enter the UB website URL.');
-      return;
-    }
-    setState(() {
-      _initializing = true;
-      _initStepIndex = 0;
-      _error = null;
-    });
-
-    for (var i = 0; i < _initMessages.length; i++) {
-      if (!mounted) return;
-      setState(() => _initStepIndex = i);
-      await Future<void>.delayed(const Duration(milliseconds: 800));
-    }
-
-    try {
-      final res = await NeyvoPulseApi.initializeUb(website: website);
-      if (!mounted) return;
-      final ok = res['ok'] == true;
-      final status = (res['status'] as String?)?.toLowerCase();
-      setState(() => _initializing = false);
-      if (ok && (status == 'ready' || status == 'building' || status == 'error')) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const UbModelOverviewPage()),
-        );
-        return;
-      }
-      setState(() => _error = res['error']?.toString() ?? 'Initialization failed.');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _initializing = false;
-        _error = e.toString();
-      });
-    }
-  }
-
   void _goTo(int index) {
-    setState(() => _pageIndex = index);
+    ref.read(ubOnboardingCtrlProvider.notifier).setPageIndex(index);
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 420),
@@ -89,6 +38,9 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(ubOnboardingCtrlProvider);
+    final msgIndex = ui.initStepIndex.clamp(0, UbOnboardingCtrl.initMessages.length - 1);
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Stack(
@@ -130,7 +82,7 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
                               Expanded(
                                 child: PageView(
                                   controller: _pageController,
-                                  onPageChanged: (i) => setState(() => _pageIndex = i),
+                                  onPageChanged: (i) => ref.read(ubOnboardingCtrlProvider.notifier).setPageIndex(i),
                                   children: [
                                     _buildSlideWelcome(),
                                     _buildSlideHowItWorks(),
@@ -142,7 +94,7 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: List.generate(3, (i) {
-                                  final selected = i == _pageIndex;
+                                  final selected = i == ui.pageIndex;
                                   return AnimatedContainer(
                                     duration: const Duration(milliseconds: 200),
                                     margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -162,34 +114,34 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   TextButton(
-                                    onPressed: _pageIndex == 0
-                                        ? null
-                                        : () => _goTo(_pageIndex - 1),
+                                    onPressed: ui.pageIndex == 0 ? null : () => _goTo(ui.pageIndex - 1),
                                     child: const Text('Back'),
                                   ),
                                   FilledButton(
-                                    onPressed: _initializing
+                                    onPressed: ui.initializing
                                         ? null
                                         : () {
-                                            if (_pageIndex < 2) {
-                                              _goTo(_pageIndex + 1);
+                                            if (ui.pageIndex < 2) {
+                                              _goTo(ui.pageIndex + 1);
                                             } else {
-                                              _initializeAndGoToOverview();
+                                              ref
+                                                  .read(ubOnboardingCtrlProvider.notifier)
+                                                  .initializeAndGoToOverview(context, _websiteController.text);
                                             }
                                           },
                                     style: FilledButton.styleFrom(
                                       backgroundColor: NeyvoColors.teal,
                                     ),
                                     child: Text(
-                                      _pageIndex < 2 ? 'Continue' : 'Initialize UB Voice OS',
+                                      ui.pageIndex < 2 ? 'Continue' : 'Initialize UB Voice OS',
                                     ),
                                   ),
                                 ],
                               ),
-                              if (_error != null) ...[
+                              if (ui.error != null) ...[
                                 const SizedBox(height: 12),
                                 Text(
-                                  _error!,
+                                  ui.error!,
                                   style: NeyvoTextStyles.body
                                       .copyWith(color: NeyvoColors.error),
                                 ),
@@ -205,7 +157,7 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
               ),
             ),
           ),
-          if (_initializing) Positioned.fill(child: _buildInitializationOverlay()),
+          if (ui.initializing) Positioned.fill(child: _buildInitializationOverlay(msgIndex)),
         ],
       ),
     );
@@ -290,7 +242,7 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
     );
   }
 
-  Widget _buildInitializationOverlay() {
+  Widget _buildInitializationOverlay(int msgIndex) {
     return Container(
       color: Colors.black.withOpacity(0.78),
       child: Center(
@@ -306,7 +258,7 @@ class _UbOnboardingPageState extends State<UbOnboardingPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                _initMessages[_initStepIndex],
+                UbOnboardingCtrl.initMessages[msgIndex],
                 style: NeyvoTextStyles.heading,
                 textAlign: TextAlign.center,
               ),

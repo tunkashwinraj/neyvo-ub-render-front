@@ -17,6 +17,7 @@ import 'features/operators/aria_operators/operators_list_screen.dart';
 import 'features/operators/aria_operators/operators_create_screen.dart';
 import 'features/operators/aria_operators/operators_building_screen.dart';
 import 'features/operators/aria_operators/operators_detail_screen.dart';
+import 'features/operators/aria_operators/operator_optimization_screen.dart';
 import 'ui/screens/internal/backup_rollback_page.dart';
 
 /// Maps legacy Pulse paths to canonical (tab-matching) route names for deep links.
@@ -170,6 +171,12 @@ class PulseRouter {
           if (parts.length >= 4 && parts[2] == 'building') {
             final operatorId = parts[3];
             return _operatorsBuildingRoute(operatorId: operatorId);
+          }
+          if (parts.length >= 4 && parts[3] == 'optimization') {
+            final operatorId = parts[2];
+            return MaterialPageRoute(
+              builder: (_) => OperatorOptimizationScreen(operatorId: operatorId),
+            );
           }
           if (parts.length >= 3 && parts[2].isNotEmpty) {
             final operatorId = parts[2];

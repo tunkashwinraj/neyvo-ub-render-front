@@ -2,21 +2,18 @@
 // Assistant training – org-wide Vector RAG knowledge (replaces legacy FAQ + policy UI).
 
 import 'package:flutter/material.dart';
-import '../neyvo_pulse_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers/training_knowledge_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../widgets/neyvo_empty_state.dart';
 
-class TrainingPage extends StatefulWidget {
+class TrainingPage extends ConsumerWidget {
   const TrainingPage({super.key});
 
   @override
-  State<TrainingPage> createState() => _TrainingPageState();
-}
-
-class _TrainingPageState extends State<TrainingPage> {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Assistant Training'),
@@ -29,42 +26,23 @@ class _TrainingPageState extends State<TrainingPage> {
   }
 }
 
-class TrainingKnowledgeSection extends StatefulWidget {
+class TrainingKnowledgeSection extends ConsumerStatefulWidget {
   const TrainingKnowledgeSection({super.key});
 
   @override
-  State<TrainingKnowledgeSection> createState() => _TrainingKnowledgeSectionState();
+  ConsumerState<TrainingKnowledgeSection> createState() => _TrainingKnowledgeSectionState();
 }
 
-class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
-  bool _loading = false;
-  bool _saving = false;
-  bool _deleting = false;
-  String _searchQuery = '';
-  List<Map<String, dynamic>> _items = const [];
-
+class _TrainingKnowledgeSectionState extends ConsumerState<TrainingKnowledgeSection> {
   @override
   void initState() {
     super.initState();
-    _loadItems();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(trainingKnowledgeCtrlProvider.notifier).loadItems();
+    });
   }
 
-  Future<void> _loadItems() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    try {
-      final res = await NeyvoPulseApi.listTrainingKnowledgeItems();
-      final raw = (res['items'] as List?) ?? const [];
-      if (!mounted) return;
-      setState(() {
-        _items = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
+  Future<void> _loadItems() => ref.read(trainingKnowledgeCtrlProvider.notifier).loadItems();
 
   Future<void> _openAddDialog() async {
     final questionCtrl = TextEditingController();
@@ -74,9 +52,12 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return AlertDialog(
+        return Consumer(
+          builder: (context, ref, _) {
+            final saving = ref.watch(trainingKnowledgeCtrlProvider).saving;
+            return StatefulBuilder(
+              builder: (context, setLocalState) {
+                return AlertDialog(
               backgroundColor: NeyvoColors.bgBase,
               title: const Text('Add Knowledge'),
               content: SizedBox(
@@ -119,11 +100,11 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
               ),
               actions: [
                 TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(ctx).pop(),
+                  onPressed: saving ? null : () => Navigator.of(ctx).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton.icon(
-                  onPressed: _saving
+                  onPressed: saving
                       ? null
                       : () async {
                           final question = questionCtrl.text.trim();
@@ -135,14 +116,14 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                             });
                             return;
                           }
-                          setState(() => _saving = true);
+                          ref.read(trainingKnowledgeCtrlProvider.notifier).setSaving(true);
                           try {
-                            await NeyvoPulseApi.addTrainingKnowledgeItem(
-                              question: question,
-                              answer: answer,
-                            );
+                            await ref.read(trainingKnowledgeCtrlProvider.notifier).addItem(
+                                  question: question,
+                                  answer: answer,
+                                );
                             if (ctx.mounted) Navigator.of(ctx).pop();
-                            await _loadItems();
+                            await ref.read(trainingKnowledgeCtrlProvider.notifier).loadItems();
                             if (!mounted || !context.mounted) return;
                             final messenger = ScaffoldMessenger.maybeOf(context);
                             messenger?.showSnackBar(
@@ -161,10 +142,10 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                               }
                             }
                           } finally {
-                            if (mounted) setState(() => _saving = false);
+                            if (mounted) ref.read(trainingKnowledgeCtrlProvider.notifier).setSaving(false);
                           }
                         },
-                  icon: _saving
+                  icon: saving
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -175,9 +156,11 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                     backgroundColor: NeyvoColors.teal,
                     foregroundColor: NeyvoColors.white,
                   ),
-                  label: Text(_saving ? 'Saving...' : 'Save'),
+                  label: Text(saving ? 'Saving...' : 'Save'),
                 ),
               ],
+            );
+              },
             );
           },
         );
@@ -194,9 +177,12 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return AlertDialog(
+        return Consumer(
+          builder: (context, ref, _) {
+            final saving = ref.watch(trainingKnowledgeCtrlProvider).saving;
+            return StatefulBuilder(
+              builder: (context, setLocalState) {
+                return AlertDialog(
               backgroundColor: NeyvoColors.bgBase,
               title: const Text('Edit Knowledge'),
               content: SizedBox(
@@ -237,11 +223,11 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
               ),
               actions: [
                 TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(ctx).pop(),
+                  onPressed: saving ? null : () => Navigator.of(ctx).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton.icon(
-                  onPressed: _saving
+                  onPressed: saving
                       ? null
                       : () async {
                           final question = questionCtrl.text.trim();
@@ -253,18 +239,14 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                             });
                             return;
                           }
-                          setState(() => _saving = true);
+                          ref.read(trainingKnowledgeCtrlProvider.notifier).setSaving(true);
                           try {
-                            // Simple update strategy: add new item, then delete old one to avoid missing vectors.
-                            await NeyvoPulseApi.addTrainingKnowledgeItem(
-                              question: question,
-                              answer: answer,
-                            );
-                            if (itemId.isNotEmpty) {
-                              await NeyvoPulseApi.deleteTrainingKnowledgeItem(itemId);
-                            }
+                            await ref.read(trainingKnowledgeCtrlProvider.notifier).replaceItem(
+                                  oldItemId: itemId,
+                                  question: question,
+                                  answer: answer,
+                                );
                             if (ctx.mounted) Navigator.of(ctx).pop();
-                            await _loadItems();
                             if (!mounted || !context.mounted) return;
                             final messenger = ScaffoldMessenger.maybeOf(context);
                             messenger?.showSnackBar(
@@ -283,10 +265,10 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                               }
                             }
                           } finally {
-                            if (mounted) setState(() => _saving = false);
+                            if (mounted) ref.read(trainingKnowledgeCtrlProvider.notifier).setSaving(false);
                           }
                         },
-                  icon: _saving
+                  icon: saving
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -297,9 +279,11 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                     backgroundColor: NeyvoColors.teal,
                     foregroundColor: NeyvoColors.white,
                   ),
-                  label: Text(_saving ? 'Saving...' : 'Save'),
+                  label: Text(saving ? 'Saving...' : 'Save'),
                 ),
               ],
+            );
+              },
             );
           },
         );
@@ -308,7 +292,8 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
   }
 
   Future<void> _deleteItem(Map<String, dynamic> item) async {
-    if (_deleting) return;
+    final ui = ref.read(trainingKnowledgeCtrlProvider);
+    if (ui.deleting) return;
     final itemId = (item['id'] ?? '').toString().trim();
     if (itemId.isEmpty) return;
 
@@ -339,13 +324,9 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
     );
     if (confirmed != true) return;
 
-    setState(() => _deleting = true);
     try {
-      await NeyvoPulseApi.deleteTrainingKnowledgeItem(itemId);
+      await ref.read(trainingKnowledgeCtrlProvider.notifier).deleteItem(itemId);
       if (!mounted) return;
-      setState(() {
-        _items = _items.where((e) => (e['id'] ?? '').toString() != itemId).toList();
-      });
       if (!context.mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
@@ -357,15 +338,13 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
       messenger?.showSnackBar(
         SnackBar(content: Text('Delete failed: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _deleting = false);
     }
   }
 
-  List<Map<String, dynamic>> get _filteredItems {
-    final q = _searchQuery.trim().toLowerCase();
-    if (q.isEmpty) return _items;
-    return _items.where((item) {
+  List<Map<String, dynamic>> _filteredItems(TrainingKnowledgeUiState ui) {
+    final q = ui.searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return ui.items;
+    return ui.items.where((item) {
       final question = (item['question'] ?? '').toString().toLowerCase();
       final answer = (item['answer'] ?? '').toString().toLowerCase();
       return question.contains(q) || answer.contains(q);
@@ -374,7 +353,8 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredItems;
+    final ui = ref.watch(trainingKnowledgeCtrlProvider);
+    final filtered = _filteredItems(ui);
 
     return NeyvoGlassPanel(
       child: Column(
@@ -397,7 +377,7 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _saving ? null : _openAddDialog,
+                onPressed: ui.saving ? null : _openAddDialog,
                 style: FilledButton.styleFrom(
                   backgroundColor: NeyvoColors.teal,
                   foregroundColor: NeyvoColors.white,
@@ -409,7 +389,7 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
           ),
           const SizedBox(height: 14),
           TextField(
-            onChanged: (v) => setState(() => _searchQuery = v),
+            onChanged: (v) => ref.read(trainingKnowledgeCtrlProvider.notifier).setSearchQuery(v),
             decoration: const InputDecoration(
               hintText: 'Search saved Q&A by keyword',
               prefixIcon: Icon(Icons.search),
@@ -419,18 +399,18 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
           Row(
             children: [
               TextButton.icon(
-                onPressed: _loading ? null : _loadItems,
+                onPressed: ui.loading ? null : _loadItems,
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Refresh'),
               ),
             ],
           ),
-          if (_loading)
+          if (ui.loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-          if (!_loading && _items.isEmpty)
+          if (!ui.loading && ui.items.isEmpty)
             SizedBox(
               width: double.infinity,
               child: buildNeyvoEmptyState(
@@ -442,7 +422,7 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                 icon: Icons.psychology_alt_outlined,
               ),
             )
-          else if (!_loading && filtered.isEmpty)
+          else if (!ui.loading && filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
@@ -502,13 +482,13 @@ class _TrainingKnowledgeSectionState extends State<TrainingKnowledgeSection> {
                       children: [
                         IconButton(
                           tooltip: 'Edit',
-                          onPressed: _saving ? null : () => _openEditDialog(item),
+                          onPressed: ui.saving ? null : () => _openEditDialog(item),
                           icon: const Icon(Icons.edit_outlined),
                           color: NeyvoColors.textSecondary,
                         ),
                         IconButton(
                           tooltip: 'Delete',
-                          onPressed: _deleting ? null : () => _deleteItem(item),
+                          onPressed: ui.deleting ? null : () => _deleteItem(item),
                           icon: const Icon(Icons.delete_outline),
                           color: NeyvoColors.error,
                         ),

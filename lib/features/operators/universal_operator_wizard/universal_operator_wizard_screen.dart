@@ -4,6 +4,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../neyvo_pulse_api.dart';
@@ -27,16 +28,16 @@ List<RefiningQuestion> buildRefiningQuestionsForGoal(String goal) {
   ];
 }
 
-class UniversalOperatorWizardScreen extends StatefulWidget {
+class UniversalOperatorWizardScreen extends ConsumerStatefulWidget {
   const UniversalOperatorWizardScreen({super.key, this.initialState});
 
   final UniversalWizardState? initialState;
 
   @override
-  State<UniversalOperatorWizardScreen> createState() => _UniversalOperatorWizardScreenState();
+  ConsumerState<UniversalOperatorWizardScreen> createState() => _UniversalOperatorWizardScreenState();
 }
 
-class _UniversalOperatorWizardScreenState extends State<UniversalOperatorWizardScreen> {
+class _UniversalOperatorWizardScreenState extends ConsumerState<UniversalOperatorWizardScreen> {
   late UniversalWizardState _state;
   int _step = 0;
   String? _error;

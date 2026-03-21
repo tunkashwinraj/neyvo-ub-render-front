@@ -1,34 +1,22 @@
 // UB Model Overview – "receipt" screen after initialization. Shows stats, departments, recommended operators; Continue → Dashboard.
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
-import '../../../screens/pulse_shell.dart';
+import '../../../core/providers/ub_model_overview_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/backgrounds/neyvo_neural_background.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
-class UbModelOverviewPage extends StatefulWidget {
+class UbModelOverviewPage extends ConsumerStatefulWidget {
   const UbModelOverviewPage({super.key});
 
   @override
-  State<UbModelOverviewPage> createState() => _UbModelOverviewPageState();
+  ConsumerState<UbModelOverviewPage> createState() => _UbModelOverviewPageState();
 }
 
-class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
-  bool _loading = true;
-  String? _error;
-  String _status = 'missing';
-  Map<String, dynamic>? _summary;
-  List<dynamic> _departments = [];
-  List<dynamic> _faqTopics = [];
-  Timer? _pollTimer;
-  String _websiteUrl = 'bridgeport.edu';
-
+class _UbModelOverviewPageState extends ConsumerState<UbModelOverviewPage> {
   static const List<String> _recommendedOperators = [
     'Admissions Operator',
     'Student Financial Services Operator',
@@ -41,98 +29,15 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(ubModelOverviewCtrlProvider.notifier).load();
     });
-    try {
-      final res = await NeyvoPulseApi.getUbStatus();
-      if (!mounted) return;
-      final ok = res['ok'] == true;
-      if (!ok) {
-        setState(() {
-          _loading = false;
-          _error = res['error']?.toString() ?? 'Failed to load status';
-        });
-        return;
-      }
-      final status = (res['status'] as String?)?.toLowerCase() ?? 'missing';
-      setState(() {
-        _status = status;
-        _summary = res['summary'] is Map ? Map<String, dynamic>.from(res['summary'] as Map) : null;
-        _departments = res['departments'] is List ? List<dynamic>.from(res['departments'] as List) : [];
-        _faqTopics = res['faqTopics'] is List ? List<dynamic>.from(res['faqTopics'] as List) : [];
-        _loading = false;
-        _error = res['error']?.toString();
-      });
-      if (status == 'building' && mounted) _startPolling();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
-    }
-  }
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      await _load();
-      if (!mounted || (_status != 'building' && _status != 'missing')) {
-        _pollTimer?.cancel();
-      }
-    });
-  }
-
-  Future<void> _completeAndGoToDashboard() async {
-    try {
-      await NeyvoPulseApi.updateAccountInfo({
-        'onboarding_completed': true,
-        'active_surface': 'comms',
-        'surfaces_enabled': ['comms'],
-      });
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('neyvo_pulse_onboarding_completed', true);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const PulseShell()),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    }
-  }
-
-  Future<void> _rerunAnalysis() async {
-    setState(() => _loading = true);
-    try {
-      await NeyvoPulseApi.initializeUb(website: 'https://www.bridgeport.edu');
-      if (!mounted) return;
-      _websiteUrl = 'bridgeport.edu';
-      await _load();
-      if (_status == 'building') _startPolling();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(ubModelOverviewCtrlProvider);
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Stack(
@@ -144,13 +49,13 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
                 constraints: const BoxConstraints(maxWidth: 960),
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: _loading && _status == 'building'
-                      ? _buildBuildingState()
-                      : _status == 'ready'
-                          ? _buildReadyState()
-                          : _status == 'error'
-                              ? _buildErrorState()
-                              : _buildBuildingState(),
+                  child: ui.loading && ui.status == 'building'
+                      ? _buildBuildingState(ui)
+                      : ui.status == 'ready'
+                          ? _buildReadyState(ui)
+                          : ui.status == 'error'
+                              ? _buildErrorState(ui)
+                              : _buildBuildingState(ui),
                 ),
               ),
             ),
@@ -160,7 +65,7 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
     );
   }
 
-  Widget _buildBuildingState() {
+  Widget _buildBuildingState(UbModelOverviewUiState ui) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -173,7 +78,7 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'We are analyzing $_websiteUrl. This may take a minute.',
+          'We are analyzing ${ui.websiteUrl}. This may take a minute.',
           style: NeyvoTextStyles.body,
           textAlign: TextAlign.center,
         ),
@@ -187,7 +92,7 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
     );
   }
 
-  Widget _buildErrorState() {
+  Widget _buildErrorState(UbModelOverviewUiState ui) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,12 +117,12 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(_error ?? 'Unknown error', style: NeyvoTextStyles.body),
+                Text(ui.error ?? 'Unknown error', style: NeyvoTextStyles.body),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     FilledButton(
-                      onPressed: _rerunAnalysis,
+                      onPressed: () => ref.read(ubModelOverviewCtrlProvider.notifier).rerunAnalysis(),
                       style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
                       child: const Text('Re-run analysis'),
                     ),
@@ -231,10 +136,10 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
     );
   }
 
-  Widget _buildReadyState() {
-    final summary = _summary ?? {};
-    final deptCount = summary['departmentsCount'] is int ? summary['departmentsCount'] as int : _departments.length;
-    final faqCount = summary['faqCount'] is int ? summary['faqCount'] as int : _faqTopics.length;
+  Widget _buildReadyState(UbModelOverviewUiState ui) {
+    final summary = ui.summary ?? {};
+    final deptCount = summary['departmentsCount'] is int ? summary['departmentsCount'] as int : ui.departments.length;
+    final faqCount = summary['faqCount'] is int ? summary['faqCount'] as int : ui.faqTopics.length;
     final contactsFound = summary['contactsFound'] is int ? summary['contactsFound'] as int : 0;
     final hoursFound = (summary['hoursFound'] as String?) ?? 'No';
 
@@ -252,7 +157,7 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
         ),
         const SizedBox(height: 6),
         Text(
-          'We analyzed $_websiteUrl and built your University Model.',
+          'We analyzed ${ui.websiteUrl} and built your University Model.',
           style: NeyvoTextStyles.body,
           textAlign: TextAlign.center,
         ),
@@ -278,8 +183,8 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
           style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.textPrimary),
         ),
         const SizedBox(height: 12),
-        ...(_departments.take(10).map((d) {
-          final m = d is Map ? Map<String, dynamic>.from(d as Map) : <String, dynamic>{};
+        ...(ui.departments.take(10).map((d) {
+          final m = d is Map ? Map<String, dynamic>.from(d) : <String, dynamic>{};
           final name = m['name']?.toString() ?? 'Department';
           final handles = m['handles']?.toString() ?? '';
           final phone = m['phone']?.toString();
@@ -321,7 +226,7 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
         ),
         const SizedBox(height: 24),
         FilledButton(
-          onPressed: _completeAndGoToDashboard,
+          onPressed: () => ref.read(ubModelOverviewCtrlProvider.notifier).completeAndGoToDashboard(context),
           style: FilledButton.styleFrom(
             backgroundColor: NeyvoColors.teal,
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -330,12 +235,12 @@ class _UbModelOverviewPageState extends State<UbModelOverviewPage> {
         ),
         const SizedBox(height: 12),
         TextButton(
-          onPressed: _rerunAnalysis,
+          onPressed: () => ref.read(ubModelOverviewCtrlProvider.notifier).rerunAnalysis(),
           child: const Text('Re-run analysis'),
         ),
-        if (_error != null) ...[
+        if (ui.error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+          Text(ui.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
         ],
       ],
     );

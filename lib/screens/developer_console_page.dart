@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers/developer_console_busy_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 
-class DeveloperConsolePage extends StatefulWidget {
+class DeveloperConsolePage extends ConsumerStatefulWidget {
   const DeveloperConsolePage({super.key});
 
   @override
-  State<DeveloperConsolePage> createState() => _DeveloperConsolePageState();
+  ConsumerState<DeveloperConsolePage> createState() => _DeveloperConsolePageState();
 }
 
-class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
+class _DeveloperConsolePageState extends ConsumerState<DeveloperConsolePage> {
   final _devPhoneNumberIdController = TextEditingController();
   final _devPhoneE164Controller = TextEditingController();
-  bool _devWorking = false;
 
   @override
   void dispose() {
@@ -31,7 +32,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       final res = await NeyvoPulseApi.attachNumber(
         phoneNumberId: id,
@@ -48,7 +49,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -60,7 +61,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       await NeyvoPulseApi.releaseNumber(id);
       if (!mounted) return;
@@ -74,7 +75,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -86,7 +87,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       await NeyvoPulseApi.setOutboundPrimary(id);
       if (!mounted) return;
@@ -100,7 +101,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -112,7 +113,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       await NeyvoPulseApi.registerFreecaller(id);
       if (!mounted) return;
@@ -126,7 +127,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -138,7 +139,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       final res = await NeyvoPulseApi.getWarmUpStatus(id);
       if (!mounted) return;
@@ -152,7 +153,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -164,7 +165,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       final res = await NeyvoPulseApi.getNumberCapacity(id);
       if (!mounted) return;
@@ -179,7 +180,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
@@ -191,7 +192,7 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
       );
       return;
     }
-    setState(() => _devWorking = true);
+    ref.read(developerConsoleBusyProvider.notifier).setBusy(true);
     try {
       await NeyvoPulseApi.advanceWarmUp(id);
       if (!mounted) return;
@@ -205,12 +206,13 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _devWorking = false);
+      if (mounted) ref.read(developerConsoleBusyProvider.notifier).setBusy(false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final devWorking = ref.watch(developerConsoleBusyProvider);
     return Scaffold(
       backgroundColor: NeyvoTheme.bgPrimary,
       appBar: AppBar(
@@ -261,36 +263,36 @@ class _DeveloperConsolePageState extends State<DeveloperConsolePage> {
                       runSpacing: NeyvoSpacing.sm,
                       children: [
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devAttachNumber,
+                          onPressed: devWorking ? null : _devAttachNumber,
                           child: const Text('Attach'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devDetachNumber,
+                          onPressed: devWorking ? null : _devDetachNumber,
                           child: const Text('Detach'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devSetPrimary,
+                          onPressed: devWorking ? null : _devSetPrimary,
                           child: const Text('Set primary'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devRegisterFreecaller,
+                          onPressed: devWorking ? null : _devRegisterFreecaller,
                           child: const Text('Register freecaller'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devWarmupStatus,
+                          onPressed: devWorking ? null : _devWarmupStatus,
                           child: const Text('Warm-up status'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devCapacity,
+                          onPressed: devWorking ? null : _devCapacity,
                           child: const Text('Capacity'),
                         ),
                         FilledButton.tonal(
-                          onPressed: _devWorking ? null : _devAdvanceWarmup,
+                          onPressed: devWorking ? null : _devAdvanceWarmup,
                           child: const Text('Advance warm-up'),
                         ),
                       ],
                     ),
-                    if (_devWorking) ...[
+                    if (devWorking) ...[
                       const SizedBox(height: NeyvoSpacing.sm),
                       Row(
                         children: [

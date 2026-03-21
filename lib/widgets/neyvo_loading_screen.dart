@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/neyvo_theme.dart';
 import '../tenant/tenant_brand.dart';
 
-class NeyvoLoadingScreen extends StatelessWidget {
+class NeyvoLoadingScreen extends ConsumerWidget {
   const NeyvoLoadingScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return const Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Center(

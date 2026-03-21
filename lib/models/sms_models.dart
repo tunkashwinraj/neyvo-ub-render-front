@@ -3,16 +3,20 @@
 class SmsConfig {
   final bool configured;
   final String? fromMasked;
+  /// tenant | platform | none
+  final String? fromSource;
 
   const SmsConfig({
     required this.configured,
     this.fromMasked,
+    this.fromSource,
   });
 
   factory SmsConfig.fromJson(Map<String, dynamic> json) {
     return SmsConfig(
       configured: json['configured'] == true,
       fromMasked: json['from_masked']?.toString(),
+      fromSource: json['from_source']?.toString(),
     );
   }
 }

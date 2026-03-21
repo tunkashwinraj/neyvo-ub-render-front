@@ -1,11 +1,12 @@
 // Exports – list or create Studio exports (placeholder until list API exists).
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ExportsPage extends StatelessWidget {
+class ExportsPage extends ConsumerWidget {
   const ExportsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: const Text('Exports')),
       body: Center(

@@ -2,7 +2,9 @@
 // Wallet: balance overview and transactions list with optional link to call detail.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/wallet_page_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
@@ -19,28 +21,19 @@ import '../../../widgets/add_credits_modal.dart';
 import 'plan_selector_page.dart';
 import 'voice_tier_page.dart';
 
-class WalletPage extends StatefulWidget {
+class WalletPage extends ConsumerStatefulWidget {
   const WalletPage({super.key});
 
   @override
-  State<WalletPage> createState() => _WalletPageState();
+  ConsumerState<WalletPage> createState() => _WalletPageState();
 }
 
-class _WalletPageState extends State<WalletPage> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _wallet;
-  List<Map<String, dynamic>> _transactions = [];
-  int _offset = 0;
-  static const int _pageSize = 30;
-  String _typeFilter = 'all'; // all | credit | debit
-  bool _loadingMore = false;
-
+class _WalletPageState extends ConsumerState<WalletPage> {
   @override
   void initState() {
     super.initState();
-    _load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(walletPageCtrlProvider.notifier).load();
       final payment = Uri.base.queryParameters['payment'];
       if (payment != null && payment.isNotEmpty) {
         Map<String, dynamic>? paymentDetails;
@@ -56,80 +49,10 @@ class _WalletPageState extends State<WalletPage> {
           removePaymentPending();
         }
         showPaymentResultDialogIfNeeded(context, payment, paymentDetails: paymentDetails).then((_) {
-          if (mounted) _load();
+          if (mounted) ref.read(walletPageCtrlProvider.notifier).load();
         });
       }
     });
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _offset = 0;
-    });
-    try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getBillingWallet(),
-        NeyvoPulseApi.getBillingTransactions(limit: _pageSize, offset: 0, type: _typeFilter),
-      ]);
-      if (!mounted) return;
-      final txRes = results[1] as Map<String, dynamic>;
-      final list = txRes['transactions'] as List<dynamic>?;
-      setState(() {
-        _wallet = results[0] as Map<String, dynamic>;
-        _transactions = list?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || _transactions.length < _offset + _pageSize) return;
-    setState(() => _loadingMore = true);
-    try {
-      final nextOffset = _offset + _pageSize;
-      final res = await NeyvoPulseApi.getBillingTransactions(limit: _pageSize, offset: nextOffset, type: _typeFilter);
-      final list = (res['transactions'] as List<dynamic>?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      if (!mounted) return;
-      setState(() {
-        _transactions.addAll(list);
-        _offset = nextOffset;
-        _loadingMore = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
-
-  Future<void> _onTypeFilterChanged(String type) async {
-    if (_typeFilter == type) return;
-    setState(() {
-      _typeFilter = type;
-      _loading = true;
-      _offset = 0;
-    });
-    try {
-      final res = await NeyvoPulseApi.getBillingTransactions(limit: _pageSize, offset: 0, type: type);
-      final list = (res['transactions'] as List<dynamic>?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      if (!mounted) return;
-      setState(() {
-        _transactions = list;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   void _openCallDetail(String callId) async {
@@ -148,7 +71,7 @@ class _WalletPageState extends State<WalletPage> {
           builder: (_) => CallDetailPage(call: call),
         ),
       );
-      if (mounted) _load();
+      if (mounted) ref.read(walletPageCtrlProvider.notifier).load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -190,24 +113,28 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(walletPageCtrlProvider);
     final primary = TenantBrand.primary(context);
-    if (_loading && _wallet == null) {
+    if (s.loading && s.wallet == null) {
       return Center(child: CircularProgressIndicator(color: primary));
     }
-    if (_error != null && _wallet == null) {
+    if (s.error != null && s.wallet == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text(s.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(
+              onPressed: () => ref.read(walletPageCtrlProvider.notifier).load(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
 
-    final credits = (_wallet?['credits'] as num?)?.toInt() ?? (_wallet?['wallet_credits'] as num?)?.toInt() ?? 0;
+    final credits = (s.wallet?['credits'] as num?)?.toInt() ?? (s.wallet?['wallet_credits'] as num?)?.toInt() ?? 0;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -299,7 +226,7 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(width: 8),
                     TextButton.icon(
-                      onPressed: _load,
+                      onPressed: () => ref.read(walletPageCtrlProvider.notifier).load(),
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('Refresh'),
                     ),
@@ -330,7 +257,11 @@ class _WalletPageState extends State<WalletPage> {
                           ),
                         ),
                         FilledButton.icon(
-                          onPressed: () => showAddCreditsModal(context, wallet: _wallet, onSuccess: _load),
+                          onPressed: () => showAddCreditsModal(
+                            context,
+                            wallet: s.wallet,
+                            onSuccess: () => ref.read(walletPageCtrlProvider.notifier).load(),
+                          ),
                           icon: const Icon(Icons.add, size: 20),
                           label: const Text('Add credits'),
                           style: FilledButton.styleFrom(
@@ -357,12 +288,12 @@ class _WalletPageState extends State<WalletPage> {
                 ),
                 const SizedBox(height: 12),
                 NeyvoGlassPanel(
-                  child: _loading && _transactions.isEmpty
+                  child: s.loading && s.transactions.isEmpty
                       ? Padding(
                           padding: EdgeInsets.all(24),
                           child: Center(child: CircularProgressIndicator(color: primary)),
                         )
-                      : _transactions.isEmpty
+                      : s.transactions.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(24),
                               child: Text('No transactions yet.', style: NeyvoTextStyles.body),
@@ -371,17 +302,17 @@ class _WalletPageState extends State<WalletPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _tableHeader(),
-                                ..._transactions.asMap().entries.map((e) => _transactionRow(e.value, e.key as int)),
-                                if (_loadingMore)
+                                ...s.transactions.asMap().entries.map((e) => _transactionRow(e.value, e.key, s)),
+                                if (s.loadingMore)
                                   Padding(
                                     padding: EdgeInsets.all(12),
                                     child: Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: primary))),
                                   ),
-                                if (!_loadingMore && _transactions.length >= _pageSize)
+                                if (!s.loadingMore && s.transactions.length >= WalletPageUiState.pageSize)
                                   Padding(
                                     padding: const EdgeInsets.all(8),
                                     child: TextButton(
-                                      onPressed: _loadMore,
+                                      onPressed: () => ref.read(walletPageCtrlProvider.notifier).loadMore(),
                                       child: const Text('Load more'),
                                     ),
                                   ),
@@ -397,12 +328,13 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   Widget _filterChip(String label, String value) {
-    final selected = _typeFilter == value;
+    final s = ref.watch(walletPageCtrlProvider);
+    final selected = s.typeFilter == value;
     final primary = TenantBrand.primary(context);
     return FilterChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) => _onTypeFilterChanged(value),
+      onSelected: (_) => ref.read(walletPageCtrlProvider.notifier).setTypeFilter(value),
       selectedColor: primary.withOpacity(0.3),
       checkmarkColor: primary,
     );
@@ -429,31 +361,34 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   /// Balance after this transaction (running balance). Uses API balance_after when present, else computed from current balance and list order (newest first).
-  int _balanceAfterTransaction(int index, Map<String, dynamic> t) {
+  int _balanceAfterTransaction(int index, Map<String, dynamic> t, WalletPageUiState s) {
     final fromApi = t['balance_after'];
     if (fromApi != null) {
       if (fromApi is int) return fromApi;
       if (fromApi is num) return fromApi.toInt();
     }
-    final currentCredits = (_wallet != null ? (_wallet!['credits'] as num?)?.toInt() ?? (_wallet!['wallet_credits'] as num?)?.toInt() : null) ?? 0;
+    final currentCredits = (s.wallet != null
+            ? (s.wallet!['credits'] as num?)?.toInt() ?? (s.wallet!['wallet_credits'] as num?)?.toInt()
+            : null) ??
+        0;
     int sumAbove = 0;
     for (int i = 0; i < index; i++) {
-      final c = _transactions[i]['credits'] as num?;
+      final c = s.transactions[i]['credits'] as num?;
       sumAbove += (c?.toInt() ?? 0);
     }
     return currentCredits - sumAbove;
   }
 
   /// Last balance = balance before this transaction (before its credit/debit was applied). Not the current balance.
-  int _balanceBeforeTransaction(int index, Map<String, dynamic> t) {
-    final after = _balanceAfterTransaction(index, t);
+  int _balanceBeforeTransaction(int index, Map<String, dynamic> t, WalletPageUiState s) {
+    final after = _balanceAfterTransaction(index, t, s);
     final credits = (t['credits'] as num?)?.toInt() ?? (t['amount'] as num?)?.toInt() ?? 0;
     return after - credits;
   }
 
   void _openBilling() {
     PulseShellController.navigatePulse(context, PulseRouteNames.billing);
-    if (mounted) _load();
+    if (mounted) ref.read(walletPageCtrlProvider.notifier).load();
   }
 
   static String _typeDisplay(String type) {
@@ -495,7 +430,7 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  Widget _transactionRow(Map<String, dynamic> t, int index) {
+  Widget _transactionRow(Map<String, dynamic> t, int index, WalletPageUiState s) {
     final type = (t['type'] ?? '').toString().toLowerCase();
     final creditsVal = (t['credits'] as num?)?.toInt() ?? (t['amount'] as num?)?.toInt() ?? 0;
     final isCredit = creditsVal >= 0;
@@ -573,7 +508,7 @@ class _WalletPageState extends State<WalletPage> {
             SizedBox(
               width: 90,
               child: Text(
-                '${_balanceBeforeTransaction(index, t)} credits',
+                '${_balanceBeforeTransaction(index, t, s)} credits',
                 style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
               ),
             ),

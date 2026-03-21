@@ -62,6 +62,8 @@ abstract class PulseRouteNames {
   // Dynamic segments handled by PulseRouter:
   // - /operators/building/{operator_id}
   // - /operators/{operator_id}
+  // - /operators/{operator_id}/optimization
+  static String operatorsOptimization(String operatorId) => '/operators/$operatorId/optimization';
 
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';

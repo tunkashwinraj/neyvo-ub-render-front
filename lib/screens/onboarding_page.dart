@@ -4,40 +4,24 @@
 // Connected to: GET/PATCH /api/pulse/account, templates, agents, studio
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../neyvo_pulse_api.dart';
+import '../core/providers/onboarding_flow_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/backgrounds/neyvo_neural_background.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../ui/components/visualizer/neyvo_voice_wave.dart';
-import '../ui/screens/business_interview/business_setup_interview_page.dart';
-import 'pulse_shell.dart';
 
-const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
-
-class OnboardingPage extends StatefulWidget {
+class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
 
   @override
-  State<OnboardingPage> createState() => _OnboardingPageState();
+  ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
 }
 
-class _OnboardingPageState extends State<OnboardingPage> {
+class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final PageController _pageController = PageController();
-  int _pageIndex = 0;
-
-  bool _initializing = false;
-  int _initStepIndex = 0;
-  String? _error;
-
-  static const List<String> _initMessages = [
-    'Initializing Neyvo Voice OS…',
-    'Loading voice engine…',
-    'Preparing routing layer…',
-    'Calibrating business intelligence…',
-  ];
 
   @override
   void dispose() {
@@ -45,68 +29,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
-  Future<void> _completeOnboarding() async {
-    try {
-      final body = <String, dynamic>{
-        'onboarding_completed': true,
-        'active_surface': 'comms',
-        'surfaces_enabled': ['comms'],
-      };
-      await NeyvoPulseApi.updateAccountInfo(body);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kOnboardingCompletedKey, true);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const PulseShell()),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _initializing = false;
-      });
-    }
-  }
-
-  Future<void> _startInitializationAndInterview() async {
-    if (_initializing) return;
-    setState(() {
-      _initializing = true;
-      _initStepIndex = 0;
-      _error = null;
-    });
-
-    try {
-      for (var i = 0; i < _initMessages.length; i++) {
-        if (!mounted) return;
-        setState(() {
-          _initStepIndex = i;
-        });
-        await Future<void>.delayed(const Duration(milliseconds: 900));
-      }
-
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const BusinessSetupInterviewPage(),
-        ),
-      );
-
-      if (!mounted) return;
-      await _completeOnboarding();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _initializing = false;
-      });
-    }
-  }
-
   void _goTo(int index) {
-    setState(() {
-      _pageIndex = index;
-    });
+    ref.read(onboardingFlowCtrlProvider.notifier).setPageIndex(index);
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 420),
@@ -116,6 +40,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(onboardingFlowCtrlProvider);
+    final msgIndex = ui.initStepIndex.clamp(0, OnboardingFlowCtrl.initMessages.length - 1);
+
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Stack(
@@ -157,11 +84,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               Expanded(
                                 child: PageView(
                                   controller: _pageController,
-                                  onPageChanged: (i) {
-                                    setState(() {
-                                      _pageIndex = i;
-                                    });
-                                  },
+                                  onPageChanged: (i) =>
+                                      ref.read(onboardingFlowCtrlProvider.notifier).setPageIndex(i),
                                   children: [
                                     _buildSlideWelcome(),
                                     _buildSlideHowItWorks(),
@@ -174,7 +98,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: List.generate(4, (i) {
-                                  final selected = i == _pageIndex;
+                                  final selected = i == ui.pageIndex;
                                   return AnimatedContainer(
                                     duration: const Duration(milliseconds: 200),
                                     margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -194,35 +118,34 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   TextButton(
-                                    onPressed:
-                                        _pageIndex == 0 ? null : () => _goTo(_pageIndex - 1),
+                                    onPressed: ui.pageIndex == 0 ? null : () => _goTo(ui.pageIndex - 1),
                                     child: const Text('Back'),
                                   ),
                                   FilledButton(
-                                    onPressed: _initializing
+                                    onPressed: ui.initializing
                                         ? null
                                         : () {
-                                            if (_pageIndex < 3) {
-                                              _goTo(_pageIndex + 1);
+                                            if (ui.pageIndex < 3) {
+                                              _goTo(ui.pageIndex + 1);
                                             } else {
-                                              _startInitializationAndInterview();
+                                              ref
+                                                  .read(onboardingFlowCtrlProvider.notifier)
+                                                  .startInitializationAndInterview(context);
                                             }
                                           },
                                     style: FilledButton.styleFrom(
                                       backgroundColor: NeyvoColors.teal,
                                     ),
                                     child: Text(
-                                      _pageIndex < 3
-                                          ? 'Continue'
-                                          : 'Initialize My Voice OS',
+                                      ui.pageIndex < 3 ? 'Continue' : 'Initialize My Voice OS',
                                     ),
                                   ),
                                 ],
                               ),
-                              if (_error != null) ...[
+                              if (ui.error != null) ...[
                                 const SizedBox(height: 12),
                                 Text(
-                                  _error!,
+                                  ui.error!,
                                   style: NeyvoTextStyles.body
                                       .copyWith(color: NeyvoColors.error),
                                 ),
@@ -238,7 +161,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
             ),
           ),
-          if (_initializing) Positioned.fill(child: _buildInitializationOverlay()),
+          if (ui.initializing) Positioned.fill(child: _buildInitializationOverlay(msgIndex)),
         ],
       ),
     );
@@ -351,7 +274,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
-  Widget _buildInitializationOverlay() {
+  Widget _buildInitializationOverlay(int msgIndex) {
     return Container(
       color: Colors.black.withOpacity(0.78),
       child: Center(
@@ -367,7 +290,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                _initMessages[_initStepIndex],
+                OnboardingFlowCtrl.initMessages[msgIndex],
                 style: NeyvoTextStyles.heading,
                 textAlign: TextAlign.center,
               ),
@@ -445,4 +368,3 @@ class _Bullet extends StatelessWidget {
     );
   }
 }
-

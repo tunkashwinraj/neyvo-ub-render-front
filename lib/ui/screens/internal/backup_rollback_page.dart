@@ -1,122 +1,27 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../api/neyvo_api.dart';
+import '../../../core/providers/backup_rollback_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 
-class BackupRollbackPage extends StatefulWidget {
+class BackupRollbackPage extends ConsumerStatefulWidget {
   const BackupRollbackPage({super.key});
 
   @override
-  State<BackupRollbackPage> createState() => _BackupRollbackPageState();
+  ConsumerState<BackupRollbackPage> createState() => _BackupRollbackPageState();
 }
 
-class _BackupRollbackPageState extends State<BackupRollbackPage> {
+class _BackupRollbackPageState extends ConsumerState<BackupRollbackPage> {
   static const _frontRepo = 'tunkashwinraj/Goodwin_Neyvo_Front';
   static const _backRepo = 'tunkashwinraj/Goodwin_Neyvo_Back';
-
-  /// Internal access gate: comma-separated list of admin emails.
-  /// Build example:
-  /// flutter build web --release -O 4 --dart-define=INTERNAL_BACKUP_ADMINS=a@b.com,c@d.com
-  static const String _kAdminsCsv = String.fromEnvironment('INTERNAL_BACKUP_ADMINS', defaultValue: '');
-
-  bool _loading = true;
-  String? _error;
-
-  List<_Release> _front = const [];
-  List<_Release> _back = const [];
 
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  bool get _isAuthorized {
-    final user = FirebaseAuth.instance.currentUser;
-    final email = (user?.email ?? '').trim().toLowerCase();
-    if (email.isEmpty) return false;
-    final allowed = _kAdminsCsv
-        .split(',')
-        .map((e) => e.trim().toLowerCase())
-        .where((e) => e.isNotEmpty)
-        .toSet();
-    // If not configured, default-deny (internal page should never be open to everyone).
-    if (allowed.isEmpty) return false;
-    return allowed.contains(email);
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(backupRollbackProvider.notifier).load();
     });
-    try {
-      if (!_isAuthorized) {
-        if (!mounted) return;
-        setState(() {
-          _front = const [];
-          _back = const [];
-          _loading = false;
-        });
-        return;
-      }
-      final res = await NeyvoApi.getJsonMap('/api/pulse/internal/backups');
-      if (res['ok'] != true) {
-        throw Exception(res['error']?.toString() ?? 'Failed to load backups');
-      }
-      final repos = res['repos'];
-      if (repos is! Map) throw Exception('Invalid backups response');
-      final front = _parseRepoResult(repos[_frontRepo]);
-      final back = _parseRepoResult(repos[_backRepo]);
-      if (!mounted) return;
-      setState(() {
-        _front = front;
-        _back = back;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  List<_Release> _parseRepoResult(dynamic v) {
-    final m = (v is Map) ? v : null;
-    final ok = m?['ok'] == true;
-    if (!ok) {
-      final status = m?['status']?.toString();
-      final body = m?['body']?.toString();
-      throw Exception('Backups API failed${status != null ? " ($status)" : ""}: ${body ?? m?['error'] ?? 'unknown'}');
-    }
-    final list = m?['releases'];
-    if (list is! List) return const [];
-    final out = <_Release>[];
-    for (final item in list) {
-      if (item is! Map) continue;
-      final tag = (item['tag'] ?? '').toString();
-      if (!tag.startsWith('backup-')) continue;
-      final htmlUrl = (item['html_url'] ?? '').toString();
-      final name = (item['name'] ?? tag).toString();
-      final createdAt = (item['created_at'] ?? '').toString();
-      final assetNames = <String>[];
-      final a = item['asset_names'];
-      if (a is List) {
-        for (final x in a) {
-          final s = x?.toString() ?? '';
-          if (s.isNotEmpty) assetNames.add(s);
-        }
-      }
-      out.add(_Release(tag: tag, name: name, createdAt: createdAt, htmlUrl: htmlUrl, assetNames: assetNames));
-    }
-    out.sort((a, b) => b.tag.compareTo(a.tag));
-    return out;
   }
 
   Future<void> _openUrl(String url) async {
@@ -127,7 +32,8 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isAuthorized) {
+    final notifier = ref.read(backupRollbackProvider.notifier);
+    if (!notifier.isAuthorized) {
       return Scaffold(
         backgroundColor: NeyvoTheme.bgPrimary,
         appBar: AppBar(
@@ -142,6 +48,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
         ),
       );
     }
+    final ui = ref.watch(backupRollbackProvider);
     return Scaffold(
       backgroundColor: NeyvoTheme.bgPrimary,
       appBar: AppBar(
@@ -149,7 +56,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
         title: Text('Backups & rollbacks (internal)', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
         actions: [
           TextButton.icon(
-            onPressed: _load,
+            onPressed: () => ref.read(backupRollbackProvider.notifier).load(),
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Refresh'),
           ),
@@ -178,25 +85,25 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
           const SizedBox(height: 18),
           _sectionTitle('Snapshot releases'),
           const SizedBox(height: 10),
-          if (_loading) ...[
+          if (ui.loading) ...[
             const Center(child: CircularProgressIndicator(color: NeyvoColors.teal)),
             const SizedBox(height: 12),
           ],
-          if (_error != null) ...[
-            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
+          if (ui.error != null) ...[
+            Text(ui.error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.warning)),
             const SizedBox(height: 12),
           ],
           _repoCard(
             title: 'Frontend snapshots',
             subtitle: _frontRepo,
-            releases: _front,
+            releases: ui.front,
             onOpenReleases: () => _openUrl('https://github.com/$_frontRepo/releases'),
           ),
           const SizedBox(height: 14),
           _repoCard(
             title: 'Backend snapshots',
             subtitle: _backRepo,
-            releases: _back,
+            releases: ui.back,
             onOpenReleases: () => _openUrl('https://github.com/$_backRepo/releases'),
           ),
           const SizedBox(height: 18),
@@ -310,7 +217,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
   Widget _repoCard({
     required String title,
     required String subtitle,
-    required List<_Release> releases,
+    required List<BackupRelease> releases,
     required VoidCallback onOpenReleases,
   }) {
     return Card(
@@ -354,7 +261,7 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
     );
   }
 
-  Widget _releaseRow(_Release r) {
+  Widget _releaseRow(BackupRelease r) {
     final hasFrontendZip = r.assetNames.any((a) => a.toLowerCase().contains('frontend-build-web') || a.toLowerCase().endsWith('.zip'));
     final hasEnc = r.assetNames.any((a) => a.toLowerCase().endsWith('.enc'));
     return InkWell(
@@ -403,20 +310,3 @@ class _BackupRollbackPageState extends State<BackupRollbackPage> {
     );
   }
 }
-
-class _Release {
-  final String tag;
-  final String name;
-  final String createdAt;
-  final String htmlUrl;
-  final List<String> assetNames;
-
-  _Release({
-    required this.tag,
-    required this.name,
-    required this.createdAt,
-    required this.htmlUrl,
-    required this.assetNames,
-  });
-}
-

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers/callbacks_page_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
@@ -7,64 +10,34 @@ import '../tenant/tenant_brand.dart';
 import '../utils/callback_date_format.dart';
 import 'student_detail_page.dart';
 
-class CallbacksPage extends StatefulWidget {
+class CallbacksPage extends ConsumerStatefulWidget {
   const CallbacksPage({super.key});
 
   @override
-  State<CallbacksPage> createState() => _CallbacksPageState();
+  ConsumerState<CallbacksPage> createState() => _CallbacksPageState();
 }
 
-class _CallbacksPageState extends State<CallbacksPage> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _analytics;
-  List<Map<String, dynamic>> _callbacks = [];
-  String _filter = 'all'; // all | overdue
-
+class _CallbacksPageState extends ConsumerState<CallbacksPage> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(callbacksPageCtrlProvider.notifier).load();
     });
-    try {
-      final analyticsRes = await NeyvoPulseApi.getCallbacksAnalytics();
-      final listRes = await NeyvoPulseApi.listCallbacks();
-      if (!mounted) return;
-      if (analyticsRes['ok'] == true) {
-        _analytics = analyticsRes['analytics'] as Map<String, dynamic>?;
-      }
-      if (listRes['ok'] == true) {
-        final list = (listRes['callbacks'] as List? ?? []).cast<Map<String, dynamic>>();
-        _callbacks = list;
-      } else if (listRes['error'] != null) {
-        _error = listRes['error']?.toString();
-      }
-      _loading = false;
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(callbacksPageCtrlProvider);
+    final ctrl = ref.read(callbacksPageCtrlProvider.notifier);
     final primary = TenantBrand.primary(context);
-    if (_loading) {
+
+    if (s.loading) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator(color: primary)),
       );
     }
-    if (_error != null) {
+    if (s.error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Callbacks')),
         body: Center(
@@ -72,23 +45,24 @@ class _CallbacksPageState extends State<CallbacksPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _error!,
+                s.error!,
                 style: NeyvoType.bodyMedium.copyWith(color: NeyvoColors.error),
               ),
               const SizedBox(height: NeyvoSpacing.md),
-              FilledButton(onPressed: _load, child: const Text('Retry')),
+              FilledButton(onPressed: () => ctrl.load(), child: const Text('Retry')),
             ],
           ),
         ),
       );
     }
 
-    final stats = _analytics ?? const {};
+    final stats = s.analytics ?? const {};
     final scheduled = (stats['scheduled'] as num?)?.toInt() ?? 0;
     final completed = (stats['completed'] as num?)?.toInt() ?? 0;
     final exhausted = (stats['exhausted'] as num?)?.toInt() ?? 0;
     final retryWait = (stats['retry_wait'] as num?)?.toInt() ?? 0;
     final dialing = (stats['dialing'] as num?)?.toInt() ?? 0;
+    final filtered = ctrl.filteredCallbacks();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Callbacks & Scheduler')),
@@ -123,12 +97,12 @@ class _CallbacksPageState extends State<CallbacksPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 OutlinedButton.icon(
-                  onPressed: _load,
+                  onPressed: () => ctrl.load(),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh'),
                 ),
                 DropdownButton<String>(
-                  value: _filter,
+                  value: s.filter,
                   items: const [
                     DropdownMenuItem(
                       value: 'all',
@@ -141,14 +115,14 @@ class _CallbacksPageState extends State<CallbacksPage> {
                   ],
                   onChanged: (val) {
                     if (val == null) return;
-                    setState(() => _filter = val);
+                    ctrl.setFilter(val);
                   },
                 ),
               ],
             ),
             const SizedBox(height: NeyvoSpacing.lg),
             Expanded(
-              child: _filteredCallbacks().isEmpty
+              child: filtered.isEmpty
                   ? Center(
                       child: Text(
                         'No active callbacks (scheduled, retrying, or dialing).',
@@ -156,13 +130,12 @@ class _CallbacksPageState extends State<CallbacksPage> {
                       ),
                     )
                   : ListView.separated(
-                      itemCount: _filteredCallbacks().length,
-                      separatorBuilder: (_, __) => const SizedBox(height: NeyvoSpacing.sm),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: NeyvoSpacing.sm),
                       itemBuilder: (context, index) {
-                        final c = _filteredCallbacks()[index];
+                        final c = filtered[index];
                         final name = (c['name'] ?? 'Unknown').toString();
                         final phone = (c['phone'] ?? '—').toString();
-                        // API sends both status (alias) and callback_status — prefer explicit status.
                         final status =
                             (c['status'] ?? c['callback_status'] ?? '').toString();
                         final attempts = (c['callback_attempt_count'] as num?)?.toInt();
@@ -181,7 +154,7 @@ class _CallbacksPageState extends State<CallbacksPage> {
                                       MaterialPageRoute(
                                         builder: (_) => StudentDetailPage(
                                           studentId: studentId,
-                                          onUpdated: _load,
+                                          onUpdated: () => ctrl.load(),
                                         ),
                                       ),
                                     );
@@ -204,44 +177,44 @@ class _CallbacksPageState extends State<CallbacksPage> {
                                                   name,
                                                   style: NeyvoType.titleMedium.copyWith(color: NeyvoColors.textPrimary),
                                                 ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            phone,
-                                            style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: NeyvoSpacing.sm,
-                                            runSpacing: NeyvoSpacing.sm,
-                                            children: [
-                                              Chip(
-                                                label: Text(
-                                                  'Status: ${status.isEmpty ? 'unknown' : status}',
-                                                  style: NeyvoType.bodySmall,
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  phone,
+                                                  style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
                                                 ),
-                                              ),
-                                              if (attempts != null && maxAttempts != null)
-                                                Chip(
-                                                  label: Text(
-                                                    'Attempts: $attempts / $maxAttempts',
-                                                    style: NeyvoType.bodySmall,
+                                                const SizedBox(height: 6),
+                                                Wrap(
+                                                  spacing: NeyvoSpacing.sm,
+                                                  runSpacing: NeyvoSpacing.sm,
+                                                  children: [
+                                                    Chip(
+                                                      label: Text(
+                                                        'Status: ${status.isEmpty ? 'unknown' : status}',
+                                                        style: NeyvoType.bodySmall,
+                                                      ),
+                                                    ),
+                                                    if (attempts != null && maxAttempts != null)
+                                                      Chip(
+                                                        label: Text(
+                                                          'Attempts: $attempts / $maxAttempts',
+                                                          style: NeyvoType.bodySmall,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                if (at.isNotEmpty) ...[
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    'Next: $at',
+                                                    style: NeyvoType.bodyMedium.copyWith(
+                                                      color: NeyvoColors.tealLight,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
                                                   ),
-                                                ),
-                                            ],
+                                                ],
+                                              ],
+                                            ),
                                           ),
-                                          if (at.isNotEmpty) ...[
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              'Next: $at',
-                                              style: NeyvoType.bodyMedium.copyWith(
-                                                color: NeyvoColors.tealLight,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                              ),
-                                            ),
                                           if (studentId.isNotEmpty)
                                             Icon(
                                               Icons.chevron_right,
@@ -267,13 +240,13 @@ class _CallbacksPageState extends State<CallbacksPage> {
                                               : () async {
                                                   try {
                                                     await NeyvoPulseApi.cancelStudentCallback(studentId);
-                                                    if (!mounted) return;
+                                                    if (!context.mounted) return;
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       const SnackBar(content: Text('Callback cancelled')),
                                                     );
-                                                    await _load();
+                                                    await ctrl.load();
                                                   } catch (e) {
-                                                    if (!mounted) return;
+                                                    if (!context.mounted) return;
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(content: Text(e.toString())),
                                                     );
@@ -326,23 +299,4 @@ class _CallbacksPageState extends State<CallbacksPage> {
       ),
     );
   }
-
-  List<Map<String, dynamic>> _filteredCallbacks() {
-    if (_filter == 'overdue') {
-      final now = DateTime.now().toUtc();
-      return _callbacks.where((c) {
-        final raw = c['callback_at'];
-        if (raw == null) return false;
-        try {
-          final dt = DateTime.parse(raw.toString()).toUtc();
-          return dt.isBefore(now);
-        } catch (_) {
-          return false;
-        }
-      }).toList();
-    }
-    return _callbacks;
-  }
-
 }
-

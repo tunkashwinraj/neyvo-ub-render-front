@@ -1,18 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-<<<<<<< HEAD
-=======
-import '../../../features/settings/settings_screen.dart';
-import '../../../neyvo_pulse_api.dart';
->>>>>>> origin/Twinkle
 import '../../../api/neyvo_api.dart';
+import '../../../features/settings/settings_screen.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../providers/sendgrid_providers.dart';
 import '../../../providers/sms_providers.dart';
 import '../../../services/sendgrid_api.dart';
+import '../../../services/sms_api.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
@@ -210,6 +205,12 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                   data: (cfg) {
                     final connected = cfg.connected;
                     final from = cfg.fromEmail ?? '';
+                    final tenantSender = cfg.source == 'tenant';
+                    final hint = tenantSender
+                        ? 'Using your organization SendGrid key (stored encrypted).'
+                        : (connected
+                            ? 'Using platform SendGrid defaults from the server. You can connect your own key below.'
+                            : 'Connect your SendGrid API key and verified sender, or ask your admin to set server env vars.');
                     return NeyvoGlassPanel(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
@@ -264,7 +265,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                               ),
                                             ),
                                             child: Text(
-                                              connected ? 'Connected' : 'Not connected',
+                                              connected ? 'Ready' : 'Not configured',
                                               style: NeyvoTextStyles.micro.copyWith(
                                                 color: connected ? const Color(0xFF22C55E) : NeyvoColors.textMuted,
                                                 fontWeight: FontWeight.w700,
@@ -280,7 +281,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        connected ? 'From: ${from.isEmpty ? '—' : from}' : 'Connect your SendGrid API key',
+                                        connected ? 'From: ${from.isEmpty ? '—' : from}' : 'No sender configured',
                                         style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
@@ -290,54 +291,83 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.info_outline, size: 16, color: NeyvoColors.textMuted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    hint,
+                                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 14),
                             Wrap(
                               spacing: 10,
                               runSpacing: 8,
                               children: [
-                                FilledButton(
-                                  onPressed: () async {
-                                    await showModalBottomSheet<void>(
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    showModalBottomSheet<void>(
                                       context: context,
                                       isScrollControlled: true,
-                                      backgroundColor: NeyvoTheme.bgSurface,
-                                      builder: (ctx) => ConnectSendGridSheet(
-                                        onDone: () {
-                                          ref.invalidate(sendgridConfigProvider);
-                                          Navigator.pop(ctx);
-                                        },
+                                      backgroundColor: NeyvoColors.bgBase,
+                                      builder: (ctx) => Padding(
+                                        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+                                        child: _ConnectSendGridSheet(
+                                          onDone: () {
+                                            Navigator.of(ctx).pop();
+                                            ref.invalidate(sendgridConfigProvider);
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('SendGrid connected')),
+                                              );
+                                            }
+                                          },
+                                        ),
                                       ),
                                     );
                                   },
-                                  style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-                                  child: Text(connected ? 'Update connection' : 'Connect'),
+                                  icon: const Icon(Icons.link, size: 18),
+                                  label: Text(tenantSender ? 'Update key' : 'Connect API key'),
                                 ),
-                                if (connected)
-                                  OutlinedButton(
+                                if (tenantSender)
+                                  TextButton.icon(
                                     onPressed: () async {
                                       final ok = await showDialog<bool>(
                                         context: context,
                                         builder: (ctx) => AlertDialog(
                                           title: const Text('Disconnect SendGrid?'),
-                                          content: const Text('Voice email tools will stop until you connect again.'),
+                                          content: const Text(
+                                            'Removes your organization key. The platform default will be used if the server has one.',
+                                          ),
                                           actions: [
                                             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                             TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Disconnect')),
                                           ],
                                         ),
                                       );
-                                      if (ok == true && context.mounted) {
-                                        try {
-                                          await SendgridApi.disconnect();
-                                          ref.invalidate(sendgridConfigProvider);
-                                        } catch (e) {
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-                                          }
-                                        }
+                                      if (ok != true || !context.mounted) return;
+                                      try {
+                                        await SendgridApi.disconnect();
+                                        ref.invalidate(sendgridConfigProvider);
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('SendGrid disconnected for this organization')),
+                                        );
+                                      } catch (e) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Failed: $e')),
+                                        );
                                       }
                                     },
-                                    child: const Text('Disconnect'),
+                                    icon: const Icon(Icons.link_off, size: 18),
+                                    label: const Text('Disconnect'),
                                   ),
                               ],
                             ),
@@ -369,82 +399,117 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                   data: (smsCfg) {
                     final active = smsCfg.configured;
                     final masked = smsCfg.fromMasked ?? '';
+                    final src = smsCfg.fromSource ?? '';
+                    final srcLabel = src == 'tenant'
+                        ? 'Organization number'
+                        : (src == 'platform' ? 'Platform default number' : '—');
                     return NeyvoGlassPanel(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    NeyvoColors.teal.withOpacity(0.9),
-                                    NeyvoColors.ubLightBlue.withOpacity(0.9),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        NeyvoColors.teal.withOpacity(0.9),
+                                        NeyvoColors.ubLightBlue.withOpacity(0.9),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.sms_outlined, color: Colors.white, size: 22),
+                                  ),
                                 ),
-                              ),
-                              child: const Center(
-                                child: Icon(Icons.sms_outlined, color: Colors.white, size: 22),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Expanded(
-                                        child: Text(
-                                          'SMS via Twilio',
-                                          style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
-                                        ),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              'SMS via Twilio',
+                                              style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: active
+                                                  ? const Color(0xFF22C55E).withOpacity(0.14)
+                                                  : NeyvoColors.borderSubtle.withOpacity(0.4),
+                                              borderRadius: BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: active
+                                                    ? const Color(0xFF22C55E).withOpacity(0.45)
+                                                    : NeyvoColors.borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              active ? 'Active' : 'Setup required',
+                                              style: NeyvoTextStyles.micro.copyWith(
+                                                color: active ? const Color(0xFF22C55E) : NeyvoColors.textMuted,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: active
-                                              ? const Color(0xFF22C55E).withOpacity(0.14)
-                                              : NeyvoColors.borderSubtle.withOpacity(0.4),
-                                          borderRadius: BorderRadius.circular(999),
-                                          border: Border.all(
-                                            color: active
-                                                ? const Color(0xFF22C55E).withOpacity(0.45)
-                                                : NeyvoColors.borderSubtle,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          active ? 'Active' : 'Setup required',
-                                          style: NeyvoTextStyles.micro.copyWith(
-                                            color: active ? const Color(0xFF22C55E) : NeyvoColors.textMuted,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Outbound SMS for ARIA operators (sendSMS tool)',
+                                        style: NeyvoTextStyles.micro,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        active
+                                            ? 'From: ${masked.isEmpty ? 'configured' : masked} · $srcLabel'
+                                            : 'Twilio credentials must be enabled on the API server; you can still set a per-organization sending number.',
+                                        style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+                                        maxLines: 4,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Outbound SMS for ARIA operators (sendSMS tool)',
-                                    style: NeyvoTextStyles.micro,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                showModalBottomSheet<void>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: NeyvoColors.bgBase,
+                                  builder: (ctx) => Padding(
+                                    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+                                    child: _SmsTwilioFromSheet(
+                                      onDone: () {
+                                        Navigator.of(ctx).pop();
+                                        ref.invalidate(smsConfigProvider);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('SMS sending number updated')),
+                                          );
+                                        }
+                                      },
+                                    ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    active
-                                        ? 'From: ${masked.isEmpty ? 'configured' : masked}'
-                                        : 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER on the API server.',
-                                    style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
-                                    maxLines: 4,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
+                                );
+                              },
+                              icon: const Icon(Icons.phone_android_outlined, size: 18),
+                              label: const Text('Set sending number'),
                             ),
                           ],
                         ),
@@ -1083,160 +1148,210 @@ class _CalendlyIntegrationPageState extends State<CalendlyIntegrationPage> {
   }
 }
 
-/// Bottom sheet: API key (obscured) + from email, 1s debounced SendGrid key validation, inline errors only.
-class ConnectSendGridSheet extends StatefulWidget {
+class _ConnectSendGridSheet extends StatefulWidget {
   final VoidCallback onDone;
 
-  const ConnectSendGridSheet({super.key, required this.onDone});
+  const _ConnectSendGridSheet({required this.onDone});
 
   @override
-  State<ConnectSendGridSheet> createState() => _ConnectSendGridSheetState();
+  State<_ConnectSendGridSheet> createState() => _ConnectSendGridSheetState();
 }
 
-class _ConnectSendGridSheetState extends State<ConnectSendGridSheet> {
+class _ConnectSendGridSheetState extends State<_ConnectSendGridSheet> {
   final _apiKey = TextEditingController();
   final _fromEmail = TextEditingController();
-  bool _obscure = true;
-  bool _validating = false;
-  bool? _keyOk;
-  String? _keyInlineError;
-  Timer? _debounce;
-  bool _saving = false;
-  String? _formError;
+  bool _busy = false;
+  String? _validateNote;
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _apiKey.dispose();
     _fromEmail.dispose();
     super.dispose();
   }
 
-  void _scheduleValidate() {
-    _debounce?.cancel();
+  Future<void> _validate() async {
     setState(() {
-      _keyOk = null;
-      _keyInlineError = null;
+      _busy = true;
+      _validateNote = null;
     });
-    final v = _apiKey.text.trim();
-    if (v.isEmpty) return;
-    _debounce = Timer(const Duration(seconds: 1), () async {
-      if (!mounted) return;
-      setState(() {
-        _validating = true;
-        _keyInlineError = null;
-      });
-      final r = await SendgridApi.validateApiKey(v);
-      if (!mounted) return;
-      setState(() {
-        _validating = false;
-        _keyOk = r.valid;
-        _keyInlineError = r.valid ? null : (r.errorMessage ?? 'Invalid key');
-      });
+    final r = await SendgridApi.validateApiKey(_apiKey.text);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _validateNote = r.valid ? 'Key looks valid.' : (r.errorMessage ?? 'Invalid');
     });
   }
 
   Future<void> _connect() async {
-    setState(() => _formError = null);
-    final key = _apiKey.text.trim();
-    final from = _fromEmail.text.trim();
-    if (key.isEmpty || from.isEmpty) {
-      setState(() => _formError = 'API key and from email are required.');
-      return;
-    }
-    if (from.contains('@') == false) {
-      setState(() => _formError = 'Enter a valid from email.');
-      return;
-    }
-    setState(() => _saving = true);
+    setState(() {
+      _busy = true;
+      _validateNote = null;
+    });
     try {
-      await SendgridApi.connect(apiKey: key, fromEmail: from);
+      await SendgridApi.connect(apiKey: _apiKey.text, fromEmail: _fromEmail.text);
       if (!mounted) return;
       widget.onDone();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SendGrid connected')),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _formError = e.toString());
+      setState(() => _validateNote = e.toString());
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: bottom + 20),
+    return SafeArea(
       child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Text('Connect SendGrid', style: NeyvoTextStyles.heading),
-                const Spacer(),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-              ],
-            ),
+            Text('Connect SendGrid', style: NeyvoTextStyles.heading),
             const SizedBox(height: 8),
+            Text(
+              'Your API key is encrypted and stored per organization. The server must have SENDGRID_ENC_KEY set.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+            ),
+            const SizedBox(height: 16),
             TextField(
-              controller: _fromEmail,
-              keyboardType: TextInputType.emailAddress,
+              controller: _apiKey,
+              obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'From email (verified sender)',
-                hintText: 'hello@yourdomain.com',
+                labelText: 'SendGrid API key',
+                hintText: 'SG....',
               ),
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: _apiKey,
-              obscureText: _obscure,
-              onChanged: (_) => _scheduleValidate(),
-              decoration: InputDecoration(
-                labelText: 'SendGrid API key',
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_validating)
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    else if (_keyOk == true)
-                      const Icon(Icons.check_circle, color: Color(0xFF22C55E))
-                    else if (_keyOk == false)
-                      const Icon(Icons.cancel, color: Color(0xFFEF4444)),
-                    IconButton(
-                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ],
-                ),
+              controller: _fromEmail,
+              decoration: const InputDecoration(
+                labelText: 'Verified sender (from email)',
+                hintText: 'notifications@yourdomain.com',
               ),
             ),
-            if (_keyInlineError != null && _keyInlineError!.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(_keyInlineError!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
-            ],
-            if (_formError != null && _formError!.isNotEmpty) ...[
+            if (_validateNote != null) ...[
               const SizedBox(height: 10),
-              Text(_formError!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning)),
+              Text(_validateNote!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.warning)),
             ],
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : _validate,
+                    child: const Text('Validate key'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _busy ? null : _connect,
+                    style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmsTwilioFromSheet extends StatefulWidget {
+  final VoidCallback onDone;
+
+  const _SmsTwilioFromSheet({required this.onDone});
+
+  @override
+  State<_SmsTwilioFromSheet> createState() => _SmsTwilioFromSheetState();
+}
+
+class _SmsTwilioFromSheetState extends State<_SmsTwilioFromSheet> {
+  final _from = TextEditingController();
+  bool _busy = false;
+  String? _note;
+
+  @override
+  void dispose() {
+    _from.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(String raw) async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    try {
+      await SmsApi.saveTwilioFromNumber(raw);
+      if (!mounted) return;
+      widget.onDone();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _note = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Twilio sending number', style: NeyvoTextStyles.heading),
+            const SizedBox(height: 8),
+            Text(
+              'Uses your platform Twilio account on the server. Set a dedicated number for this organization, or clear to use TWILIO_PHONE_NUMBER.',
+              style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _from,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'From number (E.164 or US local)',
+                hintText: '+15555550123',
+              ),
+            ),
+            if (_note != null) ...[
+              const SizedBox(height: 10),
+              Text(_note!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.warning)),
+            ],
+            const SizedBox(height: 16),
             FilledButton(
-              onPressed: _saving ? null : _connect,
+              onPressed: _busy ? null : () => _save(_from.text),
               style: FilledButton.styleFrom(backgroundColor: NeyvoColors.teal),
-              child: _saving
+              child: _busy
                   ? const SizedBox(
-                      width: 22,
-                      height: 22,
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Save connection'),
+                  : const Text('Save'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _busy ? null : () => _save(''),
+              child: const Text('Use platform default'),
             ),
           ],
         ),

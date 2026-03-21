@@ -1,100 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
+import '../../../core/providers/plan_selector_page_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/billing/credits_info_icon.dart';
 
-class PlanSelectorPage extends StatefulWidget {
+class PlanSelectorPage extends ConsumerStatefulWidget {
   const PlanSelectorPage({super.key});
 
   @override
-  State<PlanSelectorPage> createState() => _PlanSelectorPageState();
+  ConsumerState<PlanSelectorPage> createState() => _PlanSelectorPageState();
 }
 
-class _PlanSelectorPageState extends State<PlanSelectorPage> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _subscription;
-  String? _updatingTo;
-
+class _PlanSelectorPageState extends ConsumerState<PlanSelectorPage> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(planSelectorPageCtrlProvider.notifier).load();
     });
-    try {
-      final sub = await NeyvoPulseApi.getSubscription();
-      if (!mounted) return;
-      setState(() {
-        _subscription = sub;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   Future<void> _changePlan(String target) async {
-    if (_updatingTo != null) return;
-    setState(() => _updatingTo = target);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      final current = (_subscription?['tier'] ?? _subscription?['subscription_tier'] ?? 'free').toString().toLowerCase();
-      if (target == current) {
-        setState(() => _updatingTo = null);
-        return;
-      }
-      if (target == 'free') {
-        await NeyvoPulseApi.cancelSubscription();
-      } else if (current == 'free') {
-        await NeyvoPulseApi.subscribe(target);
-      } else {
-        await NeyvoPulseApi.upgradeSubscription(target);
-      }
+      final changed = await ref.read(planSelectorPageCtrlProvider.notifier).changePlan(target);
       if (!mounted) return;
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Subscription updated to ${target[0].toUpperCase()}${target.substring(1)}')),
-      );
+      if (changed) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Subscription updated to ${target[0].toUpperCase()}${target.substring(1)}')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Failed to update plan: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _updatingTo = null);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _subscription == null) {
+    final s = ref.watch(planSelectorPageCtrlProvider);
+    if (s.loading && s.subscription == null) {
       return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
     }
-    if (_error != null && _subscription == null) {
+    if (s.error != null && s.subscription == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text(s.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(
+              onPressed: () => ref.read(planSelectorPageCtrlProvider.notifier).load(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
 
-    final tier = (_subscription?['tier'] ?? _subscription?['subscription_tier'] ?? 'free').toString().toLowerCase();
+    final tier = (s.subscription?['tier'] ?? s.subscription?['subscription_tier'] ?? 'free').toString().toLowerCase();
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -201,8 +168,9 @@ class _PlanSelectorPageState extends State<PlanSelectorPage> {
     required String currentTier,
     bool highlighted = false,
   }) {
+    final st = ref.watch(planSelectorPageCtrlProvider);
     final isCurrent = currentTier == id;
-    final isUpdating = _updatingTo == id;
+    final isUpdating = st.updatingTo == id;
     final creditsLine = creditsPerMonth == 0
         ? '0 credits / mo'
         : '${formatCredits(creditsPerMonth)} credits / mo';

@@ -1,78 +1,62 @@
 // File: projects_list_page.dart
 // Purpose: Neyvo unified – list Studio projects; FAB opens 3-step creation wizard.
-// Surface: studio
-// Connected to: GET /api/studio/projects, POST /api/studio/projects
 
 import 'package:flutter/material.dart';
-import '../neyvo_pulse_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers/studio_projects_list_provider.dart';
 import '../pulse_route_names.dart';
 import 'project_creation_wizard.dart';
 
-class ProjectsListPage extends StatefulWidget {
+class ProjectsListPage extends ConsumerWidget {
   const ProjectsListPage({super.key});
 
   @override
-  State<ProjectsListPage> createState() => _ProjectsListPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(studioProjectsListProvider);
 
-class _ProjectsListPageState extends State<ProjectsListPage> {
-  bool _loading = true;
-  String? _error;
-  List<dynamic> _projects = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final res = await NeyvoPulseApi.listStudioProjects();
-      if (res['ok'] == true && res['projects'] != null) {
-        setState(() { _projects = List<dynamic>.from(res['projects'] as List); _loading = false; });
-      } else {
-        setState(() { _error = res['error'] as String? ?? 'Failed to load'; _loading = false; });
-      }
-    } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Projects')),
-      body: _body(),
+      body: async.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(e.toString(), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => ref.invalidate(studioProjectsListProvider),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+        data: (projects) => _ProjectsBody(projects: projects, ref: ref),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final created = await showDialog<bool>(
             context: context,
             builder: (ctx) => const ProjectCreationWizard(),
           );
-          if (created == true) _load();
+          if (created == true) ref.invalidate(studioProjectsListProvider);
         },
         child: const Icon(Icons.add),
       ),
     );
   }
+}
 
-  Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _load, child: const Text('Retry')),
-          ],
-        ),
-      );
-    }
-    if (_projects.isEmpty) {
+class _ProjectsBody extends StatelessWidget {
+  const _ProjectsBody({required this.projects, required this.ref});
+
+  final List<dynamic> projects;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    if (projects.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -87,7 +71,7 @@ class _ProjectsListPageState extends State<ProjectsListPage> {
                   context: context,
                   builder: (ctx) => const ProjectCreationWizard(),
                 );
-                if (created == true) _load();
+                if (created == true) ref.invalidate(studioProjectsListProvider);
               },
               icon: const Icon(Icons.add),
               label: const Text('Create project'),
@@ -98,9 +82,9 @@ class _ProjectsListPageState extends State<ProjectsListPage> {
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _projects.length,
+      itemCount: projects.length,
       itemBuilder: (context, i) {
-        final p = _projects[i] as Map<String, dynamic>;
+        final p = projects[i] as Map<String, dynamic>;
         final name = p['name'] as String? ?? 'Untitled';
         final id = p['id'] as String? ?? '';
         final type = p['type'] as String? ?? 'tts';
@@ -110,7 +94,6 @@ class _ProjectsListPageState extends State<ProjectsListPage> {
             title: Text(name),
             subtitle: Text(type),
             onTap: () {
-              // Navigate to project detail / script editor when route exists
               Navigator.of(context).pushNamed(PulseRouteNames.projectDetail, arguments: id);
             },
           ),
