@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
@@ -29,8 +28,6 @@ import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_scope.dart';
-import '../tenant/tenant_brand.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
@@ -458,13 +455,12 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     // #endregion
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
-    final tenant = TenantScope.of(context)?.config;
-    final Color sidebarBgColor = tenant?.primaryColor ?? NeyvoColors.sidebarBg;
-    final Color sidebarAccentColor = tenant?.secondaryColor ?? NeyvoColors.ubLightBlue;
+    final Color sidebarBgColor = NeyvoColors.sidebarBg;
+    final Color sidebarAccentColor = Theme.of(context).colorScheme.secondary;
     final Color sidebarSelectedColor = sidebarBgColor.withOpacity(0.85);
     final Color sidebarHoverColor = sidebarBgColor.withOpacity(0.5);
 
-    final brandPrimary = TenantBrand.primary(context);
+    final brandPrimary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
@@ -479,7 +475,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
             ),
             child: Column(
               children: [
-                // Logo area — tenant horizontal logo (white preferred), UB fallback
+                // Logo area
                 Container(
                   height: 64,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -488,45 +484,10 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Builder(
-                      builder: (context) {
-                        
-                        final scope = TenantScope.of(context);
-                        final tenant = scope?.config;
-                        final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
-                        if (logoUrl != null && logoUrl.isNotEmpty) {
-                          final lower = logoUrl.toLowerCase();
-                          if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-                            return Image.network(
-                              logoUrl,
-                              fit: BoxFit.contain,
-                              height: 46,
-                              errorBuilder: (context, _, __) {
-                                final t = TenantScope.of(context)?.config;
-                                return Text(
-                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
-                                  style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            );
-                          } else {
-                            return SvgPicture.network(
-                              logoUrl,
-                              fit: BoxFit.contain,
-                              height: 46,
-                              placeholderBuilder: (_) => const SizedBox(height: 46),
-                            );
-                          }
-                        }
-                        return Text(
-                          (tenant?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (tenant?.schoolName ?? 'Neyvo'),
-                          style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      },
+                    child: Image.asset(
+                      'assets/goodwin_logo/goodwin-horiz-white.png',
+                      height: 36,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
@@ -911,7 +872,7 @@ extension on _PulseShellState {
                           });
                         }
                       },
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.secondary(ctx)),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.secondary),
                 child: working
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Text('Switch'),

@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/neyvo_theme.dart';
-import '../../tenant/tenant_brand.dart';
 import '../../core/providers/agents_provider.dart';
 import '../agents/create_agent_wizard.dart';
 import '../agents/create_first_operator_panel.dart';
@@ -235,7 +234,7 @@ class ManagedProfilesPageState extends ConsumerState<ManagedProfilesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
       body: Column(
@@ -265,7 +264,7 @@ class ManagedProfilesPageState extends ConsumerState<ManagedProfilesPage> {
             child: ref.watch(agentsNotifierProvider).when(
                   data: (data) => _body(data),
                   loading: () => Center(
-                    child: CircularProgressIndicator(color: TenantBrand.primary(context)),
+                    child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
                   ),
                   error: (e, st) => Center(
                     child: Column(
@@ -341,7 +340,7 @@ class ManagedProfilesPageState extends ConsumerState<ManagedProfilesPage> {
                         onTap: () => _openProfileDetail(profileId),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(name, style: NeyvoTextStyles.body.copyWith(color: TenantBrand.primary(context), decoration: TextDecoration.underline)),
+                          child: Text(name, style: NeyvoTextStyles.body.copyWith(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline)),
                         ),
                       ),
                     ),

@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/neyvo_api.dart';
 import 'core/providers/account_provider.dart';
+import 'core/providers/theme_provider.dart';
 import 'core/providers/timezone_provider.dart';
 import 'services/user_timezone_service.dart';
 import 'firebase_options.dart';
@@ -18,8 +19,6 @@ import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
-import 'tenant/tenant_config.dart';
-import 'tenant/tenant_scope.dart';
 import 'theme/neyvo_theme.dart';
 import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
@@ -91,45 +90,32 @@ String get _kFallbackAccountId {
 
     tz.initializeTimeZones();
 
-    // Organization-only theme bootstrap. Avoid tenant endpoint at startup.
-    const tenantConfig = TenantConfig.defaultGoodwin;
-
     runApp(
       ProviderScope(
-        child: NeyvoPulseRoot(tenantConfig: tenantConfig),
+        child: const NeyvoPulseRoot(),
       ),
     );
   }
 
   class NeyvoPulseRoot extends StatelessWidget {
-    final TenantConfig tenantConfig;
-
-    const NeyvoPulseRoot({super.key, required this.tenantConfig});
+    const NeyvoPulseRoot({super.key});
 
     @override
     Widget build(BuildContext context) {
-      return TenantScope(
-        config: tenantConfig,
-        child: const NeyvoPulseApp(),
-      );
+      return const NeyvoPulseApp();
     }
   }
 
-  class NeyvoPulseApp extends StatelessWidget {
+  class NeyvoPulseApp extends ConsumerWidget {
   const NeyvoPulseApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final scope = TenantScope.of(context);
-    final tenant = scope?.config;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(appThemeProvider);
     return MaterialApp(
       title: 'Neyvo',
       debugShowCheckedModeBanner: false,
-      theme: NeyvoThemeData.light(
-        primaryColor: tenant?.primaryColor,
-        secondaryColor: tenant?.secondaryColor ?? tenant?.accentColor,
-        accentColor: tenant?.accentColor,
-      ),
+      theme: theme,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {

@@ -6,7 +6,6 @@ import '../../../core/providers/account_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
@@ -120,7 +119,7 @@ class _LaunchPageState extends ConsumerState<LaunchPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Center(
-        child: CircularProgressIndicator(color: TenantBrand.primary(context)),
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
       );
     }
     if (_error != null) {
@@ -137,7 +136,7 @@ class _LaunchPageState extends ConsumerState<LaunchPage> {
     }
 
     if (_hasFirstCompletedCall) {
-      final primary = TenantBrand.primary(context);
+      final primary = Theme.of(context).colorScheme.primary;
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [

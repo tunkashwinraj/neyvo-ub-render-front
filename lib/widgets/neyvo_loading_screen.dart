@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 
 class NeyvoLoadingScreen extends ConsumerWidget {
   const NeyvoLoadingScreen({super.key});
@@ -53,7 +52,7 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {

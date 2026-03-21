@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/calls_ui_provider.dart';
 import '../../../theme/neyvo_theme.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_history_page.dart';
 import '../../../screens/callbacks_page.dart';
@@ -56,7 +55,7 @@ class _CallsPageState extends ConsumerState<CallsPage> {
   Widget _pill(String label, CallsSection target) {
     final section = ref.watch(callsUiProvider);
     final selected = section == target;
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return InkWell(
       onTap: () => ref.read(callsUiProvider.notifier).select(target),
       borderRadius: BorderRadius.circular(999),

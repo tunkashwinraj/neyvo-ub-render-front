@@ -15,7 +15,6 @@ import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
-import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/csv_import.dart';
 import '../utils/export_csv.dart';
@@ -832,6 +831,18 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   }
 
   void _showCampaignStartResult(Map<String, dynamic> res, {bool isRerun = false}) {
+    final alreadyRunning = res['already_running'] == true ||
+        (res['message']?.toString().toLowerCase().contains('already running') ?? false);
+    if (alreadyRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Campaign is already running.'),
+          backgroundColor: NeyvoTheme.warning,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
     final initiated = res['total_initiated'] ?? 0;
     final failed = res['total_failed'] ?? 0;
     final failureReason = res['failure_reason']?.toString();
@@ -1159,7 +1170,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             actions: [
               TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
                 onPressed: selected.isEmpty ? null : () => Navigator.of(ctx).pop(true),
                 child: const Text('Start'),
               ),
@@ -1305,7 +1316,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Create Campaign'),
               style: FilledButton.styleFrom(
-                backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+                backgroundColor: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(width: NeyvoSpacing.md),
@@ -1352,7 +1363,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             icon: const Icon(Icons.add, size: 20),
             label: const Text('Create Campaign'),
             style: FilledButton.styleFrom(
-              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+              backgroundColor: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
             ),
           ),
           const SizedBox(width: NeyvoSpacing.md),
@@ -1382,7 +1393,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 buttonLabel: 'Create Campaign',
                 onAction: () => setState(() => _showCreateWizard = true),
                 icon: Icons.campaign_outlined,
-                actionButtonColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
+                actionButtonColor: true ? Theme.of(context).colorScheme.primary : null,
               )
             else
               ..._campaigns.map((c) => Card(
@@ -1393,7 +1404,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                       backgroundColor: NeyvoTheme.bgHover,
                       child: Icon(
                         Icons.campaign_outlined,
-                        color: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+                        color: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     title: Text(c['name']?.toString() ?? 'Unnamed', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
@@ -1590,11 +1601,18 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           return sum + (int.tryParse(v?.toString() ?? '') ?? 0);
         });
         final avgCreditsPerCall = calls.isNotEmpty ? (totalCreditsUsed / calls.length) : 0.0;
-        final audienceIds = (c['student_ids'] as List?)
+        final audienceMode = (c['audience_mode'] ?? '').toString().trim().toUpperCase();
+        final manualAudienceIds = (c['manual_student_ids'] as List?)
                 ?.map((e) => (e ?? '').toString())
                 .where((e) => e.isNotEmpty)
                 .toList() ??
             <String>[];
+        final legacyAudienceIds = (c['student_ids'] as List?)
+                ?.map((e) => (e ?? '').toString())
+                .where((e) => e.isNotEmpty)
+                .toList() ??
+            <String>[];
+        final audienceIds = audienceMode == 'MANUAL' ? manualAudienceIds : legacyAudienceIds;
 
         String operatorLabel() {
           final pid = (c['profile_id'] ?? '').toString().trim();
@@ -1628,11 +1646,23 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         }
 
         String audienceSummary() {
-          if (c['student_ids'] != null) {
-            return '${(c['student_ids'] as List).length} contacts selected';
+          if (audienceMode == 'MANUAL') {
+            return '${manualAudienceIds.length} contacts selected';
+          }
+          if (audienceMode == 'FILTERS') {
+            final snapshotSize = asInt(c['snapshot_audience_size'] ?? 0);
+            final planned = asInt(c['total_planned'] ?? 0);
+            final count = snapshotSize > 0 ? snapshotSize : planned;
+            return count > 0 ? 'Filters • $count contacts' : 'Filters audience';
+          }
+          if (manualAudienceIds.isNotEmpty) {
+            return '${manualAudienceIds.length} contacts selected';
+          }
+          if (legacyAudienceIds.isNotEmpty) {
+            return '${legacyAudienceIds.length} contacts selected';
           }
           if (c['filters'] != null) {
-            return 'Filters: ${c['filters']?.toString() ?? '—'}';
+            return 'Filters audience';
           }
           return '—';
         }
@@ -1771,9 +1801,9 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 Material(
                   color: NeyvoTheme.bgSurface,
                   child: TabBar(
-                    labelColor: TenantBrand.primary(context),
+                    labelColor: Theme.of(context).colorScheme.primary,
                     unselectedLabelColor: NeyvoTheme.textSecondary,
-                    indicatorColor: TenantBrand.primary(context),
+                    indicatorColor: Theme.of(context).colorScheme.primary,
                     tabs: const [
                       Tab(text: 'Overview'),
                       Tab(text: 'Actions'),
@@ -1880,7 +1910,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                             value: progress,
                             minHeight: 10,
                             backgroundColor: NeyvoTheme.bgHover,
-                            valueColor: AlwaysStoppedAnimation<Color>(TenantBrand.primary(context)),
+                            valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -2056,7 +2086,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                         return NeyvoTheme.error;
                       case 'in_progress':
                       case 'dialing':
-                        return TenantBrand.primary(context);
+                        return Theme.of(context).colorScheme.primary;
                       case 'retry_wait':
                         return NeyvoTheme.warning;
                       default:
@@ -2166,7 +2196,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                         color: NeyvoTheme.bgCard,
                         margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),
                         child: ListTile(
-                          leading: Icon(Icons.phone_outlined, color: TenantBrand.primary(context)),
+                          leading: Icon(Icons.phone_outlined, color: Theme.of(context).colorScheme.primary),
                           title: Text(call['student_name']?.toString() ?? '—', style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
                           subtitle: Text('${call['student_phone'] ?? '—'} • ${call['status'] ?? '—'}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
                           trailing: Text(formatDate(call['created_at']), style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary)),
@@ -2334,7 +2364,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                   icon: const Icon(Icons.play_arrow, size: 20),
                   label: const Text('Start campaign'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: TenantBrand.primary(context),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -2494,7 +2524,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                               final selectionKey = vapiId.isNotEmpty ? vapiId : 'item:${it['id'] ?? index}';
                               final isSelected = selectedVapiCallId == selectionKey;
                               return Material(
-                                color: isSelected ? TenantBrand.primary(context).withValues(alpha: 0.15) : Colors.transparent,
+                                color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15) : Colors.transparent,
                                 child: InkWell(
                                   onTap: () => onSelectVapiCallId(selectionKey),
                                   child: Padding(
@@ -2673,7 +2703,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                   },
                   icon: const Icon(Icons.open_in_new, size: 18),
                   label: const Text('View full call details'),
-                  style: TextButton.styleFrom(foregroundColor: TenantBrand.primary(context)),
+                  style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary),
                 ),
               ],
             ),
@@ -2999,13 +3029,13 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 return Expanded(
                   child: Row(
                     children: [
-                      if (i > 0) Expanded(child: Divider(color: done ? TenantBrand.primary(context) : NeyvoTheme.border)),
+                      if (i > 0) Expanded(child: Divider(color: done ? Theme.of(context).colorScheme.primary : NeyvoTheme.border)),
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: active ? TenantBrand.primary(context) : (done ? TenantBrand.primary(context) : NeyvoTheme.bgCard),
+                        backgroundColor: active ? Theme.of(context).colorScheme.primary : (done ? Theme.of(context).colorScheme.primary : NeyvoTheme.bgCard),
                         child: Text('${i + 1}', style: TextStyle(color: active || done ? NeyvoColors.white : NeyvoTheme.textMuted, fontSize: 12)),
                       ),
-                      if (i < steps.length - 1) Expanded(child: Divider(color: done ? TenantBrand.primary(context) : NeyvoTheme.border)),
+                      if (i < steps.length - 1) Expanded(child: Divider(color: done ? Theme.of(context).colorScheme.primary : NeyvoTheme.border)),
                     ],
                   ),
                 );
@@ -3038,7 +3068,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                     }
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : TenantBrand.primary(context),
+                    backgroundColor: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
                   ),
                   child: Text(_wizardStep == steps.length - 1
                       ? (_editingCampaignId != null ? 'Save changes' : 'Create campaign')
@@ -3096,12 +3126,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'contact_list'
-                              ? TenantBrand.primary(context)
+                              ? Theme.of(context).colorScheme.primary
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'contact_list'
-                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -3109,7 +3139,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                           'From Contact List',
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'contact_list'
-                                ? TenantBrand.primary(context)
+                                ? Theme.of(context).colorScheme.primary
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -3129,12 +3159,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'filters'
-                              ? TenantBrand.primary(context)
+                              ? Theme.of(context).colorScheme.primary
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'filters'
-                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -3142,7 +3172,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                           'Smart Filter',
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'filters'
-                                ? TenantBrand.primary(context)
+                                ? Theme.of(context).colorScheme.primary
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -3161,12 +3191,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: _audienceMode == 'excel'
-                              ? TenantBrand.primary(context)
+                              ? Theme.of(context).colorScheme.primary
                               : NeyvoTheme.border,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color: _audienceMode == 'excel'
-                            ? TenantBrand.primary(context).withValues(alpha: 0.1)
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                             : null,
                       ),
                       child: Center(
@@ -3175,7 +3205,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                           textAlign: TextAlign.center,
                           style: NeyvoType.bodyMedium.copyWith(
                             color: _audienceMode == 'excel'
-                                ? TenantBrand.primary(context)
+                                ? Theme.of(context).colorScheme.primary
                                 : NeyvoTheme.textSecondary,
                           ),
                         ),
@@ -3231,7 +3261,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${_previewAudienceCount!} students match these filters', style: NeyvoType.titleMedium.copyWith(color: TenantBrand.primary(context))),
+                        Text('${_previewAudienceCount!} students match these filters', style: NeyvoType.titleMedium.copyWith(color: Theme.of(context).colorScheme.primary)),
                         if (_previewAudienceSample.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           ..._previewAudienceSample.take(3).map((s) => Text('• ${s['name'] ?? '—'} ${s['phone'] ?? ''}', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary))),
@@ -3377,7 +3407,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                           onPressed: () => Navigator.pushNamed(context, PulseRouteNames.students),
                           icon: const Icon(Icons.people, size: 20),
                           label: const Text('Go to Contacts'),
-                          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+                          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
                         ),
                       ],
                     ),

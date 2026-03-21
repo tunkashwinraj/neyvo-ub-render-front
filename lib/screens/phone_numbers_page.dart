@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
 import '../core/providers/numbers_provider.dart';
-import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
@@ -229,7 +228,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: importing ? null : () => submit(setInner),
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                 icon: importing
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
                     : const Icon(Icons.upload, size: 18),
@@ -282,7 +281,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
   @override
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(numbersNotifierProvider);
-    final primaryColor = TenantBrand.primary(context);
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return asyncValue.when(
       data: (data) => RefreshIndicator(
         onRefresh: _load,
@@ -343,7 +342,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.call, color: TenantBrand.primary(context)),
+              Icon(Icons.call, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 10),
               Text('Primary number', style: NeyvoTextStyles.heading),
             ],
@@ -373,7 +372,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.grid_view_outlined, color: TenantBrand.primary(context)),
+              Icon(Icons.grid_view_outlined, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 10),
               Text('Production numbers', style: NeyvoTextStyles.heading),
               const Spacer(),
@@ -509,7 +508,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
           ),
           if (isAttaching) ...[
             const SizedBox(height: 10),
-            LinearProgressIndicator(minHeight: 3, color: TenantBrand.primary(context), backgroundColor: NeyvoColors.bgBase),
+            LinearProgressIndicator(minHeight: 3, color: Theme.of(context).colorScheme.primary, backgroundColor: NeyvoColors.bgBase),
           ],
         ],
       ),

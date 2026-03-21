@@ -16,7 +16,6 @@ import '../core/providers/students_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
@@ -34,7 +33,7 @@ class _StudentsHubPageState extends ConsumerState<StudentsHubPage> {
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(studentsNotifierProvider);
     final tab = ref.watch(studentsHubTabProvider);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return asyncValue.when(
       data: (_) => Scaffold(
         appBar: AppBar(
@@ -738,8 +737,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       icon: const Icon(Icons.person_add_rounded, size: 20),
                       label: const Text('Add student'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: TenantBrand.isGoodwin(context)
-                            ? TenantBrand.primary(context)
+                        backgroundColor: true
+                            ? Theme.of(context).colorScheme.primary
                             : NeyvoColors.ubPurple,
                         foregroundColor: NeyvoColors.white,
                         padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: 14),
@@ -1931,7 +1930,7 @@ class _SyncTabState extends State<_SyncTab> {
 
   Widget _modeChip(String key, String label) {
     final selected = _modes.contains(key);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return FilterChip(
       selected: selected,
       label: Text(label),

@@ -5,7 +5,6 @@ import '../../../core/providers/billing_provider.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../../utils/payment_result_dialog.dart';
 import '../../../utils/payment_pending_storage.dart';
 import '../../components/billing/credits_info_icon.dart';
@@ -63,7 +62,7 @@ class _BillingPageState extends ConsumerState<BillingPage> {
   @override
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(billingNotifierProvider);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return asyncValue.when(
       data: (data) => _billingContent(context, data, primary),
       loading: () => Center(child: CircularProgressIndicator(color: primary)),

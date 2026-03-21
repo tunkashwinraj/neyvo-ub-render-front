@@ -1,15 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../neyvo_pulse_api.dart';
-import '../../pulse_route_names.dart';
-import '../../screens/pulse_shell.dart';
-import '../../tenant/tenant_brand.dart';
 import '../../theme/neyvo_theme.dart';
-import 'managed_profile_api_service.dart';
+import 'raw_assistant_detail_provider.dart';
 
-class RawAssistantDetailPage extends StatefulWidget {
+class RawAssistantDetailPage extends ConsumerStatefulWidget {
   const RawAssistantDetailPage({
     super.key,
     required this.profileId,
@@ -20,19 +15,13 @@ class RawAssistantDetailPage extends StatefulWidget {
   final bool embedded;
 
   @override
-  State<RawAssistantDetailPage> createState() => _RawAssistantDetailPageState();
+  ConsumerState<RawAssistantDetailPage> createState() => _RawAssistantDetailPageState();
 }
 
-class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
+class _RawAssistantDetailPageState extends ConsumerState<RawAssistantDetailPage>
     with SingleTickerProviderStateMixin {
-  bool _loading = true;
-  String? _error;
-  bool _saving = false;
-
-  Map<String, dynamic> _profile = const {};
-  Map<String, dynamic> _rawConfig = const {};
-
   late TabController _tabs;
+  String? _syncSignature;
 
   final _nameCtrl = TextEditingController();
   final _systemPromptCtrl = TextEditingController();
@@ -43,7 +32,6 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-    _load();
   }
 
   @override
@@ -56,79 +44,42 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ManagedProfileApiService.getProfile(widget.profileId);
-      final profile = Map<String, dynamic>.from(res);
-      final rawCfg = Map<String, dynamic>.from(
-        (profile['raw_vapi_config'] as Map?) ?? const <String, dynamic>{},
-      );
-
-      // Populate basic fields.
-      final name = (profile['profile_name'] ?? profile['name'] ?? '').toString();
-      _nameCtrl.text = name;
-      final model = (rawCfg['model'] as Map?) ?? const {};
-      final messages = (model['messages'] as List?) ?? const [];
-      if (messages.isNotEmpty && messages.first is Map && (messages.first['role'] ?? '').toString().toLowerCase() == 'system') {
-        _systemPromptCtrl.text = (messages.first['content'] ?? '').toString();
-      } else {
-        _systemPromptCtrl.text = (profile['custom_system_prompt'] ?? '').toString();
-      }
-      _voicemailCtrl.text = (rawCfg['voicemailMessage'] ?? profile['voicemail_message'] ?? '').toString();
-
-      if (!mounted) return;
-      setState(() {
-        _profile = profile;
-        _rawConfig = rawCfg;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+  void _syncControllersFromState(RawAssistantDetailUiState ui) {
+    if (ui.loading) return;
+    final profile = ui.profile;
+    final rawCfg = ui.rawConfig;
+    final sig = '${profile['updated_at'] ?? profile['id'] ?? ''}|${rawCfg.hashCode}';
+    if (_syncSignature == sig) return;
+    _syncSignature = sig;
+    final name = (profile['profile_name'] ?? profile['name'] ?? '').toString();
+    _nameCtrl.text = name;
+    final model = (rawCfg['model'] as Map?) ?? const {};
+    final messages = (model['messages'] as List?) ?? const [];
+    if (messages.isNotEmpty &&
+        messages.first is Map &&
+        (messages.first['role'] ?? '').toString().toLowerCase() == 'system') {
+      _systemPromptCtrl.text = (messages.first['content'] ?? '').toString();
+    } else {
+      _systemPromptCtrl.text = (profile['custom_system_prompt'] ?? '').toString();
     }
+    _voicemailCtrl.text = (rawCfg['voicemailMessage'] ?? profile['voicemail_message'] ?? '').toString();
   }
 
   Future<void> _save() async {
-    if (_saving) return;
-    setState(() => _saving = true);
+    final ui = ref.read(rawAssistantDetailCtrlProvider(widget.profileId));
+    if (ui.saving) return;
     try {
-      // Start from current raw config and apply edits.
-      final cfg = jsonDecode(jsonEncode(_rawConfig)) as Map<String, dynamic>;
-      cfg['name'] = _nameCtrl.text.trim().isEmpty ? (cfg['name'] ?? 'Operator') : _nameCtrl.text.trim();
-      cfg['voicemailMessage'] = _voicemailCtrl.text.trim();
-      final model = (cfg['model'] as Map?) ?? <String, dynamic>{};
-      final messages = (model['messages'] as List?)?.toList() ?? <dynamic>[];
-      if (messages.isEmpty || messages.first is! Map || ((messages.first as Map)['role'] ?? '').toString().toLowerCase() != 'system') {
-        messages.insert(0, {'role': 'system', 'content': _systemPromptCtrl.text.trim()});
-      } else {
-        (messages.first as Map)['content'] = _systemPromptCtrl.text.trim();
-      }
-      model['messages'] = messages;
-      cfg['model'] = model;
-
-      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, {
-        'profile_name': _nameCtrl.text.trim(),
-        'raw_vapi_import': cfg,
-      });
+      await ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).save(
+            name: _nameCtrl.text,
+            systemPrompt: _systemPromptCtrl.text,
+            voicemail: _voicemailCtrl.text,
+          );
       if (!mounted) return;
-      setState(() {
-        _profile = updated;
-        _rawConfig = Map<String, dynamic>.from(updated['raw_vapi_config'] as Map? ?? cfg);
-        _saving = false;
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Assistant saved and synced to Vapi.')),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
@@ -143,29 +94,17 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
       );
       return;
     }
-    if (_saving) return;
-    setState(() => _saving = true);
+    final ui = ref.read(rawAssistantDetailCtrlProvider(widget.profileId));
+    if (ui.saving) return;
     try {
-      final parsed = jsonDecode(raw);
-      if (parsed is! Map<String, dynamic>) {
-        throw const FormatException('JSON must be an object');
-      }
-      final updated = await ManagedProfileApiService.updateProfile(widget.profileId, {
-        'raw_vapi_import': parsed,
-      });
+      await ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).importJson(raw);
       if (!mounted) return;
-      setState(() {
-        _profile = updated;
-        _rawConfig = Map<String, dynamic>.from(updated['raw_vapi_config'] as Map? ?? parsed);
-        _saving = false;
-      });
       _jsonImportCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Imported JSON and replaced assistant in Vapi.')),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Invalid JSON or failed to import: $e')),
       );
@@ -174,19 +113,25 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final title = _nameCtrl.text.trim().isEmpty ? 'Raw assistant' : _nameCtrl.text.trim();
-    final primary = TenantBrand.primary(context);
+    final ui = ref.watch(rawAssistantDetailCtrlProvider(widget.profileId));
+    _syncControllersFromState(ui);
+    final profile = ui.profile;
+    final rawConfig = ui.rawConfig;
+    final primary = Theme.of(context).colorScheme.primary;
 
-    final inner = _loading
+    final inner = ui.loading
         ? Center(child: CircularProgressIndicator(color: primary))
-        : _error != null
+        : ui.error != null
             ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+                    Text(ui.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
                     const SizedBox(height: 16),
-                    TextButton(onPressed: _load, child: const Text('Retry')),
+                    TextButton(
+                      onPressed: () => ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).load(),
+                      child: const Text('Retry'),
+                    ),
                   ],
                 ),
               )
@@ -197,20 +142,26 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            title,
-                            style: NeyvoTextStyles.heading.copyWith(fontSize: 20, fontWeight: FontWeight.w800),
-                            overflow: TextOverflow.ellipsis,
+                          child: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _nameCtrl,
+                            builder: (context, value, _) {
+                              final title = value.text.trim().isEmpty ? 'Raw assistant' : value.text.trim();
+                              return Text(
+                                title,
+                                style: NeyvoTextStyles.heading.copyWith(fontSize: 20, fontWeight: FontWeight.w800),
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: _saving ? null : _save,
+                          onPressed: ui.saving ? null : _save,
                           style: FilledButton.styleFrom(
                             backgroundColor: primary,
                             foregroundColor: NeyvoColors.white,
                           ),
-                          child: _saving
+                          child: ui.saving
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -228,7 +179,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
                       runSpacing: 8,
                       children: [
                         _detailChip('Operator ID', widget.profileId),
-                        _detailChip('VAPI Assistant ID', (_profile['vapi_assistant_id'] ?? '—').toString()),
+                        _detailChip('VAPI Assistant ID', (profile['vapi_assistant_id'] ?? '—').toString()),
                       ],
                     ),
                   ),
@@ -253,8 +204,8 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
                       controller: _tabs,
                       children: [
                         _tabPersonality(),
-                        _tabVoice(),
-                        _tabSettings(),
+                        _tabVoice(rawConfig),
+                        _tabSettings(profile, ui.saving),
                       ],
                     ),
                   ),
@@ -271,7 +222,13 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
           icon: const Icon(Icons.arrow_back, color: NeyvoColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(title, style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary)),
+        title: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _nameCtrl,
+          builder: (context, value, _) {
+            final title = value.text.trim().isEmpty ? 'Raw assistant' : value.text.trim();
+            return Text(title, style: NeyvoTextStyles.title.copyWith(color: NeyvoColors.textPrimary));
+          },
+        ),
       ),
       body: inner,
     );
@@ -304,7 +261,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
         TextField(
           controller: _nameCtrl,
           decoration: const InputDecoration(hintText: 'e.g. Maria (SNAP E&T)'),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) {},
         ),
         const SizedBox(height: 16),
         Text('System prompt', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
@@ -344,18 +301,16 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
   };
 
   void _resetVoiceToDefault() {
-    setState(() {
-      final cfg = Map<String, dynamic>.from(_rawConfig);
-      cfg['voice'] = Map<String, dynamic>.from(_defaultVoiceConfig);
-      _rawConfig = cfg;
-    });
+    final cfg = Map<String, dynamic>.from(ref.read(rawAssistantDetailCtrlProvider(widget.profileId)).rawConfig);
+    cfg['voice'] = Map<String, dynamic>.from(_defaultVoiceConfig);
+    ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).replaceRawConfig(cfg);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Voice reset to default. Tap Save to apply.')),
     );
   }
 
-  Widget _tabVoice() {
-    final voice = (_rawConfig['voice'] as Map?) ?? const {};
+  Widget _tabVoice(Map<String, dynamic> rawConfig) {
+    final voice = (rawConfig['voice'] as Map?) ?? const {};
     final provider = (voice['provider'] ?? '').toString();
     final voiceId = (voice['voiceId'] ?? '').toString();
     final model = (voice['model'] ?? '').toString();
@@ -409,15 +364,9 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
               Checkbox(
                 value: chunkEnabled,
                 onChanged: (v) {
-                  setState(() {
-                    final cfg = Map<String, dynamic>.from(_rawConfig);
-                    final voiceCfg = Map<String, dynamic>.from((cfg['voice'] as Map?) ?? const {});
-                    final cp = Map<String, dynamic>.from((voiceCfg['chunkPlan'] as Map?) ?? const {});
-                    cp['enabled'] = v ?? true;
-                    voiceCfg['chunkPlan'] = cp;
-                    cfg['voice'] = voiceCfg;
-                    _rawConfig = cfg;
-                  });
+                  ref
+                      .read(rawAssistantDetailCtrlProvider(widget.profileId).notifier)
+                      .setVoiceChunkEnabled(v ?? true);
                 },
               ),
             ],
@@ -425,15 +374,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
         ),
         _voiceField('Min characters per chunk', minChars, (v) {
           final val = int.tryParse(v);
-          setState(() {
-            final cfg = Map<String, dynamic>.from(_rawConfig);
-            final voiceCfg = Map<String, dynamic>.from((cfg['voice'] as Map?) ?? const {});
-            final cp = Map<String, dynamic>.from((voiceCfg['chunkPlan'] as Map?) ?? const {});
-            if (val != null) cp['minCharacters'] = val;
-            voiceCfg['chunkPlan'] = cp;
-            cfg['voice'] = voiceCfg;
-            _rawConfig = cfg;
-          });
+          ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).setVoiceMinCharacters(val);
         }),
       ],
     );
@@ -466,7 +407,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
     );
   }
 
-  Widget _tabSettings() {
+  Widget _tabSettings(Map<String, dynamic> profile, bool saving) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -494,8 +435,8 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
         SizedBox(
           width: double.infinity,
           child: FilledButton.tonal(
-            onPressed: _saving ? null : _importJson,
-            child: _saving
+            onPressed: saving ? null : _importJson,
+            child: saving
                 ? const SizedBox(
                     height: 20,
                     width: 20,
@@ -511,7 +452,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
         ),
         const SizedBox(height: 8),
         Text(
-          'Assistant ID: ${(_profile['vapi_assistant_id'] ?? '').toString()}',
+          'Assistant ID: ${(profile['vapi_assistant_id'] ?? '').toString()}',
           style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
         ),
       ],
@@ -519,13 +460,7 @@ class _RawAssistantDetailPageState extends State<RawAssistantDetailPage>
   }
 
   void _updateVoiceField(String key, dynamic value) {
-    setState(() {
-      final cfg = Map<String, dynamic>.from(_rawConfig);
-      final voiceCfg = Map<String, dynamic>.from((cfg['voice'] as Map?) ?? const {});
-      voiceCfg[key] = value;
-      cfg['voice'] = voiceCfg;
-      _rawConfig = cfg;
-    });
+    ref.read(rawAssistantDetailCtrlProvider(widget.profileId).notifier).updateVoiceField(key, value);
   }
 }
 

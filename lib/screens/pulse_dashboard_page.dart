@@ -12,8 +12,6 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
-import '../tenant/tenant_scope.dart';
 import '../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
@@ -575,7 +573,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
+      return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
     }
     if (_error != null) {
       return Center(
@@ -590,14 +588,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       );
     }
 
-    final tenant = TenantScope.of(context)?.config;
-    // Treat Goodwin as the current tenant either when the tenant scope says so,
-    // or when we are running on the Goodwin domain (defensive fallback in case
-    // tenant resolution fails on the frontend).
-    final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-    final host = kIsWeb ? Uri.base.host.toLowerCase() : '';
-    final isGoodwinTenant =
-        tenantId == 'goodwin' || host.startsWith('goodwin.') || host.contains('.goodwin.');
+    final isGoodwinTenant = true;
     final ubReady = _ubStatus == 'ready';
 
     // Keep the dedicated "create first operator" experience only for UB.
@@ -661,7 +652,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
                                     }
                                   },
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
+                                    backgroundColor: i == 0 ? Theme.of(context).colorScheme.primary : NeyvoColors.bgRaised,
                                     foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
                                     padding: const EdgeInsets.symmetric(vertical: 14),
                                   ),
@@ -726,7 +717,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   }
 
   Widget _buildHeroSection(BuildContext context, NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
-    final tenant = TenantScope.of(context)?.config;
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
         (_perf?['total_calls'] as num?)?.toInt() ??
         _recentCalls.length;
@@ -761,14 +751,10 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       ),
     );
 
-    final schoolName = (tenant?.schoolName ?? 'University of Bridgeport').trim().isEmpty
-        ? 'University of Bridgeport'
-        : tenant!.schoolName!;
+    final schoolName = 'Neyvo';
     final heroTitle = '$schoolName Voice OS';
 
-    final modelLabelPrefix = (tenant?.tenantId ?? '').trim().isEmpty
-        ? 'UB'
-        : tenant!.tenantId!.toUpperCase();
+    final modelLabelPrefix = 'NEYVO';
 
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),

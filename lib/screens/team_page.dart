@@ -9,7 +9,6 @@ import '../core/providers/account_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import 'member_detail_page.dart';
 
 /// Fixed width for Add/Edit team member dialogs (same for admin and staff).
@@ -152,7 +151,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Team'),
@@ -306,7 +305,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
                                       child: Row(
                                         children: [
                                           CircleAvatar(
-                                            backgroundColor: TenantBrand.primary(context)
+                                            backgroundColor: Theme.of(context).colorScheme.primary
                                                 .withOpacity(0.1),
                                             child: Text(
                                               display.isNotEmpty
@@ -314,7 +313,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
                                                       .toUpperCase()
                                                   : '?',
                                               style: TextStyle(
-                                                color: TenantBrand.primary(context),
+                                                color: Theme.of(context).colorScheme.primary,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -364,7 +363,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       floatingActionButton: _canAddMember
           ? FloatingActionButton(
               onPressed: _openAddMember,
-              backgroundColor: TenantBrand.primary(context),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               child: const Icon(Icons.add),
             )
           : null,
@@ -624,7 +623,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
+                      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -650,7 +649,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
           child: const Text('Add'),
         ),
       ],
@@ -922,7 +921,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
+                      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -948,7 +947,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
           child: const Text('Save'),
         ),
       ],

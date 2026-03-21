@@ -10,7 +10,6 @@ import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import '../widgets/neyvo_empty_state.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/export_csv.dart';
@@ -273,7 +272,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     if (_loading && _overview == null) {
       return buildNeyvoLoadingState();
     }

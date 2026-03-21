@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/dialer_page_provider.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/phone_util.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
@@ -41,7 +40,7 @@ class _DialerPageState extends ConsumerState<DialerPage> {
   @override
   Widget build(BuildContext context) {
     final d = ref.watch(dialerPageCtrlProvider);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     if (d.loading) {
       return Center(child: CircularProgressIndicator(color: primary));
     }

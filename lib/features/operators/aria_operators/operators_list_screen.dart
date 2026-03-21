@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../pulse_route_names.dart';
 import 'aria_operator_providers.dart';
+import 'operators_create_screen.dart';
 
 Color _industryColor(String industry) {
   final i = industry.toLowerCase();
@@ -27,6 +28,11 @@ class OperatorsListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Operators'),
         actions: [
+          IconButton(
+            tooltip: 'Create ARIA operator (popup)',
+            onPressed: () => _openAriaCreatePopup(context),
+            icon: const Icon(Icons.mic_external_on_outlined),
+          ),
           IconButton(
             tooltip: 'Create new operator',
             onPressed: () {
@@ -64,6 +70,12 @@ class OperatorsListScreen extends ConsumerWidget {
                         Navigator.pushNamed(context, PulseRouteNames.operatorsNew);
                       },
                       child: const Text('Create new operator'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _openAriaCreatePopup(context),
+                      icon: const Icon(Icons.mic_external_on_outlined),
+                      label: const Text('Create with ARIA (Popup)'),
                     ),
                   ],
                 ),
@@ -186,6 +198,26 @@ class OperatorsListScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+void _openAriaCreatePopup(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: SizedBox(
+          width: 1100,
+          height: 760,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: const OperatorsCreateScreen(),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _LoadingGrid extends StatelessWidget {

@@ -4,14 +4,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api/neyvo_api.dart';
 import '../core/providers/account_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
-import '../tenant/tenant_scope.dart';
-import '../tenant/tenant_brand.dart';
 
 class PulseAuthPage extends ConsumerStatefulWidget {
   const PulseAuthPage({super.key});
@@ -233,8 +230,7 @@ class _PulseAuthPageState extends ConsumerState<PulseAuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tenant = TenantScope.of(context)?.config;
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
@@ -259,50 +255,12 @@ class _PulseAuthPageState extends ConsumerState<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    if (tenant?.logoHorizontalColorUrl != null &&
-                        tenant!.logoHorizontalColorUrl!.isNotEmpty)
-                      Builder(
-                        builder: (context) {
-                          final url = tenant.logoHorizontalColorUrl!;
-                          final lower = url.toLowerCase();
-                          if (lower.endsWith('.png') ||
-                              lower.endsWith('.jpg') ||
-                              lower.endsWith('.jpeg')) {
-                            return Image.network(
-                              url,
-                              fit: BoxFit.contain,
-                              height: 58,
-                              errorBuilder: (context, _, __) {
-                                final t = TenantScope.of(context)?.config;
-                                return Text(
-                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
-                                  style: NeyvoType.headlineMediumLight.copyWith(color: primary),
-                                  textAlign: TextAlign.center,
-                                );
-                              },
-                            );
-                          } else {
-                            return SvgPicture.network(
-                              url,
-                              fit: BoxFit.contain,
-                              height: 58,
-                              placeholderBuilder: (_) => const SizedBox(height: 58),
-                            );
-                          }
-                        },
-                      )
-                    else
-                      Text(
-                        (tenant?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (tenant?.schoolName ?? 'Neyvo'),
-                        style: NeyvoType.headlineMediumLight.copyWith(color: primary),
-                        textAlign: TextAlign.center,
-                      ),
-                    const SizedBox(height: NeyvoSpacing.xl),
-                    Text(
-                      'Neyvo',
-                      style: NeyvoType.displayLargeLight,
-                      textAlign: TextAlign.center,
+                    Image.asset(
+                      'assets/goodwin_logo/goodwin-horiz-rgb.png',
+                      height: 72,
+                      fit: BoxFit.contain,
                     ),
+                    const SizedBox(height: NeyvoSpacing.lg),
                     const SizedBox(height: NeyvoSpacing.sm),
                     Text(
                       'Sign in to access your voice intelligence platform.',
