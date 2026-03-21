@@ -4,23 +4,24 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/neyvo_api.dart';
+import '../core/providers/students_list_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
-import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import 'student_detail_page.dart';
 
-class StudentsListPage extends StatefulWidget {
+class StudentsListPage extends ConsumerStatefulWidget {
   const StudentsListPage({super.key});
 
   @override
-  State<StudentsListPage> createState() => _StudentsListPageState();
+  ConsumerState<StudentsListPage> createState() => _StudentsListPageState();
 }
 
-class _StudentsListPageState extends State<StudentsListPage> with SingleTickerProviderStateMixin {
+class _StudentsListPageState extends ConsumerState<StudentsListPage> with SingleTickerProviderStateMixin {
   List<dynamic> _allStudents = [];
   List<dynamic> _filteredStudents = [];
   bool _loading = true;
@@ -40,10 +41,11 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_filterStudents);
+    _searchController.addListener(() {
+      ref.read(studentsListCtrlProvider.notifier).setSearchQuery(_searchController.text);
+    });
     _subTabController = TabController(length: 2, vsync: this);
     _subTabController.addListener(() => setState(() {}));
-    _load();
   }
 
   @override
@@ -53,70 +55,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     super.dispose();
   }
 
-  Future<void> _loadReminders() async {
-    setState(() => _remindersLoading = true);
-    try {
-      final res = await NeyvoPulseApi.listReminders();
-      if (mounted) setState(() {
-        _reminders = res['reminders'] as List? ?? res['data'] as List? ?? [];
-        _remindersLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() { _reminders = []; _remindersLoading = false; });
-    }
-  }
+  Future<void> _loadReminders() => ref.read(studentsListCtrlProvider.notifier).loadReminders();
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final agentsRes = await NeyvoPulseApi.listAgents();
-      final agents = (agentsRes['agents'] as List? ?? []).cast<Map<String, dynamic>>();
-      final isEducation = agents.any((a) =>
-          (a['industry']?.toString().toLowerCase() ?? '') == 'education');
-      final firstAgentId = agents.isNotEmpty ? (agents.first['id'] ?? agents.first['agent_id'])?.toString() : null;
-
-      bool? hasBalance;
-      bool? isOverdue;
-      String? dueAfter;
-      String? dueBefore;
-      if (isEducation && _filterStatus != 'all') {
-        if (_filterStatus == 'with_balance') hasBalance = true;
-        else if (_filterStatus == 'overdue') isOverdue = true;
-        else if (_filterStatus == 'due_this_week') {
-          final now = DateTime.now();
-          dueAfter = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-          final end = now.add(const Duration(days: 7));
-          dueBefore = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
-        } else if (_filterStatus == 'no_balance') hasBalance = false;
-      }
-      final res = await NeyvoPulseApi.listStudents(
-        hasBalance: hasBalance,
-        isOverdue: isOverdue,
-        dueAfter: dueAfter,
-        dueBefore: dueBefore,
-      );
-      final list = res['students'] as List? ?? [];
-      if (mounted) {
-        setState(() {
-          _isEducationOrg = isEducation;
-          _agents = agents;
-          _selectedAgentId ??= (firstAgentId?.trim().isEmpty ?? true) ? null : firstAgentId?.trim();
-          _allStudents = list;
-          _filteredStudents = list;
-          _loading = false;
-        });
-        _filterStudents();
-      }
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
+  Future<void> _load() => ref.read(studentsListCtrlProvider.notifier).load();
 
   static bool _isOverdue(Map<String, dynamic> s) {
     final dueStr = s['due_date']?.toString().trim() ?? '';
@@ -149,61 +90,17 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     return balance.isNotEmpty && balance != '0';
   }
 
-  void _filterStudents() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredStudents = _allStudents.where((s) {
-        final name = (s['name']?.toString() ?? '').toLowerCase();
-        final first = (s['first_name']?.toString() ?? '').toLowerCase();
-        final last = (s['last_name']?.toString() ?? '').toLowerCase();
-        final combined = ('$first $last').trim();
-        final phone = (s['phone']?.toString() ?? '').toLowerCase();
-        final email = (s['email']?.toString() ?? '').toLowerCase();
-        final studentId = (s['student_id']?.toString() ?? '').toLowerCase();
-        final dept = (s['department']?.toString() ?? '').toLowerCase();
-        final year = (s['year_of_study']?.toString() ?? '').toLowerCase();
-        final matchesSearch = query.isEmpty ||
-            name.contains(query) ||
-            first.contains(query) ||
-            last.contains(query) ||
-            combined.contains(query) ||
-            phone.contains(query) ||
-            email.contains(query) ||
-            studentId.contains(query) ||
-            dept.contains(query) ||
-            year.contains(query);
-        if (!matchesSearch) return false;
+  void _filterStudents() =>
+      ref.read(studentsListCtrlProvider.notifier).setSearchQuery(_searchController.text);
 
-        if (_filterStatus == 'all') return true;
-        if (_filterStatus == 'with_balance') return _hasBalance(s);
-        if (_filterStatus == 'overdue') return _isOverdue(s);
-        if (_filterStatus == 'due_this_week') return _isDueThisWeek(s);
-        if (_filterStatus == 'no_balance') return !_hasBalance(s);
-        return true;
-      }).toList();
-    });
-  }
+  void _toggleSelection(String id) => ref.read(studentsListCtrlProvider.notifier).toggleSelection(id);
 
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-      } else {
-        _selectedIds.add(id);
-      }
-    });
-  }
-
-  void _exitSelectionMode() {
-    setState(() {
-      _selectionMode = false;
-      _selectedIds.clear();
-    });
-  }
+  void _exitSelectionMode() => ref.read(studentsListCtrlProvider.notifier).clearSelection();
 
   List<Map<String, dynamic>> _getSelectedStudents() {
-    return _filteredStudents
-        .where((s) => _selectedIds.contains(s['id']?.toString()))
+    final ui = ref.read(studentsListCtrlProvider);
+    return ui.filteredStudents
+        .where((s) => ui.selectedIds.contains(s['id']?.toString()))
         .map((s) => s as Map<String, dynamic>)
         .toList();
   }
@@ -354,6 +251,13 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _allStudents = ui.allStudents;
+    final _filteredStudents = ui.filteredStudents;
+    final _loading = ui.loading;
+    final _error = ui.error;
+    final _selectionMode = ui.selectionMode;
+    final _selectedIds = ui.selectedIds;
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -410,7 +314,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 ),
                 IconButton(
                   icon: const Icon(Icons.checklist),
-                  onPressed: () => setState(() => _selectionMode = true),
+                  onPressed: () => ref.read(studentsListCtrlProvider.notifier).setSelectionMode(true),
                   tooltip: 'Select contacts',
                 ),
               ],
@@ -425,7 +329,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
       floatingActionButton: _selectionMode ? null : (_subTabController.index == 0
           ? FloatingActionButton(
               onPressed: _openAddStudent,
-              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
+              backgroundColor: true ? Theme.of(context).colorScheme.primary : null,
               child: const Icon(Icons.add),
             )
           : FloatingActionButton(
@@ -436,6 +340,13 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Widget _buildStudentsTab() {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _allStudents = ui.allStudents;
+    final _filteredStudents = ui.filteredStudents;
+    final _filterStatus = ui.filterStatus;
+    final _selectionMode = ui.selectionMode;
+    final _selectedIds = ui.selectedIds;
+    final _isEducationOrg = ui.isEducationOrg;
     return Column(
         children: [
           // Search and Filter Bar
@@ -477,8 +388,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'All',
                         selected: _filterStatus == 'all',
                         onTap: () {
-                          setState(() => _filterStatus = 'all');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('all');
                         },
                       ),
                       const SizedBox(width: NeyvoSpacing.sm),
@@ -486,8 +396,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'With Balance',
                         selected: _filterStatus == 'with_balance',
                         onTap: () {
-                          setState(() => _filterStatus = 'with_balance');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('with_balance');
                         },
                       ),
                       const SizedBox(width: NeyvoSpacing.sm),
@@ -495,8 +404,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'Overdue',
                         selected: _filterStatus == 'overdue',
                         onTap: () {
-                          setState(() => _filterStatus = 'overdue');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('overdue');
                         },
                       ),
                       if (_isEducationOrg) ...[
@@ -505,8 +413,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                           label: 'Due This Week',
                           selected: _filterStatus == 'due_this_week',
                           onTap: () {
-                            setState(() => _filterStatus = 'due_this_week');
-                            _load();
+                            ref.read(studentsListCtrlProvider.notifier).setFilterStatus('due_this_week');
                           },
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
@@ -514,8 +421,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                           label: 'No Balance',
                           selected: _filterStatus == 'no_balance',
                           onTap: () {
-                            setState(() => _filterStatus = 'no_balance');
-                            _load();
+                            ref.read(studentsListCtrlProvider.notifier).setFilterStatus('no_balance');
                           },
                         ),
                       ],
@@ -548,8 +454,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                               icon: const Icon(Icons.add),
                               label: const Text('Add first contact'),
                               style: FilledButton.styleFrom(
-                                backgroundColor: TenantBrand.isGoodwin(context)
-                                    ? TenantBrand.primary(context)
+                                backgroundColor: true
+                                    ? Theme.of(context).colorScheme.primary
                                     : null,
                               ),
                             ),
@@ -573,8 +479,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                 TextButton(
                                   onPressed: () {
                                     _searchController.clear();
-                                    setState(() => _filterStatus = 'all');
-                                    _filterStudents();
+                                    ref.read(studentsListCtrlProvider.notifier).setFilterStatus('all');
                                   },
                                   child: const Text('Clear filters'),
                                 ),
@@ -591,15 +496,15 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                 columns: [
                                   if (_selectionMode)
                                     const DataColumn(label: SizedBox(width: 40, child: Text(''))),
-                                  DataColumn(label: Text('Name', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Student ID', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Department', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Phone', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Email', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Year', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Last call', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Balance', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Due date', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Name', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Student ID', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Department', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Phone', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Email', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Year', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Last call', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Balance', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Due date', style: NeyvoType.labelSmall)),
                                   const DataColumn(label: SizedBox(width: 48, child: Text(''))),
                                 ],
                                 rows: _filteredStudents.map<DataRow>((s) {
@@ -683,6 +588,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Widget _buildRemindersTab() {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _reminders = ui.reminders;
+    final _remindersLoading = ui.remindersLoading;
     if (_reminders.isEmpty && !_remindersLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadReminders());
     }
@@ -740,7 +648,6 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                             try {
                               await NeyvoPulseApi.deleteReminder(r['id']?.toString() ?? '');
                               _loadReminders();
-                              setState(() {});
                             } catch (_) {}
                           },
                         ),
@@ -754,6 +661,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Future<void> _openScheduleReminderModal() async {
+    final ui = ref.read(studentsListCtrlProvider);
+    final students = ui.allStudents;
     final agentsRes = await NeyvoPulseApi.listAgents(direction: 'outbound');
     final agents = (agentsRes['agents'] as List? ?? []).where((a) => (a['industry']?.toString().toLowerCase() ?? '') == 'education').toList();
     String? selectedStudentId;
@@ -775,7 +684,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                   DropdownButtonFormField<String>(
                     value: selectedStudentId,
                     decoration: const InputDecoration(labelText: 'Student'),
-                    items: _allStudents.map((s) => DropdownMenuItem(value: s['id']?.toString(), child: Text(s['name']?.toString() ?? '—'))).toList(),
+                    items: students.map((s) => DropdownMenuItem(value: s['id']?.toString(), child: Text(s['name']?.toString() ?? '—'))).toList(),
                     onChanged: (v) => setDialogState(() => selectedStudentId = v),
                   ),
                   const SizedBox(height: 12),
@@ -826,7 +735,6 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                     if (ctx2.mounted) Navigator.pop(ctx);
                     if (mounted) {
                       _loadReminders();
-                      setState(() {});
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reminder scheduled')));
                     }
                   } catch (e) {
@@ -1058,8 +966,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         actions: [
           TextButton(onPressed: () => navigator.pop(), child: const Text('Cancel')),
           FilledButton(
-            style: TenantBrand.isGoodwin(context)
-                ? FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context))
+            style: true
+                ? FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary)
                 : null,
             onPressed: () async {
               final firstName = firstNameC.text.trim();

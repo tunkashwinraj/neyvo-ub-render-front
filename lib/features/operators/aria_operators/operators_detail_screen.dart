@@ -15,6 +15,7 @@ import '../../../services/email_templates_api.dart';
 import 'aria_operator_api_service.dart';
 import 'aria_operator_providers.dart';
 import 'aria_vapi_iframe.dart';
+import 'operators_create_screen.dart';
 
 // Screen: /operators/{operator_id}
 class OperatorsDetailScreen extends ConsumerStatefulWidget {
@@ -138,7 +139,13 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                         label: const Text('Call this operator'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
                     OutlinedButton(
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,7 +165,11 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                           : null,
                       child: const Text('Optimization'),
                     ),
-                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => _openAriaCreatePopup(context),
+                      icon: const Icon(Icons.mic_external_on_outlined),
+                      label: const Text('Create ARIA (Popup)'),
+                    ),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFEF4444),
@@ -334,6 +345,26 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
       },
     );
   }
+}
+
+void _openAriaCreatePopup(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: SizedBox(
+          width: 1100,
+          height: 760,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: const OperatorsCreateScreen(),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _EmailTemplatesSection extends ConsumerWidget {

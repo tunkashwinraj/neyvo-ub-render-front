@@ -10,7 +10,6 @@ import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../services/user_timezone_service.dart';
 import '../../../theme/neyvo_theme.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../../utils/export_csv.dart';
 import '../../../utils/payment_result_dialog.dart';
 import '../../../utils/payment_pending_storage.dart';
@@ -114,7 +113,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(walletPageCtrlProvider);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     if (s.loading && s.wallet == null) {
       return Center(child: CircularProgressIndicator(color: primary));
     }
@@ -330,7 +329,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
   Widget _filterChip(String label, String value) {
     final s = ref.watch(walletPageCtrlProvider);
     final selected = s.typeFilter == value;
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return FilterChip(
       label: Text(label),
       selected: selected,

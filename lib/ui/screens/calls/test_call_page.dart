@@ -12,7 +12,6 @@ import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../activation/activation_service.dart';
 
@@ -110,7 +109,7 @@ class _TestCallPageState extends ConsumerState<TestCallPage> {
     final live = activationService.isLive || (status?.firstCallCompleted == true);
 
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
+      return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
     }
     if (_error != null) {
       return Center(
@@ -160,7 +159,7 @@ class _TestCallPageState extends ConsumerState<TestCallPage> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.phone_in_talk_outlined, color: TenantBrand.primary(context)),
+                            Icon(Icons.phone_in_talk_outlined, color: Theme.of(context).colorScheme.primary),
                             const SizedBox(width: 10),
                             Text('Training number', style: NeyvoTextStyles.heading),
                           ],
@@ -211,7 +210,7 @@ class _TestCallPageState extends ConsumerState<TestCallPage> {
                                 SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context)),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -237,7 +236,7 @@ class _TestCallPageState extends ConsumerState<TestCallPage> {
                             width: double.infinity,
                             child: FilledButton(
                               onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
-                              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
                               child: const Text('Go to Home'),
                             ),
                           ),

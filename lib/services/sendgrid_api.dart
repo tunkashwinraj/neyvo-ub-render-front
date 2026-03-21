@@ -9,19 +9,13 @@ class SendgridApi {
     final id = NeyvoPulseApi.defaultAccountId.trim();
     if (id.isEmpty) return const {};
     // Send both keys for compatibility across FastAPI/legacy endpoints.
-    return {
-      'account_id': id,
-      'business_id': id,
-    };
+    return {'account_id': id, 'business_id': id};
   }
 
   static Map<String, dynamic> _idBody() {
     final id = NeyvoPulseApi.defaultAccountId.trim();
     if (id.isEmpty) return const {};
-    return {
-      'account_id': id,
-      'business_id': id,
-    };
+    return {'account_id': id, 'business_id': id};
   }
 
   static Future<SendgridConfig> getConfig() async {
@@ -38,7 +32,9 @@ class SendgridApi {
   }
 
   /// Returns (valid, errorMessage). [errorMessage] set when invalid or request failed.
-  static Future<({bool valid, String? errorMessage})> validateApiKey(String apiKey) async {
+  static Future<({bool valid, String? errorMessage})> validateApiKey(
+    String apiKey,
+  ) async {
     final trimmed = apiKey.trim();
     if (trimmed.isEmpty) {
       return (valid: false, errorMessage: 'Enter an API key');
@@ -46,13 +42,13 @@ class SendgridApi {
     try {
       final m = await NeyvoApi.postJsonMap(
         '/api/integrations/sendgrid/validate',
-        body: {
-          ..._idBody(),
-          'api_key': trimmed,
-        },
+        body: {..._idBody(), 'api_key': trimmed},
       );
       final ok = m['ok'] == true;
-      return (valid: ok, errorMessage: ok ? null : (m['error']?.toString() ?? 'Invalid key'));
+      return (
+        valid: ok,
+        errorMessage: ok ? null : (m['error']?.toString() ?? 'Invalid key'),
+      );
     } on ApiException catch (e) {
       final payload = e.payload;
       if (payload is Map) {
@@ -65,7 +61,10 @@ class SendgridApi {
     }
   }
 
-  static Future<void> connect({required String apiKey, required String fromEmail}) async {
+  static Future<void> connect({
+    required String apiKey,
+    required String fromEmail,
+  }) async {
     await NeyvoApi.postJsonMap(
       '/api/integrations/sendgrid/connect',
       body: {
@@ -79,9 +78,29 @@ class SendgridApi {
   static Future<void> disconnect() async {
     await NeyvoApi.postJsonMap(
       '/api/integrations/sendgrid/disconnect',
+      body: {..._idBody()},
+    );
+  }
+
+  static Future<void> verifySingleSender({
+    required String fromEmail,
+    required String fromName,
+  }) async {
+    await NeyvoApi.postJsonMap(
+      '/api/integrations/sendgrid/sender/verify',
       body: {
         ..._idBody(),
+        'from_email': fromEmail.trim(),
+        'from_name': fromName.trim(),
       },
     );
+  }
+
+  static Future<SendgridSenderStatus> getSenderStatus() async {
+    final m = await NeyvoApi.getJsonMap(
+      '/api/integrations/sendgrid/sender/status',
+      params: _idParams(),
+    );
+    return SendgridSenderStatus.fromJson(m);
   }
 }

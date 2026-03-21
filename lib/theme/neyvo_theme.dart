@@ -12,9 +12,11 @@ import 'package:google_fonts/google_fonts.dart';
 // ═══════════════════════════════════════════════════════════════════════════
 
 class NeyvoColors {
-  // Primary palette (Goodwin style guide)
-  static const Color ubPurple = Color(0xFF005CB9);    // Goodwin dark blue
-  static const Color ubLightBlue = Color(0xFF00A7E0); // Goodwin light blue
+  // Primary palette (single source of truth)
+  // Goodwin style guide (digital RGB):
+  // Dark blue #005CB9, light blue #00A7E0, green #80BC00.
+  static const Color ubPurple = Color(0xFF005CB9); // primary dark blue
+  static const Color ubLightBlue = Color(0xFF00A7E0); // secondary light blue
   static const Color white = Color(0xFFFFFFFF);
 
   // Backgrounds — white with subtle tints
@@ -27,13 +29,13 @@ class NeyvoColors {
   static const Color bgOverlay = Color(0xFFF5F6F8);
   static const Color bgHover = Color(0xFFF0F2F5);
 
-  // Borders — purple and light blue tints
-  static const Color borderLight = Color(0x1A592C82);   // 10% purple
-  static const Color borderSubtle = Color(0x0F592C82);   // 6% purple
-  static const Color borderDefault = Color(0x1A592C82);
-  static const Color borderStrong = Color(0x33592C82);   // 20% purple
+  // Borders — derived from primary blue
+  static const Color borderLight = Color(0x1A005CB9); // 10%
+  static const Color borderSubtle = Color(0x0F005CB9); // 6%
+  static const Color borderDefault = borderLight;
+  static const Color borderStrong = Color(0x33005CB9); // 20%
 
-  // Text — purple primary, light blue accent for links/secondary
+  // Text — dark neutrals for readability on light UI
   static const Color textLightPrimary = Color(0xFF1A1D2E);  // dark for readability
   static const Color textLightSecondary = Color(0xFF4A4E6A);
   static const Color textLightMuted = Color(0xFF6B6F82);
@@ -42,10 +44,10 @@ class NeyvoColors {
   static const Color textMuted = textLightMuted;
 
   // Brand variants
-  static const Color ubPurpleSoft = Color(0xFF2F79C7);   // lighter Goodwin blue
-  static const Color ubLightBlueSoft = Color(0xFF4DB8E8);
+  static const Color ubPurpleSoft = Color(0xFF2D7CC8);
+  static const Color ubLightBlueSoft = Color(0xFF5FC6EA);
   static const Color teal = ubPurple;
-  static const Color tealGlow = Color(0x1A592C82);
+  static const Color tealGlow = Color(0x1A005CB9);
   static const Color tealLight = ubPurpleSoft;
   static const Color coral = Color(0xFF80BC00);  // Goodwin green accent
 
@@ -57,8 +59,8 @@ class NeyvoColors {
 
   // Sidebar — Goodwin dark blue with subtle elevation states
   static const Color sidebarBg = ubPurple;
-  static const Color sidebarSelected = Color(0xFF7B4FA8);   // lighter purple band
-  static const Color sidebarHover = Color(0x33592C82);     // 20% purple overlay
+  static const Color sidebarSelected = Color(0xFF0B73D1); // selected band
+  static const Color sidebarHover = Color(0x33005CB9); // 20% primary overlay
   static const Color sidebarBgLight = ubPurple;
   static const Color sidebarSelectedLight = sidebarSelected;
   static const Color sidebarHoverLight = sidebarHover;
@@ -288,7 +290,7 @@ class NeyvoThemeData {
   }) {
     final primary = primaryColor ?? NeyvoColors.ubPurple;
     final secondary = secondaryColor ?? NeyvoColors.ubLightBlue;
-    final accent = accentColor ?? NeyvoColors.ubLightBlue;
+    final _ = accentColor; // kept for API compatibility
     final colorScheme = ColorScheme.light(
       primary: primary,
       secondary: secondary,

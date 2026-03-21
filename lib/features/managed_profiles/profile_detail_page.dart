@@ -9,7 +9,6 @@ import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
-import '../../tenant/tenant_brand.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
@@ -239,7 +238,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
               child: const Text('Purchase number'),
             ),
           ],
@@ -285,7 +284,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
             child: const Text('Attach'),
           ),
         ],
@@ -319,7 +318,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                 child: const Text('Move here'),
               ),
             ],
@@ -506,7 +505,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   Widget build(BuildContext context) {
     final title = _nameCtrl.text.trim().isEmpty ? 'Operator' : _nameCtrl.text.trim();
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
 
     final inner = _loading
         ? Center(child: CircularProgressIndicator(color: primary))
@@ -827,7 +826,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       itemBuilder: (context, index) {
         final msg = _chatMessages[index];
         final alignEnd = msg.isUser;
-        final primary = TenantBrand.primary(context);
+        final primary = Theme.of(context).colorScheme.primary;
         final bgColor = msg.isUser ? primary.withOpacity(0.18) : NeyvoColors.bgOverlay;
         final borderColor = msg.isUser ? primary.withOpacity(0.28) : NeyvoColors.borderDefault;
         return Align(
@@ -915,7 +914,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 tooltip: 'View full system prompt and voicemail',
                 onPressed: () => _showAiStudioFullContentDialog(msg),
                 style: IconButton.styleFrom(
-                  foregroundColor: TenantBrand.primary(context),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ],
@@ -966,7 +965,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                                 const SizedBox(height: 6),
                                 Text('After:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
                                 const SizedBox(height: 2),
-                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: TenantBrand.primary(context))),
+                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: Theme.of(context).colorScheme.primary)),
                               ],
                             ],
                           ),
@@ -1014,7 +1013,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 FilledButton(
                   onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
                   style: FilledButton.styleFrom(
-                    backgroundColor: TenantBrand.primary(context),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: NeyvoColors.white,
                   ),
                   child: const Text('Apply to operator'),
@@ -1064,9 +1063,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   child: Column(
                     children: [
                       TabBar(
-                        labelColor: TenantBrand.primary(context),
+                        labelColor: Theme.of(context).colorScheme.primary,
                         unselectedLabelColor: NeyvoColors.textSecondary,
-                        indicatorColor: TenantBrand.primary(context),
+                        indicatorColor: Theme.of(context).colorScheme.primary,
                         tabs: const [
                           Tab(text: 'System prompt'),
                           Tab(text: 'Voicemail'),
@@ -1120,7 +1119,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(width: 8),
         FilledButton(
           onPressed: _aiSuggestLoading ? null : _sendAiStudioMessage,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
           child: _aiSuggestLoading
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
               : const Text('Send'),
@@ -1583,10 +1582,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: TenantBrand.primary(context).withOpacity(0.2),
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: TenantBrand.primary(context))),
+                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: Theme.of(context).colorScheme.primary)),
                           ),
                         ],
                       ],
@@ -1698,7 +1697,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               if (_voiceCatalogLoading)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context))),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
                 )
               else if (_voiceCatalogError != null)
                 Padding(
@@ -1756,7 +1755,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                             tooltip: 'Play sample',
                             onPressed: () => _playVoiceSample(v),
                             style: IconButton.styleFrom(
-                              foregroundColor: TenantBrand.primary(context),
+                              foregroundColor: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -1764,7 +1763,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                             onPressed: _saving ? null : () => _selectVoice(v),
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(72, 36),
-                              backgroundColor: isSelected ? TenantBrand.primary(context).withOpacity(0.2) : null,
+                              backgroundColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.2) : null,
                             ),
                             child: Text(isSelected ? 'Selected' : 'Select'),
                           ),
@@ -1838,7 +1837,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),
@@ -2052,7 +2051,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),

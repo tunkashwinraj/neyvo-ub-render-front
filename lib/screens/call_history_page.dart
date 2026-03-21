@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers/call_history_provider.dart';
 import '../services/user_timezone_service.dart';
-import '../tenant/tenant_brand.dart';
 import '../utils/export_csv.dart';
 import '../theme/neyvo_theme.dart';
 import 'call_detail_page.dart';
@@ -487,7 +486,7 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                         
                         final showNumberCalled = numberCalled.isNotEmpty && numberCalled != studentPhone;
                         final callId = (call['id'] ?? call['call_id'] ?? '').toString().trim();
-                        final canDelete = TenantBrand.isGoodwin(context) && callId.isNotEmpty;
+                        final canDelete = true && callId.isNotEmpty;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: NeyvoSpacing.sm),

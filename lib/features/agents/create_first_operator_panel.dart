@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/neyvo_theme.dart';
-import '../../tenant/tenant_brand.dart';
 import '../../screens/pulse_shell.dart';
 import '../../pulse_route_names.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
@@ -82,7 +81,7 @@ class CreateFirstOperatorPanel extends StatelessWidget {
                         }
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
+                        backgroundColor: i == 0 ? Theme.of(context).colorScheme.primary : NeyvoColors.bgRaised,
                         foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),

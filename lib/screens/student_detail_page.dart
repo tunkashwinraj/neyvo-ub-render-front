@@ -2,7 +2,8 @@
 // Enhanced student detail page with payment history, call history, and quick actions
 
 import 'package:flutter/material.dart';
-import '../neyvo_pulse_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/providers/student_detail_provider.dart';
 import '../services/user_timezone_service.dart';
 import '../../api/spearia_api.dart' show ApiException;
 import '../theme/neyvo_theme.dart';
@@ -10,23 +11,18 @@ import '../utils/callback_date_format.dart';
 import '../utils/phone_util.dart';
 import 'call_detail_page.dart';
 
-class StudentDetailPage extends StatefulWidget {
+class StudentDetailPage extends ConsumerStatefulWidget {
   final String studentId;
   final VoidCallback? onUpdated;
 
   const StudentDetailPage({super.key, required this.studentId, this.onUpdated});
 
   @override
-  State<StudentDetailPage> createState() => _StudentDetailPageState();
+  ConsumerState<StudentDetailPage> createState() => _StudentDetailPageState();
 }
 
-class _StudentDetailPageState extends State<StudentDetailPage> with SingleTickerProviderStateMixin {
-  Map<String, dynamic>? _student;
-  List<dynamic> _payments = [];
-  List<dynamic> _calls = [];
-  String _pastCallsSummary = '';
-  bool _loading = true;
-  String? _error;
+class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with SingleTickerProviderStateMixin {
+  String? _syncSig;
   late TabController _tabController;
   
   final _name = TextEditingController();
@@ -39,13 +35,6 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   final _lateFee = TextEditingController();
   final _studentId = TextEditingController();
   final _notes = TextEditingController();
-  bool _saving = false;
-  bool _calling = false;
-
-  List<Map<String, dynamic>> _agents = [];
-  String? _selectedAgentId;
-
-  bool _cancelingCallback = false;
   Map<String, TextEditingController> _customFieldControllers = {};
   final _newFieldKey = TextEditingController();
 
@@ -53,7 +42,6 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _load();
   }
 
   @override
@@ -76,100 +64,61 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final studentRes = await NeyvoPulseApi.getStudent(widget.studentId);
-      final paymentsRes = await NeyvoPulseApi.listPayments(studentId: widget.studentId);
-      final callsRes = await NeyvoPulseApi.listCalls(studentId: widget.studentId);
-      List<Map<String, dynamic>> agentsList = [];
-      try {
-        final agentsRes = await NeyvoPulseApi.listAgents();
-        agentsList = (agentsRes['agents'] as List? ?? []).cast<Map<String, dynamic>>();
-      } catch (_) {}
-      String pastSummary = '';
-      List<dynamic> callsList = callsRes['calls'] as List? ?? [];
-      try {
-        final historyRes = await NeyvoPulseApi.getStudentCallHistory(widget.studentId);
-        pastSummary = historyRes['past_calls_summary']?.toString() ?? '';
-        final historyCalls = historyRes['calls'] as List? ?? [];
-        if (historyCalls.isNotEmpty) callsList = historyCalls;
-      } catch (_) {}
-      final s = studentRes['student'] as Map<String, dynamic>? ?? {};
-      if (mounted) {
-        setState(() {
-          _student = s;
-          _payments = paymentsRes['payments'] as List? ?? [];
-          _calls = callsList;
-          _pastCallsSummary = pastSummary;
-          _agents = agentsList;
-          _selectedAgentId ??= agentsList.isNotEmpty ? (agentsList.first['id'] ?? agentsList.first['agent_id'])?.toString() : null;
-          _loading = false;
-          _name.text = s['name']?.toString() ?? '';
-          _firstName.text = s['first_name']?.toString() ?? (_name.text);
-          _lastName.text = s['last_name']?.toString() ?? '';
-          _phone.text = s['phone']?.toString() ?? '';
-          _email.text = s['email']?.toString() ?? '';
-          _balance.text = s['balance']?.toString() ?? '';
-          _dueDate.text = s['due_date']?.toString() ?? '';
-          _lateFee.text = s['late_fee']?.toString() ?? '';
-          _studentId.text = s['student_id']?.toString() ?? '';
-          _notes.text = s['notes']?.toString() ?? '';
-          // Load any custom fields into editable controllers.
-          for (final c in _customFieldControllers.values) {
-            c.dispose();
-          }
-          _customFieldControllers = {};
-          final custom = (s['custom_fields'] as Map?)?.cast<String, dynamic>() ?? {};
-          custom.forEach((key, value) {
-            _customFieldControllers[key] = TextEditingController(text: value?.toString() ?? '');
-          });
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+  void _syncControllers(StudentDetailUiState ui) {
+    final s = ui.student;
+    if (s == null) return;
+    final sig = '${s['updated_at'] ?? s['id'] ?? ''}|${(s['custom_fields'] as Map?)?.length ?? 0}';
+    if (_syncSig == sig) return;
+    _syncSig = sig;
+    _name.text = s['name']?.toString() ?? '';
+    _firstName.text = s['first_name']?.toString() ?? (_name.text);
+    _lastName.text = s['last_name']?.toString() ?? '';
+    _phone.text = s['phone']?.toString() ?? '';
+    _email.text = s['email']?.toString() ?? '';
+    _balance.text = s['balance']?.toString() ?? '';
+    _dueDate.text = s['due_date']?.toString() ?? '';
+    _lateFee.text = s['late_fee']?.toString() ?? '';
+    _studentId.text = s['student_id']?.toString() ?? '';
+    _notes.text = s['notes']?.toString() ?? '';
+    for (final c in _customFieldControllers.values) {
+      c.dispose();
     }
+    _customFieldControllers = {};
+    final custom = (s['custom_fields'] as Map?)?.cast<String, dynamic>() ?? {};
+    custom.forEach((key, value) {
+      _customFieldControllers[key] = TextEditingController(text: value?.toString() ?? '');
+    });
   }
 
   Future<void> _cancelCallbackIfAny() async {
-    if (_student == null) return;
-    final status = (_student!['callback_status'] ?? '').toString().toLowerCase();
+    final ui = ref.read(studentDetailCtrlProvider(widget.studentId));
+    if (ui.student == null) return;
+    final status = (ui.student!['callback_status'] ?? '').toString().toLowerCase();
     if (status.isEmpty || status == 'canceled' || status == 'completed' || status == 'exhausted') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No active callback to cancel.')),
       );
       return;
     }
-    setState(() => _cancelingCallback = true);
     try {
-      await NeyvoPulseApi.cancelStudentCallback(widget.studentId);
+      await ref.read(studentDetailCtrlProvider(widget.studentId).notifier).cancelCallback();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Callback cancelled')),
         );
-        await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
-    } finally {
-      if (mounted) setState(() => _cancelingCallback = false);
-    }
+    } finally {}
   }
 
   Future<void> _save() async {
-    if (_student == null) return;
-    setState(() => _saving = true);
+    final ui = ref.read(studentDetailCtrlProvider(widget.studentId));
+    if (ui.student == null) return;
     try {
-      await NeyvoPulseApi.updateStudent(
-        widget.studentId,
+      await ref.read(studentDetailCtrlProvider(widget.studentId).notifier).saveStudent(
         name: _name.text.trim(),
         firstName: _firstName.text.trim().isNotEmpty ? _firstName.text.trim() : null,
         lastName: _lastName.text.trim().isNotEmpty ? _lastName.text.trim() : null,
@@ -185,13 +134,10 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
         widget.onUpdated?.call();
-        _load();
-        setState(() => _saving = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-        setState(() => _saving = false);
       }
     }
   }
@@ -217,18 +163,18 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
       return;
     }
 
-    final agentId = (_selectedAgentId ?? (_agents.isNotEmpty ? (_agents.first['id'] ?? _agents.first['agent_id'])?.toString() : null))?.trim();
+    final ui = ref.read(studentDetailCtrlProvider(widget.studentId));
+    final agents = ui.agents;
+    final agentId = (ui.selectedAgentId ?? (agents.isNotEmpty ? (agents.first['id'] ?? agents.first['agent_id'])?.toString() : null))?.trim();
     if (agentId == null || agentId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Create/select an agent before calling')));
       return;
     }
-    setState(() => _calling = true);
     try {
-      final res = await NeyvoPulseApi.startOutboundCall(
+      final res = await ref.read(studentDetailCtrlProvider(widget.studentId).notifier).startCall(
         agentId: agentId,
         studentPhone: phone,
         studentName: name,
-        studentId: widget.studentId,
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
@@ -238,18 +184,14 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
           SnackBar(content: Text(res['message']?.toString() ?? 'Call started')),
         );
         widget.onUpdated?.call();
-        _load();
-        setState(() => _calling = false);
       }
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-        setState(() => _calling = false);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-        setState(() => _calling = false);
       }
     }
   }
@@ -288,7 +230,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
     );
     if (confirm != true || !mounted) return;
     try {
-      await NeyvoPulseApi.deleteStudent(widget.studentId);
+      await ref.read(studentDetailCtrlProvider(widget.studentId).notifier).deleteStudent();
       if (mounted) {
         widget.onUpdated?.call();
         Navigator.of(context).pop();
@@ -341,15 +283,13 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 return;
               }
               try {
-                await NeyvoPulseApi.addPayment(
-                  studentId: widget.studentId,
+                await ref.read(studentDetailCtrlProvider(widget.studentId).notifier).addPayment(
                   amount: amountC.text.trim(),
                   method: methodC.text.trim().isEmpty ? null : methodC.text.trim(),
                   note: noteC.text.trim().isEmpty ? null : noteC.text.trim(),
                 );
                 if (context.mounted) {
                   navigator.pop();
-                  _load();
                 }
               } catch (e) {
                 if (context.mounted) {
@@ -366,30 +306,32 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_error != null) {
+    final ui = ref.watch(studentDetailCtrlProvider(widget.studentId));
+    _syncControllers(ui);
+    if (ui.loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (ui.error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Student profile')),
-        body: Center(child: Text(_error!, style: TextStyle(color: NeyvoColors.error))),
+        body: Center(child: Text(ui.error!, style: TextStyle(color: NeyvoColors.error))),
       );
     }
     
     final balance = _balance.text.trim();
     final dueDate = _dueDate.text.trim();
-    final callbackStatus = (_student?['callback_status'] ?? '').toString();
-    final callbackAt = _student?['callback_at'];
-    final callbackAttempts = _student?['callback_attempt_count'];
-    final callbackMaxAttempts = _student?['callback_max_attempts'];
+    final callbackStatus = (ui.student?['callback_status'] ?? '').toString();
+    final callbackAt = ui.student?['callback_at'];
+    final callbackAttempts = ui.student?['callback_attempt_count'];
+    final callbackMaxAttempts = ui.student?['callback_max_attempts'];
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(_student?['name']?.toString() ?? 'Student profile'),
+        title: Text(ui.student?['name']?.toString() ?? 'Student profile'),
         actions: [
           IconButton(
-            icon: _calling 
+            icon: ui.calling 
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.phone),
-            onPressed: _calling ? null : _call,
+            onPressed: ui.calling ? null : _call,
             tooltip: 'Reach out to contact',
           ),
           PopupMenuButton<String>(
@@ -483,8 +425,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                         Row(
                           children: [
                             FilledButton.tonal(
-                              onPressed: _cancelingCallback ? null : _cancelCallbackIfAny,
-                              child: _cancelingCallback
+                              onPressed: ui.cancelingCallback ? null : _cancelCallbackIfAny,
+                              child: ui.cancelingCallback
                                   ? const SizedBox(
                                       height: 20,
                                       width: 20,
@@ -619,8 +561,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
               ),
               const SizedBox(height: NeyvoSpacing.xl),
               FilledButton(
-                onPressed: _saving ? null : _save,
-                child: _saving 
+                onPressed: ui.saving ? null : _save,
+                child: ui.saving 
                     ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)) 
                     : const Text('Save Changes'),
               ),
@@ -628,7 +570,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
           ),
           
           // Payments Tab
-          _payments.isEmpty
+          ui.payments.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -660,7 +602,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                       ],
                     ),
                     const SizedBox(height: NeyvoSpacing.md),
-                    ..._payments.map((p) {
+                ...ui.payments.map((p) {
                       final amount = p['amount']?.toString() ?? '—';
                       final method = p['method']?.toString() ?? '';
                       final dateRaw = p['created_at'] ?? p['date'];
@@ -704,7 +646,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                 ],
               ),
               const SizedBox(height: NeyvoSpacing.md),
-              if (_calls.isEmpty)
+              if (ui.calls.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(NeyvoSpacing.xl),
@@ -725,7 +667,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                   ),
                 )
               else
-                ..._calls.map((c) {
+                ...ui.calls.map((c) {
                   final callMap = Map<String, dynamic>.from(c as Map);
                   final status = callMap['status']?.toString() ?? callMap['outcome']?.toString() ?? 'unknown';
                   final dateRaw = callMap['started_at'] ?? callMap['created_at'] ?? callMap['date'];
@@ -820,9 +762,9 @@ class _StudentDetailPageState extends State<StudentDetailPage> with SingleTicker
                     ),
                     const SizedBox(height: 8),
                     SelectableText(
-                      _pastCallsSummary.isEmpty
+                      ui.pastCallsSummary.isEmpty
                           ? 'No previous calls yet. This will fill after the first call.'
-                          : _pastCallsSummary,
+                          : ui.pastCallsSummary,
                       style: NeyvoType.bodySmall.copyWith(
                         color: NeyvoColors.textSecondary,
                         fontFamily: 'monospace',
