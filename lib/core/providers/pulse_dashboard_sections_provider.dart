@@ -120,10 +120,14 @@ final pulseDashboardSummaryProvider =
 
 final pulseDashboardCriticalProvider =
     FutureProvider.family<PulseDashboardCriticalData, PulseDashboardRange>((ref, range) async {
-  final summary = await ref.watch(pulseDashboardSummaryProvider(range).future);
+  final summaryFuture = ref.watch(pulseDashboardSummaryProvider(range).future);
+  final fallbackFuture = SetupStatusApiService.getStatus()
+      .timeout(const Duration(milliseconds: 1200))
+      .catchError((_) => <String, dynamic>{});
+  final summary = await summaryFuture;
   final setup = Map<String, dynamic>.from(summary['setup'] as Map? ?? const {});
   final kpi = Map<String, dynamic>.from(summary['kpi'] as Map? ?? const {});
-  final fallback = await SetupStatusApiService.getStatus().catchError((_) => <String, dynamic>{});
+  final fallback = await fallbackFuture;
   final fallbackBusiness = Map<String, dynamic>.from(fallback['business'] as Map? ?? const {});
 
   return PulseDashboardCriticalData(

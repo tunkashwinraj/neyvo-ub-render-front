@@ -52,7 +52,9 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    // Use fixed Neyvo brand loading color so startup is consistent
+    // across theme/bootstrap timing and never falls back to purple.
+    const loaderColor = NeyvoColors.ubPurple;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -74,7 +76,7 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
                     height: widget.circleSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: primary,
+                      color: loaderColor,
                     ),
                   ),
                 ),
