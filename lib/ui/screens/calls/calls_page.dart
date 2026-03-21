@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/providers/calls_provider.dart';
+import '../../../core/providers/calls_ui_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../../screens/call_history_page.dart';
 import '../../../screens/callbacks_page.dart';
+import 'calls_section.dart';
 import 'dialer_page.dart';
-
-enum CallsSection { calls, callbacks, dialer }
 
 class CallsPage extends ConsumerStatefulWidget {
   const CallsPage({super.key, this.initialSection = CallsSection.calls});
@@ -21,16 +20,17 @@ class CallsPage extends ConsumerStatefulWidget {
 }
 
 class _CallsPageState extends ConsumerState<CallsPage> {
-  late CallsSection _section;
-
   @override
   void initState() {
     super.initState();
-    _section = widget.initialSection;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(callsUiProvider.notifier).select(widget.initialSection);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final section = ref.watch(callsUiProvider);
     return Column(
       children: [
         Padding(
@@ -48,22 +48,17 @@ class _CallsPageState extends ConsumerState<CallsPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Expanded(
-          child: ref.watch(callsNotifierProvider).when(
-                data: (_) => _body(),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Center(child: Text('Error: $e')),
-              ),
-        ),
+        Expanded(child: _body(section)),
       ],
     );
   }
 
-  Widget _pill(String label, CallsSection section) {
-    final selected = _section == section;
+  Widget _pill(String label, CallsSection target) {
+    final section = ref.watch(callsUiProvider);
+    final selected = section == target;
     final primary = TenantBrand.primary(context);
     return InkWell(
-      onTap: () => setState(() => _section = section),
+      onTap: () => ref.read(callsUiProvider.notifier).select(target),
       borderRadius: BorderRadius.circular(999),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -85,8 +80,8 @@ class _CallsPageState extends ConsumerState<CallsPage> {
     );
   }
 
-  Widget _body() {
-    switch (_section) {
+  Widget _body(CallsSection section) {
+    switch (section) {
       case CallsSection.calls:
         return const CallHistoryPage(initialDirection: 'all');
       case CallsSection.dialer:
@@ -96,4 +91,3 @@ class _CallsPageState extends ConsumerState<CallsPage> {
     }
   }
 }
-

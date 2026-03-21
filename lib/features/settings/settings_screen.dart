@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/settings_model.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../theme/neyvo_theme.dart';
+import '../../ui/components/glass/neyvo_glass_panel.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +20,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _smtpUserCtrl = TextEditingController();
   final _smtpPassCtrl = TextEditingController();
 
+  bool _appliedFromServer = false;
+
   @override
   void dispose() {
     _calendlyCtrl.dispose();
@@ -27,27 +32,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  void _applyFromModel(SettingsModel data) {
+    _calendlyCtrl.text = data.calendlyUrl;
+    _smtpHostCtrl.text = data.smtpHost;
+    _smtpPortCtrl.text = data.smtpPort == 0 ? '' : '${data.smtpPort}';
+    _smtpUserCtrl.text = data.smtpUsername;
+    _smtpPassCtrl.text = data.smtpPassword;
+    _appliedFromServer = true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(settingsNotifierProvider);
     return asyncValue.when(
       data: (data) {
-        _calendlyCtrl.text = _calendlyCtrl.text.isEmpty ? data.calendlyUrl : _calendlyCtrl.text;
-        _smtpHostCtrl.text = _smtpHostCtrl.text.isEmpty ? data.smtpHost : _smtpHostCtrl.text;
-        _smtpPortCtrl.text = _smtpPortCtrl.text.isEmpty ? '${data.smtpPort}' : _smtpPortCtrl.text;
-        _smtpUserCtrl.text = _smtpUserCtrl.text.isEmpty ? data.smtpUsername : _smtpUserCtrl.text;
-        _smtpPassCtrl.text = _smtpPassCtrl.text.isEmpty ? data.smtpPassword : _smtpPassCtrl.text;
+        if (!_appliedFromServer) {
+          _applyFromModel(data);
+        }
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
+            Text('Calendly', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+            const SizedBox(height: 12),
+            NeyvoGlassPanel(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Calendly'),
-                    const SizedBox(height: 12),
                     TextField(
                       controller: _calendlyCtrl,
                       decoration: const InputDecoration(labelText: 'Calendly URL'),
@@ -60,10 +72,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             'calendly_url': _calendlyCtrl.text.trim(),
                           });
                           if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Calendly settings saved')));
+                          _appliedFromServer = false;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Calendly settings saved')),
+                          );
                         } catch (e) {
                           if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Save failed: $e')),
+                          );
                         }
                       },
                       child: const Text('Save'),
@@ -72,22 +89,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Card(
+            const SizedBox(height: 28),
+            Text('SMTP configuration', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+            const SizedBox(height: 12),
+            NeyvoGlassPanel(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('SMTP Configuration'),
-                    const SizedBox(height: 12),
-                    TextField(controller: _smtpHostCtrl, decoration: const InputDecoration(labelText: 'SMTP Host')),
+                    TextField(
+                      controller: _smtpHostCtrl,
+                      decoration: const InputDecoration(labelText: 'SMTP Host'),
+                    ),
                     const SizedBox(height: 8),
-                    TextField(controller: _smtpPortCtrl, decoration: const InputDecoration(labelText: 'SMTP Port')),
+                    TextField(
+                      controller: _smtpPortCtrl,
+                      decoration: const InputDecoration(labelText: 'SMTP Port'),
+                      keyboardType: TextInputType.number,
+                    ),
                     const SizedBox(height: 8),
-                    TextField(controller: _smtpUserCtrl, decoration: const InputDecoration(labelText: 'SMTP Username')),
+                    TextField(
+                      controller: _smtpUserCtrl,
+                      decoration: const InputDecoration(labelText: 'SMTP Username'),
+                    ),
                     const SizedBox(height: 8),
-                    TextField(controller: _smtpPassCtrl, decoration: const InputDecoration(labelText: 'SMTP Password')),
+                    TextField(
+                      controller: _smtpPassCtrl,
+                      decoration: const InputDecoration(labelText: 'SMTP Password'),
+                      obscureText: true,
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -101,10 +132,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 'smtp_password': _smtpPassCtrl.text.trim(),
                               });
                               if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SMTP settings saved')));
+                              _appliedFromServer = false;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('SMTP settings saved')),
+                              );
                             } catch (e) {
                               if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Save failed: $e')),
+                              );
                             }
                           },
                           child: const Text('Save'),
@@ -112,11 +148,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         const SizedBox(width: 12),
                         OutlinedButton(
                           onPressed: () async {
-                            final ok = await ref.read(settingsNotifierProvider.notifier).sendTestEmail();
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(ok ? 'Test email sent' : 'Test email failed')),
-                            );
+                            try {
+                              final ok = await ref.read(settingsNotifierProvider.notifier).sendTestEmail();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(ok ? 'Test email sent' : 'Test email failed'),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Test email failed: $e')),
+                              );
+                            }
                           },
                           child: const Text('Send Test Email'),
                         ),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/billing_provider.dart';
-import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
@@ -24,14 +23,6 @@ class BillingPage extends ConsumerStatefulWidget {
 }
 
 class _BillingPageState extends ConsumerState<BillingPage> {
-  bool _loading = true;
-  String? _error;
-
-  Map<String, dynamic>? _wallet;
-  Map<String, dynamic>? _usage;
-  Map<String, dynamic>? _subscription;
-  Map<String, dynamic>? _numbers;
-
   @override
   void initState() {
     super.initState();
@@ -65,55 +56,49 @@ class _BillingPageState extends ConsumerState<BillingPage> {
     ref.invalidate(billingNotifierProvider);
   }
 
-  void _addCredits() {
-    showAddCreditsModal(context, wallet: _wallet, onSuccess: _load);
+  void _addCredits(BillingData data) {
+    showAddCreditsModal(context, wallet: data.wallet, onSuccess: _load);
   }
 
   @override
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(billingNotifierProvider);
-    asyncValue.whenData((value) {
-      _wallet = value.wallet;
-      _usage = value.usage;
-      _subscription = value.subscription;
-      _numbers = value.numbers;
-      _loading = false;
-      _error = null;
-    });
-    if (asyncValue.hasError) {
-      _error = '${asyncValue.error}';
-      _loading = false;
-    }
     final primary = TenantBrand.primary(context);
-    if (_loading && _wallet == null) {
-      return Center(child: CircularProgressIndicator(color: primary));
-    }
-    if (_error != null) {
-      return Center(
+    return asyncValue.when(
+      data: (data) => _billingContent(context, data, primary),
+      loading: () => Center(child: CircularProgressIndicator(color: primary)),
+      error: (e, _) => Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text('$e', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
             TextButton(onPressed: _load, child: const Text('Retry')),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    final credits = (_wallet?['credits'] as num?)?.toInt() ??
-        (_wallet?['wallet_credits'] as num?)?.toInt() ??
+  Widget _billingContent(BuildContext context, BillingData data, Color primary) {
+    final wallet = data.wallet;
+    final usage = data.usage;
+    final subscription = data.subscription;
+    final numbersMap = data.numbers;
+
+    final credits = (wallet['credits'] as num?)?.toInt() ??
+        (wallet['wallet_credits'] as num?)?.toInt() ??
         0;
-    final cpm = (_wallet?['credits_per_minute'] as num?)?.toInt() ?? 25;
+    final cpm = (wallet['credits_per_minute'] as num?)?.toInt() ?? 25;
     final estMin = cpm > 0 ? credits ~/ cpm : 0;
-    final burn = (_usage?['total_dollars_spent'] as num?)?.toDouble();
-    final tier = (_wallet?['subscription_tier'] ?? _subscription?['tier'] ?? 'free')
+    final burn = (usage['total_dollars_spent'] as num?)?.toDouble();
+    final tier = (wallet['subscription_tier'] ?? subscription['tier'] ?? 'free')
         .toString()
         .toLowerCase();
 
-    final numbers = (_numbers?['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-    final totalNumbers = (_numbers?['total_numbers'] as num?)?.toInt() ?? numbers.length;
-    final monthlyCost = (_numbers?['monthly_number_cost'] ?? _numbers?['monthly_cost'])
+    final numbers = (numbersMap['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final totalNumbers = (numbersMap['total_numbers'] as num?)?.toInt() ?? numbers.length;
+    final monthlyCost = (numbersMap['monthly_number_cost'] ?? numbersMap['monthly_cost'])
             ?.toString() ??
         '\$0.00';
     final perNumber = numbers.isEmpty ? '—' : '115 credits/mo (\$1.15)';
@@ -194,7 +179,7 @@ class _BillingPageState extends ConsumerState<BillingPage> {
                             SizedBox(
                               width: 200,
                               child: FilledButton.icon(
-                                onPressed: _addCredits,
+                                onPressed: () => _addCredits(data),
                                 icon: const Icon(Icons.add, size: 20),
                                 label: const Text('Add credits'),
                                 style: FilledButton.styleFrom(
@@ -319,8 +304,7 @@ class _BillingPageState extends ConsumerState<BillingPage> {
                 const SizedBox(height: 10),
                 NeyvoGlassPanel(
                   child: _VoiceTierBlock(
-                    wallet: _wallet,
-                    onTierChanged: _load,
+                    wallet: wallet,
                     onViewTiers: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => Scaffold(
@@ -392,12 +376,11 @@ class _BillingPageState extends ConsumerState<BillingPage> {
   }
 }
 
-class _VoiceTierBlock extends StatelessWidget {
+class _VoiceTierBlock extends ConsumerWidget {
   final Map<String, dynamic>? wallet;
-  final VoidCallback onTierChanged;
   final VoidCallback? onViewTiers;
 
-  const _VoiceTierBlock({this.wallet, required this.onTierChanged, this.onViewTiers});
+  const _VoiceTierBlock({this.wallet, this.onViewTiers});
 
   static const Map<String, String> _tierLabels = {
     'neutral': 'Neutral Human',
@@ -406,7 +389,7 @@ class _VoiceTierBlock extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currentTier = (wallet?['voice_tier'] ?? wallet?['tier'] ?? 'ultra').toString().toLowerCase();
     final tierDisplay = (wallet?['tier_display'] ?? _tierLabels[currentTier] ?? 'Ultra Real Human').toString();
     final cpm = (wallet?['credits_per_minute'] as num?)?.toInt() ?? 49;
@@ -455,10 +438,9 @@ class _VoiceTierBlock extends StatelessWidget {
               onChanged: (String? value) async {
                 if (value == null || value == currentTier) return;
                 try {
-                  await NeyvoPulseApi.setBillingTier(value);
+                  await ref.read(billingNotifierProvider.notifier).setVoiceTier(value);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voice tier set to ${_tierLabels[value] ?? value}')));
-                    onTierChanged();
                   }
                 } catch (e) {
                   if (context.mounted) {

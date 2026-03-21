@@ -43,4 +43,10 @@ class BillingNotifier extends _$BillingNotifier {
       numbers: Map<String, dynamic>.from(results[3] as Map),
     );
   }
+
+  Future<void> setVoiceTier(String tier) async {
+    ref.read(speariaApiProvider);
+    await NeyvoPulseApi.setBillingTier(tier);
+    ref.invalidateSelf();
+  }
 }

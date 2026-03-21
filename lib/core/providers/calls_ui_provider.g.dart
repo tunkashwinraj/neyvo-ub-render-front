@@ -1,26 +1,26 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'billing_provider.dart';
+part of 'calls_ui_provider.dart';
 
 // **************************************************************************
 // RiverpodGenerator
 // **************************************************************************
 
-String _$billingNotifierHash() => r'18a93930f166f159b53d268fa98ea1322c536026';
+String _$callsUiHash() => r'0a90fdb11664be1ed9de8b1438b92032491cfd1f';
 
-/// See also [BillingNotifier].
-@ProviderFor(BillingNotifier)
-final billingNotifierProvider =
-    AutoDisposeAsyncNotifierProvider<BillingNotifier, BillingData>.internal(
-      BillingNotifier.new,
-      name: r'billingNotifierProvider',
+/// See also [CallsUi].
+@ProviderFor(CallsUi)
+final callsUiProvider =
+    AutoDisposeNotifierProvider<CallsUi, CallsSection>.internal(
+      CallsUi.new,
+      name: r'callsUiProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
           ? null
-          : _$billingNotifierHash,
+          : _$callsUiHash,
       dependencies: null,
       allTransitiveDependencies: null,
     );
 
-typedef _$BillingNotifier = AutoDisposeAsyncNotifier<BillingData>;
+typedef _$CallsUi = AutoDisposeNotifier<CallsSection>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

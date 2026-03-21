@@ -35,6 +35,7 @@ import '../tenant/tenant_brand.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
 import '../ui/screens/launch/launch_page.dart';
 import '../ui/screens/calls/calls_page.dart';
+import '../ui/screens/calls/calls_section.dart';
 import '../ui/screens/calls/test_call_page.dart';
 import '../ui/screens/billing/billing_page.dart';
 import '../ui/screens/billing/wallet_page.dart';
@@ -140,13 +141,22 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
       return List<_NavItem>.from(_allNavItems);
     }
     if (enumRole == UserRole.admin) {
-      return _allNavItems.where((n) => n.label != 'Billing').toList();
+      final items = <_NavItem>[];
+      for (final n in _allNavItems) {
+        if (n.label == 'Billing') continue;
+        items.add(n);
+      }
+      if (_selectedIndex >= items.length) _selectedIndex = 0;
+      return items;
     }
     if (enumRole == UserRole.member) {
-      return _allNavItems
-          .where((n) =>
-              n.label != 'Billing' && n.label != 'Lines' && n.label != 'Campaigns')
-          .toList();
+      final items = <_NavItem>[];
+      for (final n in _allNavItems) {
+        if (n.label == 'Billing' || n.label == 'Lines' || n.label == 'Campaigns') continue;
+        items.add(n);
+      }
+      if (_selectedIndex >= items.length) _selectedIndex = 0;
+      return items;
     }
     final role = _myRole?.toLowerCase();
     final perms = _myPermissions;

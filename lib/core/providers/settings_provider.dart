@@ -23,6 +23,6 @@ class SettingsNotifier extends _$SettingsNotifier {
 
   Future<bool> sendTestEmail() async {
     ref.read(speariaApiProvider);
-    return NeyvoPulseApi.sendTestEmail();
+    return await NeyvoPulseApi.sendTestEmail();
   }
 }

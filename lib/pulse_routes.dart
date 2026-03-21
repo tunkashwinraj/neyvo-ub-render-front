@@ -8,7 +8,7 @@ import 'screens/pulse_shell.dart';
 import 'screens/training_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
-import 'ui/screens/calls/calls_page.dart';
+import 'ui/screens/calls/calls_section.dart';
 import 'ui/screens/calls/test_call_page.dart';
 import 'ui/screens/ub/ub_model_overview_page.dart';
 import 'screens/developer_console_page.dart';

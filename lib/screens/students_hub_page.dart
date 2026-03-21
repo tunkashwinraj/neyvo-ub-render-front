@@ -11,6 +11,7 @@ import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/providers/students_hub_tab_provider.dart';
 import '../core/providers/students_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
@@ -28,55 +29,73 @@ class StudentsHubPage extends ConsumerStatefulWidget {
   ConsumerState<StudentsHubPage> createState() => _StudentsHubPageState();
 }
 
-class _StudentsHubPageState extends ConsumerState<StudentsHubPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final GlobalKey<_DirectoryTabState> _directoryKey = GlobalKey<_DirectoryTabState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      if (!mounted) return;
-      setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _StudentsHubPageState extends ConsumerState<StudentsHubPage> {
   @override
   Widget build(BuildContext context) {
     final asyncValue = ref.watch(studentsNotifierProvider);
+    final tab = ref.watch(studentsHubTabProvider);
+    final primary = TenantBrand.primary(context);
     return asyncValue.when(
       data: (_) => Scaffold(
-      appBar: AppBar(
-        title: const Text('Students'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Directory'),
-            Tab(text: 'Import'),
-            Tab(text: 'Sync'),
+        appBar: AppBar(
+          title: const Text('Students'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  children: [
+                    _hubTabPill(0, 'Directory', tab, primary),
+                    const SizedBox(width: 8),
+                    _hubTabPill(1, 'Import', tab, primary),
+                    const SizedBox(width: 8),
+                    _hubTabPill(2, 'Sync', tab, primary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        body: IndexedStack(
+          index: tab,
+          children: const [
+            _DirectoryTab(),
+            _ImportTab(key: ValueKey('import')),
+            _SyncTab(key: ValueKey('sync')),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _DirectoryTab(key: _directoryKey),
-          _ImportTab(key: const ValueKey('import')),
-          _SyncTab(key: const ValueKey('sync')),
-        ],
-      ),
-      floatingActionButton: null,
-    ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, st) => Center(child: Text('Error: $e')),
+    );
+  }
+
+  Widget _hubTabPill(int index, String label, int selected, Color primary) {
+    final on = selected == index;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => ref.read(studentsHubTabProvider.notifier).select(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? primary.withOpacity(0.18) : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: on ? primary.withOpacity(0.45) : NeyvoColors.borderSubtle),
+          ),
+          child: Text(
+            label,
+            style: NeyvoTextStyles.label.copyWith(
+              color: on ? primary : NeyvoColors.textSecondary,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -84,7 +103,7 @@ class _StudentsHubPageState extends ConsumerState<StudentsHubPage>
 // --- Directory tab ---
 
 class _DirectoryTab extends StatefulWidget {
-  const _DirectoryTab({super.key});
+  const _DirectoryTab();
 
   @override
   State<_DirectoryTab> createState() => _DirectoryTabState();
