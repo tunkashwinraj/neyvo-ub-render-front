@@ -31,12 +31,9 @@ class SendgridApi {
         params: _idParams(),
       );
       return SendgridConfig.fromJson(m);
-    } on ApiException catch (e) {
+    } on ApiException {
       // Keep Integrations page usable on partial/older deployments.
-      if (e.statusCode == 404 || e.statusCode == 400) {
-        return const SendgridConfig(enabled: false, connected: false);
-      }
-      rethrow;
+      return const SendgridConfig(enabled: false, connected: false);
     }
   }
 

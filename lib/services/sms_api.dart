@@ -35,20 +35,21 @@ class SmsApi {
     } on ApiException catch (e) {
       // Fallback for environments that still expose Twilio integration only.
       if (e.statusCode == 404) {
-        final m = await NeyvoApi.getJsonMap(
-          '/api/integrations/twilio',
-          params: _idParams(),
-        );
-        final from = m['default_number']?.toString();
-        return SmsConfig(
-          configured: (from != null && from.isNotEmpty),
-          fromMasked: from,
-        );
+        try {
+          final m = await NeyvoApi.getJsonMap(
+            '/api/integrations/twilio',
+            params: _idParams(),
+          );
+          final from = m['default_number']?.toString();
+          return SmsConfig(
+            configured: (from != null && from.isNotEmpty),
+            fromMasked: from,
+          );
+        } on ApiException {
+          return const SmsConfig(configured: false);
+        }
       }
-      if (e.statusCode == 400) {
-        return const SmsConfig(configured: false);
-      }
-      rethrow;
+      return const SmsConfig(configured: false);
     }
   }
 
