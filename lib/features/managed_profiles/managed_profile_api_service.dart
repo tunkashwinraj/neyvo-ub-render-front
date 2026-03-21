@@ -2,6 +2,7 @@
 // API client for Managed Profiles only. Uses /api/managed-profiles/*.
 
 import '../../api/neyvo_api.dart';
+import '../../api/spearia_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
@@ -91,6 +92,27 @@ class ManagedProfileApiService {
 
   static Future<Map<String, dynamic>> getProfile(String profileId) async =>
       _get('/api/managed-profiles/$profileId');
+
+  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async =>
+      _get('/api/operators/$profileId/integrations/messaging-defaults');
+
+  static Future<Map<String, dynamic>> saveMessagingDefaults(
+    String profileId, {
+    required Map<String, dynamic> email,
+    required Map<String, dynamic> sms,
+  }) async {
+    final body = <String, dynamic>{'email': email, 'sms': sms};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final v = await SpeariaApi.putJson(
+      '/api/operators/$profileId/integrations/messaging-defaults',
+      body: body,
+    );
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    throw ApiException('Unexpected messaging-defaults response');
+  }
 
   /// Duplicate an operator: backend clones the VAPI assistant and creates a new profile (name + " (copy)").
   static Future<Map<String, dynamic>> duplicateProfile(String profileId) async =>
