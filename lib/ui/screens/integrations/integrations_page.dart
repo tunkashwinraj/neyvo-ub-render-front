@@ -413,8 +413,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                               spacing: 10,
                               runSpacing: 8,
                               children: [
-                                if (connected)
-                                  OutlinedButton.icon(
+                                OutlinedButton.icon(
                                     onPressed: () {
                                       showModalBottomSheet<void>(
                                         context: context,
@@ -457,7 +456,9 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                       Icons.verified_outlined,
                                       size: 18,
                                     ),
-                                    label: const Text('Verify sender'),
+                                    label: Text(
+                                      connected ? 'Verify sender' : 'Configure sender',
+                                    ),
                                   ),
                                 if (tenantSender)
                                   TextButton.icon(
@@ -1534,7 +1535,7 @@ class _VerifySendGridSenderSheetState
             Text('Verify Sender', style: NeyvoTextStyles.heading),
             const SizedBox(height: 8),
             Text(
-              'SendGrid will email a verification link to this sender address.',
+              'Set sender email/name for this organization. SendGrid will email a verification link to this sender address.',
               style: NeyvoTextStyles.micro.copyWith(
                 color: NeyvoColors.textMuted,
               ),

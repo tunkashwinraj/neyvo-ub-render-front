@@ -4,6 +4,10 @@ import '../neyvo_pulse_api.dart';
 
 class SendgridApi {
   SendgridApi._();
+  static const String _integrationBaseUrl = String.fromEnvironment(
+    'API_INTEGRATIONS_BASE_URL',
+    defaultValue: 'https://neyvoub-back.onrender.com',
+  );
 
   static Map<String, dynamic> _idParams() {
     final id = NeyvoPulseApi.defaultAccountId.trim();
@@ -42,21 +46,61 @@ class SendgridApi {
     required String fromEmail,
     required String fromName,
   }) async {
-    await NeyvoApi.postJsonMap(
-      '/api/integrations/sendgrid/sender/verify',
-      body: {
-        ..._idBody(),
-        'from_email': fromEmail.trim(),
-        'from_name': fromName.trim(),
-      },
-    );
+    try {
+      await NeyvoApi.postJsonMap(
+        '/api/integrations/sendgrid/sender/verify',
+        body: {
+          ..._idBody(),
+          'from_email': fromEmail.trim(),
+          'from_name': fromName.trim(),
+        },
+      );
+    } on ApiException catch (e) {
+      // Staging/older deployments may not expose sender verification routes yet.
+      // Do not block email setup if connect + send endpoints are available.
+      if (e.statusCode == 404 || e.statusCode == 405) {
+        try {
+          await NeyvoApi.postJsonMap(
+            '$_integrationBaseUrl/api/integrations/sendgrid/sender/verify',
+            body: {
+              ..._idBody(),
+              'from_email': fromEmail.trim(),
+              'from_name': fromName.trim(),
+            },
+          );
+        } on ApiException {
+          // Keep this non-blocking for tenants that use platform-managed sender.
+        }
+        return;
+      }
+      rethrow;
+    }
   }
 
   static Future<SendgridSenderStatus> getSenderStatus() async {
-    final m = await NeyvoApi.getJsonMap(
-      '/api/integrations/sendgrid/sender/status',
-      params: _idParams(),
-    );
-    return SendgridSenderStatus.fromJson(m);
+    try {
+      final m = await NeyvoApi.getJsonMap(
+        '/api/integrations/sendgrid/sender/status',
+        params: _idParams(),
+      );
+      return SendgridSenderStatus.fromJson(m);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        try {
+          final m = await NeyvoApi.getJsonMap(
+            '$_integrationBaseUrl/api/integrations/sendgrid/sender/status',
+            params: _idParams(),
+          );
+          return SendgridSenderStatus.fromJson(m);
+        } on ApiException {
+          return const SendgridSenderStatus(
+            ok: true,
+            verified: false,
+            refreshed: false,
+          );
+        }
+      }
+      rethrow;
+    }
   }
 }

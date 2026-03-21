@@ -6,6 +6,10 @@ import '../neyvo_pulse_api.dart';
 class SmsApi {
   SmsApi._();
   static bool _smsConfigUnsupported = false;
+  static const String _integrationBaseUrl = String.fromEnvironment(
+    'API_INTEGRATIONS_BASE_URL',
+    defaultValue: 'https://neyvoub-back.onrender.com',
+  );
 
   static Map<String, dynamic> _idParams() {
     final id = NeyvoPulseApi.defaultAccountId.trim();
@@ -28,16 +32,62 @@ class SmsApi {
 
   /// Persist Twilio sending number for this business, or pass empty string to use platform default.
   static Future<SmsConfig> saveTwilioFromNumber(String fromNumber) async {
-    final v = await SpeariaApi.putJson(
-      '/api/sms/integration',
-      body: {
+    final trimmed = fromNumber.trim();
+    try {
+      final v = await SpeariaApi.putJson(
+        '/api/sms/integration',
+        body: {
+          ..._idBody(),
+          'from_number': trimmed,
+        },
+      );
+      if (v is Map<String, dynamic>) return SmsConfig.fromJson(v);
+      if (v is Map) return SmsConfig.fromJson(Map<String, dynamic>.from(v));
+      throw ApiException('Unexpected SMS integration response');
+    } on ApiException catch (e) {
+      // Older deployments use Flask Twilio integration endpoint.
+      // Some builds expose PATCH, others only allow PUT/POST.
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      // Try integration backend directly when app base URL points to a server
+      // that doesn't expose /api/sms/integration.
+      try {
+        final direct = await SpeariaApi.putJson(
+          '$_integrationBaseUrl/api/sms/integration',
+          body: {
+            ..._idBody(),
+            'from_number': trimmed,
+          },
+        );
+        if (direct is Map<String, dynamic>) return SmsConfig.fromJson(direct);
+        if (direct is Map) {
+          return SmsConfig.fromJson(Map<String, dynamic>.from(direct));
+        }
+      } on ApiException {
+        // Continue to legacy twilio fallback.
+      }
+      final body = {
         ..._idBody(),
-        'from_number': fromNumber.trim(),
-      },
-    );
-    if (v is Map<String, dynamic>) return SmsConfig.fromJson(v);
-    if (v is Map) return SmsConfig.fromJson(Map<String, dynamic>.from(v));
-    throw ApiException('Unexpected SMS integration response');
+        'default_number': trimmed,
+      };
+      try {
+        await NeyvoApi.patchJson('/api/integrations/twilio', body: body);
+      } on ApiException catch (e2) {
+        if (e2.statusCode == 404 || e2.statusCode == 405) {
+          try {
+            await SpeariaApi.putJson('/api/integrations/twilio', body: body);
+          } on ApiException catch (e3) {
+            if (e3.statusCode == 404 || e3.statusCode == 405) {
+              await NeyvoApi.postJsonMap('/api/integrations/twilio', body: body);
+            } else {
+              rethrow;
+            }
+          }
+        } else {
+          rethrow;
+        }
+      }
+      return getConfig();
+    }
   }
 
   static Future<SmsConfig> getConfig() async {
@@ -136,11 +186,9 @@ class SmsApi {
     String? name,
     String? body,
   }) async {
-    final b = <String, dynamic>{
-      'operator_id': operatorId,
-      'name': ?name,
-      'body': ?body,
-    };
+    final b = <String, dynamic>{'operator_id': operatorId};
+    if (name != null) b['name'] = name;
+    if (body != null) b['body'] = body;
     final m = await SpeariaApi.putJson(
       '/api/sms/templates/$templateId',
       body: b,
