@@ -31,6 +31,11 @@ final ariaOperatorDetailProvider =
   },
 );
 
+final operatorMessagingDefaultsProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, operatorId) async {
+  return AriaOperatorApiService.getMessagingDefaults(operatorId);
+});
+
 class AriaCreateSessionState {
   final bool isStarting;
   final bool callEnded;

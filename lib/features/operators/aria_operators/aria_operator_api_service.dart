@@ -2,6 +2,7 @@
 // API client for ARIA Operators. Calls /api/operators/* endpoints.
 
 import '../../../api/neyvo_api.dart';
+import '../../../api/spearia_api.dart';
 import '../../../neyvo_pulse_api.dart';
 
 class AriaOperatorApiService {
@@ -36,6 +37,32 @@ class AriaOperatorApiService {
   static Future<void> deleteOperator(String operatorId) async {
     final params = _withAccountId(<String, dynamic>{});
     await NeyvoApi.deleteJson('/api/operators/$operatorId', params: params);
+  }
+
+  static Future<Map<String, dynamic>> getMessagingDefaults(String operatorId) async {
+    final params = _withAccountId(<String, dynamic>{});
+    return NeyvoApi.getJsonMap(
+      '/api/operators/$operatorId/integrations/messaging-defaults',
+      params: params,
+    );
+  }
+
+  static Future<Map<String, dynamic>> saveMessagingDefaults(
+    String operatorId, {
+    required Map<String, dynamic> email,
+    required Map<String, dynamic> sms,
+  }) async {
+    final body = _withAccountId(<String, dynamic>{
+      'email': email,
+      'sms': sms,
+    });
+    final v = await SpeariaApi.putJson(
+      '/api/operators/$operatorId/integrations/messaging-defaults',
+      body: body,
+    );
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    throw ApiException('Unexpected messaging-defaults response');
   }
 }
 

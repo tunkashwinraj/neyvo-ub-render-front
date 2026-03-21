@@ -79,10 +79,22 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                   ? const Color(0xFFEF4444)
                   : const Color(0xFF94A3B8);
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: ListView(
+          return DefaultTabController(
+            length: 2,
+            child: Column(
               children: [
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Overview'),
+                    Tab(text: 'Integrations'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
                 Row(
                   children: [
                     CircleAvatar(radius: 10, backgroundColor: statusColor),
@@ -259,6 +271,12 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                   onAdd: () => _openSmsTemplateSheet(context, ref, null),
                   onEditTemplate: (t) => _openSmsTemplateSheet(context, ref, t),
                 ),
+                        ],
+                      ),
+                      _OperatorIntegrationsSection(operatorId: widget.operatorId),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
@@ -365,6 +383,199 @@ void _openAriaCreatePopup(BuildContext context) {
       );
     },
   );
+}
+
+class _OperatorIntegrationsSection extends ConsumerStatefulWidget {
+  final String operatorId;
+  const _OperatorIntegrationsSection({required this.operatorId});
+
+  @override
+  ConsumerState<_OperatorIntegrationsSection> createState() => _OperatorIntegrationsSectionState();
+}
+
+class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrationsSection> {
+  final _emailTo = TextEditingController();
+  final _emailSubject = TextEditingController();
+  final _emailBody = TextEditingController();
+  final _emailHtml = TextEditingController();
+  final _emailFromName = TextEditingController();
+  final _smsTo = TextEditingController();
+  final _smsBody = TextEditingController();
+
+  bool _loaded = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailTo.dispose();
+    _emailSubject.dispose();
+    _emailBody.dispose();
+    _emailHtml.dispose();
+    _emailFromName.dispose();
+    _smsTo.dispose();
+    _smsBody.dispose();
+    super.dispose();
+  }
+
+  void _applyDefaults(Map<String, dynamic> data) {
+    final email = data['email'] is Map ? Map<String, dynamic>.from(data['email'] as Map) : const <String, dynamic>{};
+    final sms = data['sms'] is Map ? Map<String, dynamic>.from(data['sms'] as Map) : const <String, dynamic>{};
+    _emailTo.text = (email['to'] ?? '').toString();
+    _emailSubject.text = (email['subject'] ?? '').toString();
+    _emailBody.text = (email['body'] ?? '').toString();
+    _emailHtml.text = (email['html_body'] ?? '').toString();
+    _emailFromName.text = (email['from_name'] ?? '').toString();
+    _smsTo.text = (sms['to'] ?? '').toString();
+    _smsBody.text = (sms['body'] ?? '').toString();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await AriaOperatorApiService.saveMessagingDefaults(
+        widget.operatorId,
+        email: {
+          'to': _emailTo.text.trim(),
+          'subject': _emailSubject.text,
+          'body': _emailBody.text,
+          'html_body': _emailHtml.text,
+          'from_name': _emailFromName.text.trim(),
+        },
+        sms: {
+          'to': _smsTo.text.trim(),
+          'body': _smsBody.text,
+        },
+      );
+      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Integration defaults saved')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(operatorMessagingDefaultsProvider(widget.operatorId));
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Integrations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Set default payload fields for sendEmail and sendSMS. Tool call args still win; missing args are auto-filled from here.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                async.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  error: (e, _) => Text('Could not load defaults: $e', style: const TextStyle(color: Color(0xFFF59E0B))),
+                  data: (data) {
+                    if (!_loaded) {
+                      _applyDefaults(data);
+                      _loaded = true;
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Email defaults (SendGrid)', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                TextField(controller: _emailTo, decoration: const InputDecoration(labelText: 'Default to')),
+                const SizedBox(height: 8),
+                TextField(controller: _emailFromName, decoration: const InputDecoration(labelText: 'From name helper (optional)')),
+                const SizedBox(height: 8),
+                TextField(controller: _emailSubject, decoration: const InputDecoration(labelText: 'Default subject')),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _emailBody,
+                  minLines: 3,
+                  maxLines: 8,
+                  decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _emailHtml,
+                  minLines: 2,
+                  maxLines: 6,
+                  decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('SMS defaults (Twilio)', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                TextField(controller: _smsTo, decoration: const InputDecoration(labelText: 'Default to')),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _smsBody,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'You can use variables like {{name}}, {{date}}, {{time}}. They are filled from tool call `variables`.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: const TextStyle(color: Color(0xFFF59E0B))),
+        ],
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Save Integration Defaults'),
+        ),
+      ],
+    );
+  }
 }
 
 class _EmailTemplatesSection extends ConsumerWidget {
