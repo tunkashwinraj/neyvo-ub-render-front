@@ -94,20 +94,63 @@ class ManagedProfileApiService {
   static Future<Map<String, dynamic>> getProfile(String profileId) async =>
       _get('/api/managed-profiles/$profileId');
 
-  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async {
-    final path = '/api/operators/$profileId/integrations/messaging-defaults';
-    try {
-      return _get(path);
-    } on ApiException catch (e) {
-      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
-      final params = <String, dynamic>{};
-      if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
-        params['account_id'] = NeyvoPulseApi.defaultAccountId;
-      }
-      final v = await SpeariaApi.getJson('$_integrationBaseUrl$path', params: params);
+  /// True when GET returned ok but nothing was ever saved (or wrong host returned empty).
+  static bool _messagingDefaultsPayloadEmpty(Map<String, dynamic> m) {
+    Map<String, dynamic>? asMap(dynamic v) {
       if (v is Map<String, dynamic>) return v;
       if (v is Map) return Map<String, dynamic>.from(v);
-      throw ApiException('Unexpected messaging-defaults response');
+      return null;
+    }
+
+    bool blank(String? s) => s == null || s.trim().isEmpty;
+    final email = asMap(m['email']);
+    final sms = asMap(m['sms']);
+    if (email != null) {
+      for (final k in ['to', 'subject', 'body', 'html_body', 'from_name']) {
+        if (!blank(email[k]?.toString())) return false;
+      }
+    }
+    if (sms != null) {
+      for (final k in ['to', 'body']) {
+        if (!blank(sms[k]?.toString())) return false;
+      }
+    }
+    return true;
+  }
+
+  static Future<Map<String, dynamic>> _getMessagingDefaultsFromIntegration(
+    String profileId,
+    Map<String, dynamic> params,
+  ) async {
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    final v = await SpeariaApi.getJson('$_integrationBaseUrl$path', params: params);
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    throw ApiException('Unexpected messaging-defaults response');
+  }
+
+  /// Same dual-host behavior as save: primary Pulse API, then integration backend.
+  /// Also retries integration when primary returns 200 but Firestore doc is empty (split-brain).
+  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async {
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    try {
+      final first = await NeyvoApi.getJsonMap(path, params: params);
+      if (!_messagingDefaultsPayloadEmpty(first)) return first;
+      if (NeyvoPulseApi.defaultAccountId.isEmpty) return first;
+      try {
+        final second = await _getMessagingDefaultsFromIntegration(profileId, params);
+        if (!_messagingDefaultsPayloadEmpty(second)) return second;
+      } catch (_) {
+        /* keep empty first */
+      }
+      return first;
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return _getMessagingDefaultsFromIntegration(profileId, params);
     }
   }
 

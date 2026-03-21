@@ -82,11 +82,21 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: 4, vsync: this);
+    _tabs.addListener(_onMainTabChanged);
     _load();
+  }
+
+  void _onMainTabChanged() {
+    if (_tabs.indexIsChanging) return;
+    // Reload messaging defaults when opening "Additional settings" (index 3).
+    if (_tabs.index == 3 && !_loading) {
+      _loadMessagingDefaults();
+    }
   }
 
   @override
   void dispose() {
+    _tabs.removeListener(_onMainTabChanged);
     _tabs.dispose();
     _nameCtrl.dispose();
     _goalCtrl.dispose();
@@ -125,6 +135,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       _error = null;
     });
     try {
+      await _ensurePulseAccountId();
       final results = await Future.wait([
         ManagedProfileApiService.getProfile(widget.profileId),
         NeyvoPulseApi.listNumbers(),
@@ -207,7 +218,22 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     }
   }
 
+  /// Ensures [NeyvoPulseApi.defaultAccountId] is set so operator integrations GET/PUT include account_id.
+  Future<void> _ensurePulseAccountId() async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) return;
+    try {
+      final res = await NeyvoPulseApi.getAccountInfo();
+      if (res['ok'] == true) {
+        final id = (res['account_id'] ?? res['accountId'] ?? '').toString().trim();
+        if (id.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(id);
+      }
+    } catch (_) {
+      /* still try load; user may have session-only routing */
+    }
+  }
+
   Future<void> _loadMessagingDefaults() async {
+    await _ensurePulseAccountId();
     try {
       final res = await ManagedProfileApiService.getMessagingDefaults(widget.profileId);
       final email = (res['email'] is Map)
@@ -215,15 +241,23 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           : const <String, dynamic>{};
       final sms =
           (res['sms'] is Map) ? Map<String, dynamic>.from(res['sms'] as Map) : const <String, dynamic>{};
-      _emailToCtrl.text = (email['to'] ?? '').toString();
-      _emailSubjectCtrl.text = (email['subject'] ?? '').toString();
-      _emailBodyCtrl.text = (email['body'] ?? '').toString();
-      _emailHtmlCtrl.text = (email['html_body'] ?? '').toString();
-      _emailFromNameCtrl.text = (email['from_name'] ?? '').toString();
-      _smsToCtrl.text = (sms['to'] ?? '').toString();
-      _smsBodyCtrl.text = (sms['body'] ?? '').toString();
-    } catch (_) {
-      // Keep page usable even if endpoint is unavailable on older deployments.
+      if (!mounted) return;
+      setState(() {
+        _messagingDefaultsError = null;
+        _emailToCtrl.text = (email['to'] ?? '').toString();
+        _emailSubjectCtrl.text = (email['subject'] ?? '').toString();
+        _emailBodyCtrl.text = (email['body'] ?? '').toString();
+        _emailHtmlCtrl.text = (email['html_body'] ?? '').toString();
+        _emailFromNameCtrl.text = (email['from_name'] ?? '').toString();
+        _smsToCtrl.text = (sms['to'] ?? '').toString();
+        _smsBodyCtrl.text = (sms['body'] ?? '').toString();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messagingDefaultsError =
+            'Could not load saved email/SMS defaults. Check network and that account_id is set. ($e)';
+      });
     }
   }
 
@@ -247,6 +281,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Email defaults saved')),
       );
+      await _loadMessagingDefaults();
     } catch (e) {
       if (!mounted) return;
       setState(() => _messagingDefaultsError = e.toString());
@@ -272,6 +307,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('SMS defaults saved')),
       );
+      await _loadMessagingDefaults();
     } catch (e) {
       if (!mounted) return;
       setState(() => _messagingDefaultsError = e.toString());
@@ -1906,7 +1942,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               Text('Messaging defaults (Email + SMS)', style: NeyvoTextStyles.heading),
               const SizedBox(height: 8),
               Text(
-                'Used by sendEmail/sendSMS when tool arguments are missing. You can use variables like {{name}}, {{date}}, {{time}}.',
+                'Saved text is stored in Firestore and overrides AI tool arguments when these fields are filled. '
+                'You can use variables like {{name}}, {{date}}, {{time}}. '
+                'If you still see an old “test” message, remove that wording from the assistant’s sendEmail/sendSMS tool or system prompt so the model does not pass it as the body.',
                 style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
               ),
               const SizedBox(height: 12),
