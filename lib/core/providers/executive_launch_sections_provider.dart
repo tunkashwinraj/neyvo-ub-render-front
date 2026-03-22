@@ -116,19 +116,19 @@ final executiveCriticalProvider =
           from: range.from,
           to: range.to,
           timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ),
+        ).catchError((_) => <String, dynamic>{'ok': false}),
         NeyvoPulseApi.listCalls(
           from: range.from,
           to: range.to,
           limit: 150,
           timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ),
+        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
         NeyvoPulseApi.listCalls(
           from: range.priorFrom,
           to: range.priorTo,
           limit: 150,
           timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ),
+        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
         NeyvoPulseApi.getCallsSuccessSummary(
           from: range.from,
           to: range.to,
@@ -138,7 +138,7 @@ final executiveCriticalProvider =
           limit: 5,
           noVapi: true,
           timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast),
-        ),
+        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
         ref.read(accountInfoProvider.future).catchError((_) => <String, dynamic>{}),
       ]);
       final callsRes = Map<String, dynamic>.from(results[1] as Map);

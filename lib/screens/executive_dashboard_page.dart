@@ -176,7 +176,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
 
   Future<void> _fetchCritical({required int version}) async {
     try {
-      final critical = await ref.read(executiveCriticalProvider(_rangeModel()).future);
+      final critical = await ref
+          .read(executiveCriticalProvider(_rangeModel()).future)
+          .timeout(const Duration(seconds: 8));
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = null;
@@ -184,6 +186,10 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
         _recentCalls = critical.recentCalls;
         _successSummary = critical.successSummary;
       });
+    } on TimeoutException {
+      if (mounted && version == _loadVersion) {
+        setState(() => _error = 'Dashboard request timed out. Pull to refresh or check your connection.');
+      }
     } catch (e) {
       if (mounted && version == _loadVersion) setState(() => _error = e.toString());
     }

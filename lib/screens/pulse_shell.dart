@@ -377,7 +377,9 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
 
   Future<void> _loadAccountInfo() async {
     try {
-      final res = await ref.read(accountInfoProvider.future);
+      final res = await ref
+          .read(accountInfoProvider.future)
+          .timeout(const Duration(seconds: 12));
       if (res['ok'] == true && res['account_id'] != null) {
         final accountId = res['account_id']?.toString() ?? '';
         NeyvoPulseApi.setDefaultAccountId(accountId);

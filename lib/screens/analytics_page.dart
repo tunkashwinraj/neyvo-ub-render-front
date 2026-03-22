@@ -115,9 +115,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final prior = _priorRangeIso();
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAnalyticsOverview(from: range.from, to: range.to),
-        NeyvoPulseApi.getAnalyticsComms(from: range.from, to: range.to),
-        NeyvoPulseApi.getAnalyticsStudio(from: range.from, to: range.to),
+        NeyvoPulseApi.getAnalyticsOverview(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
+        NeyvoPulseApi.getAnalyticsComms(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
+        NeyvoPulseApi.getAnalyticsStudio(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getInsights().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getCallbacksAnalytics().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getBillingWallet().catchError((_) => <String, dynamic>{}),

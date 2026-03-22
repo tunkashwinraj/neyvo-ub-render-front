@@ -285,7 +285,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     try {
       final critical = await ref
           .read(pulseDashboardCriticalProvider(range).future)
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 3));
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
