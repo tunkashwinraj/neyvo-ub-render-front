@@ -3,10 +3,11 @@
 
 import '../../../api/neyvo_api.dart';
 import '../../../api/spearia_api.dart';
+import '../../../config/backend_urls.dart';
 import '../../../neyvo_pulse_api.dart';
 
 class AriaOperatorApiService {
-  static const String _integrationBaseUrl = 'https://neyvoub-back.onrender.com';
+  static String get _integrationBaseUrl => resolveNeyvoApiBaseUrl();
 
   static Map<String, dynamic> _withAccountId(Map<String, dynamic> bodyOrParams) {
     final p = Map<String, dynamic>.from(bodyOrParams);

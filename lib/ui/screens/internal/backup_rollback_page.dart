@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../config/backend_urls.dart';
 import '../../../core/providers/backup_rollback_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 
@@ -148,7 +149,7 @@ class _BackupRollbackPageState extends ConsumerState<BackupRollbackPage> {
               children: [
                 _bullet('Frontend loads: https://goodwin-neyvo.web.app'),
                 _bullet(
-                  'Backend health: GET ${const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://neyvoub-back.onrender.com')}/api/pulse/health',
+                  'Backend health: GET ${resolveNeyvoApiBaseUrl()}/api/pulse/health',
                 ),
                 _bullet('Slate config: GET /api/pulse/integrations/slate'),
               ],

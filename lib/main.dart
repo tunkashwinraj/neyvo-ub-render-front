@@ -21,44 +21,18 @@ import 'screens/pulse_auth_page.dart';
 import 'screens/pulse_shell.dart';
 import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
+import 'config/backend_urls.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
-const String _kDefaultBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://goodwin-neyvo-back.onrender.com',
-);
-  /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
-  /// Build: flutter build web --dart-define=API_BASE_URL_STAGING=https://your-staging-back.onrender.com
-  /// If not set, staging uses the same URL as prod (single Render service).
-  const String _kStagingBaseUrl = String.fromEnvironment(
-    'API_BASE_URL_STAGING',
-  defaultValue: _kDefaultBaseUrl,
-  );
-
-/// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
-const bool _kForceStaging = bool.fromEnvironment('FORCE_STAGING', defaultValue: false);
-
-/// True when the app is running on the Firebase staging host (e.g. ub-neyvo-staging.web.app).
-bool get _isStagingHost {
-  if (_kForceStaging && kIsWeb) return true;
-  if (!kIsWeb) return false;
-  final host = Uri.base.host.toLowerCase();
-  return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');
-}
-
-String _resolveBaseUrlForEnvironment() {
-  // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
-  if (_isStagingHost) return _kStagingBaseUrl;
-
-  // Organization-only deployment: use configured base URL.
-  return _kDefaultBaseUrl;
-}
 /// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
 /// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=757763
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (NeyvoApi.baseUrl.contains(Uri.parse(_kDefaultBaseUrl).host)) return '757763';
+  // Goodwin deployment fallback only when API points at production Render host.
+  if (Uri.tryParse(NeyvoApi.baseUrl)?.host == 'goodwin-neyvo-back.onrender.com') {
+    return '757763';
+  }
   return '';
 }
 
@@ -80,7 +54,7 @@ String get _kFallbackAccountId {
   NeyvoApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
   if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
 
-  final baseUrl = _resolveBaseUrlForEnvironment();
+  final baseUrl = resolveNeyvoApiBaseUrl();
 
   // Configure backend base URL once. In dev you can override via:
   // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000

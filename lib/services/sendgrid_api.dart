@@ -1,13 +1,11 @@
 import '../api/neyvo_api.dart';
+import '../config/backend_urls.dart';
 import '../models/email_models.dart';
 import '../neyvo_pulse_api.dart';
 
 class SendgridApi {
   SendgridApi._();
-  static const String _integrationBaseUrl = String.fromEnvironment(
-    'API_INTEGRATIONS_BASE_URL',
-    defaultValue: 'https://neyvoub-back.onrender.com',
-  );
+  static String get _integrationBaseUrl => resolveNeyvoApiBaseUrl();
 
   static Map<String, dynamic> _idParams() {
     final id = NeyvoPulseApi.defaultAccountId.trim();
@@ -104,3 +102,5 @@ class SendgridApi {
     }
   }
 }
+
+

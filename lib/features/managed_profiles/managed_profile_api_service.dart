@@ -3,10 +3,11 @@
 
 import '../../api/neyvo_api.dart';
 import '../../api/spearia_api.dart';
+import '../../config/backend_urls.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
-  static const String _integrationBaseUrl = 'https://neyvoub-back.onrender.com';
+  static String get _integrationBaseUrl => resolveNeyvoApiBaseUrl();
   static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
@@ -175,6 +176,62 @@ class ManagedProfileApiService {
     required Map<String, dynamic> sms,
   }) async {
     return _saveMessagingDefaultsBody(profileId, <String, dynamic>{'sms': sms});
+  }
+
+  /// Send one test email using saved Additional settings (same rendering as Vapi sendEmail).
+  static Future<Map<String, dynamic>> testMessagingEmail(
+    String profileId, {
+    required String to,
+    Map<String, dynamic>? variables,
+    String? memberUserId,
+    String? staffId,
+    String? studentId,
+  }) async {
+    final body = <String, dynamic>{
+      'to': to.trim(),
+      if (variables != null && variables.isNotEmpty) 'variables': variables,
+      if (memberUserId != null && memberUserId.trim().isNotEmpty) 'member_user_id': memberUserId.trim(),
+      if (staffId != null && staffId.trim().isNotEmpty) 'staff_id': staffId.trim(),
+      if (studentId != null && studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+    };
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/messaging-defaults/test-email';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await SpeariaApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  /// Send one test SMS using saved Additional settings (same rendering as Vapi sendSMS).
+  static Future<Map<String, dynamic>> testMessagingSms(
+    String profileId, {
+    required String to,
+    Map<String, dynamic>? variables,
+    String? memberUserId,
+    String? staffId,
+    String? studentId,
+  }) async {
+    final body = <String, dynamic>{
+      'to': to.trim(),
+      if (variables != null && variables.isNotEmpty) 'variables': variables,
+      if (memberUserId != null && memberUserId.trim().isNotEmpty) 'member_user_id': memberUserId.trim(),
+      if (staffId != null && staffId.trim().isNotEmpty) 'staff_id': staffId.trim(),
+      if (studentId != null && studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+    };
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/messaging-defaults/test-sms';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await SpeariaApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
   }
 
   static Future<Map<String, dynamic>> _saveMessagingDefaultsBody(

@@ -2,14 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
 import '../../api/neyvo_api.dart';
+import '../../config/backend_urls.dart';
 
 export 'timezone_provider.dart';
 
 final apiBaseUrlProvider = Provider<String>((ref) {
-  return const String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
-  );
+  return resolveNeyvoApiBaseUrl();
 });
 
 final dioProvider = Provider<Dio>((ref) {

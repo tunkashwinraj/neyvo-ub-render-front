@@ -12,6 +12,7 @@ import '../../theme/neyvo_theme.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
+import 'messaging_defaults_test_panel.dart';
 
 class ManagedProfileDetailPage extends StatefulWidget {
   const ManagedProfileDetailPage({
@@ -2007,6 +2008,11 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Save SMS defaults'),
                 ),
+              ),
+              const SizedBox(height: 20),
+              MessagingDefaultsTestPanel(
+                operatorId: widget.profileId,
+                variableDefaults: _variableDefaults,
               ),
               if (_messagingDefaultsError != null) ...[
                 const SizedBox(height: 8),

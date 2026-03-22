@@ -689,7 +689,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> setMemberRole(String userId, String role) async =>
       _patch('/api/pulse/members/$userId', {'role': role});
 
-  /// Update member role, permissions, name, staff_id, phone, department, title, office, extension, campus, notes (admin only).
+  /// Update member role, permissions, name, staff_id, phone, department, title, office, extension, campus, notes, booking_url (admin only).
   static Future<Map<String, dynamic>> updateMember(
     String userId, {
     String? role,
@@ -704,6 +704,7 @@ class NeyvoPulseApi {
     String? extension,
     String? campus,
     String? notes,
+    String? bookingUrl,
   }) async {
     final body = <String, dynamic>{};
     if (role != null && role.isNotEmpty) body['role'] = role;
@@ -718,6 +719,7 @@ class NeyvoPulseApi {
     if (extension != null && extension.trim().isNotEmpty) body['extension'] = extension.trim();
     if (campus != null && campus.trim().isNotEmpty) body['campus'] = campus.trim();
     if (notes != null) body['notes'] = notes.trim();
+    if (bookingUrl != null) body['booking_url'] = bookingUrl.trim();
     return _patch('/api/pulse/members/$userId', body);
   }
 

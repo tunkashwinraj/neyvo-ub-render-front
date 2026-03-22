@@ -153,6 +153,7 @@ class _MemberDetailPageState extends ConsumerState<MemberDetailPage>
     final displayName = name.isNotEmpty ? name : (email.isNotEmpty ? email : 'Member');
 
     final notes = (member['notes'] ?? '').toString().trim();
+    final bookingUrl = (member['booking_url'] ?? '').toString().trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -191,6 +192,10 @@ class _MemberDetailPageState extends ConsumerState<MemberDetailPage>
                   _detailRow('Email', email.isNotEmpty ? email : '—'),
                   _detailRow('Phone', phone.isNotEmpty ? phone : '—'),
                   _detailRow('Extension', extension.isNotEmpty ? extension : '—'),
+                  _detailRow(
+                    'Booking / scheduling URL',
+                    bookingUrl.isNotEmpty ? bookingUrl : '—',
+                  ),
                 ],
               ),
               const SizedBox(height: NeyvoSpacing.lg),
@@ -297,6 +302,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
   late TextEditingController _notesController;
+  late TextEditingController _bookingUrlController;
 
   @override
   void initState() {
@@ -334,6 +340,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _notesController = TextEditingController(
       text: (widget.member['notes'] ?? '').toString().trim(),
     );
+    _bookingUrlController = TextEditingController(
+      text: (widget.member['booking_url'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -347,6 +356,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _extensionController.dispose();
     _campusController.dispose();
     _notesController.dispose();
+    _bookingUrlController.dispose();
     super.dispose();
   }
 
@@ -386,6 +396,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         extension: extension.isEmpty ? null : extension,
         campus: campus.isEmpty ? null : campus,
         notes: notes.isEmpty ? null : notes,
+        bookingUrl: _bookingUrlController.text.trim(),
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
@@ -434,6 +445,16 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Staff ID (optional)',
                 hintText: 'Staff identifier',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _bookingUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Booking / scheduling URL (optional)',
+                hintText: 'https://calendly.com/...',
               ),
               onChanged: (_) => setState(() {}),
             ),

@@ -683,6 +683,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _officeController;
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
+  late TextEditingController _bookingUrlController;
 
   @override
   void initState() {
@@ -717,6 +718,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _campusController = TextEditingController(
       text: (widget.member['campus'] ?? '').toString().trim(),
     );
+    _bookingUrlController = TextEditingController(
+      text: (widget.member['booking_url'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -729,6 +733,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _officeController.dispose();
     _extensionController.dispose();
     _campusController.dispose();
+    _bookingUrlController.dispose();
     super.dispose();
   }
 
@@ -769,6 +774,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
+        bookingUrl: _bookingUrlController.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -884,6 +890,16 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Campus (optional)',
                 hintText: 'e.g. Main Campus, North Campus',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _bookingUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Booking / scheduling URL (optional)',
+                hintText: 'https://calendly.com/...',
               ),
               onChanged: (_) => setState(() {}),
             ),
