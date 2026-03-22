@@ -106,7 +106,11 @@ Future<T> _cachedFetch<T>({
 
 final executiveCriticalProvider =
     FutureProvider.family<ExecutiveCriticalData, ExecutiveRange>((ref, range) async {
-  ref.watch(accountInfoProvider);
+  ref.watch(
+    accountInfoProvider.select(
+      (async) => async.valueOrNull?['account_id']?.toString() ?? '',
+    ),
+  );
   return _cachedFetch<ExecutiveCriticalData>(
     key: 'exec-critical:${range.key}',
     ttl: const Duration(seconds: 45),
@@ -205,7 +209,11 @@ final executiveDeferredProvider =
 });
 
 final launchCriticalProvider = FutureProvider<LaunchCriticalData>((ref) async {
-  ref.watch(accountInfoProvider);
+  ref.watch(
+    accountInfoProvider.select(
+      (async) => async.valueOrNull?['account_id']?.toString() ?? '',
+    ),
+  );
   return _cachedFetch<LaunchCriticalData>(
     key: 'launch-critical',
     ttl: const Duration(seconds: 45),

@@ -103,7 +103,12 @@ Future<T> _cachedFetch<T>({
 
 final pulseDashboardSummaryProvider =
     FutureProvider.family<Map<String, dynamic>, PulseDashboardRange>((ref, range) async {
-  ref.watch(accountInfoProvider);
+  // Re-fetch summary only when account id changes, not on every AsyncValue transition.
+  ref.watch(
+    accountInfoProvider.select(
+      (async) => async.valueOrNull?['account_id']?.toString() ?? '',
+    ),
+  );
   final cacheKey = 'summary:${range.key}';
   return _cachedFetch<Map<String, dynamic>>(
     cacheKey: cacheKey,
@@ -211,7 +216,7 @@ final pulseDashboardHeavyProvider =
     final days = toDate.difference(fromDate).inDays + 1;
     final prevEnd = fromDate.subtract(const Duration(days: 1));
     final prevStart = prevEnd.subtract(Duration(days: days - 1));
-    String toIso(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
+    String toIso(DateTime d) => d.toUtc().toIso8601String().split('T').first;
     return (toIso(prevStart), toIso(prevEnd));
   } catch (_) {
     return (null, null);

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../api/neyvo_api.dart';
 import '../core/providers/executive_launch_sections_provider.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
@@ -30,9 +31,13 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   DateTime? _customTo;
   bool _loading = true;
   bool _refreshing = false;
-  String? _error;
+  /// First load failed before any successful payload; full-screen retry only in that case.
+  String? _initialLoadError;
+  /// Non-fatal: background refresh or retry failed but cached dashboard data is shown.
+  String? _criticalBanner;
   String? _deferredError;
   int _loadVersion = 0;
+  bool _hasSuccessfulCriticalLoad = false;
 
   List<Map<String, dynamic>> _calls = [];
   List<Map<String, dynamic>> _recentCalls = [];
@@ -145,7 +150,8 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     if (!mounted) return;
     setState(() {
       _loading = true;
-      _error = null;
+      _initialLoadError = null;
+      _criticalBanner = null;
       _deferredError = null;
     });
     await _fetchCritical(version: version);
@@ -176,23 +182,43 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
 
   Future<void> _fetchCritical({required int version}) async {
     try {
-      final critical = await ref
-          .read(executiveCriticalProvider(_rangeModel()).future)
-          .timeout(const Duration(seconds: 8));
+      final critical = await ref.read(executiveCriticalProvider(_rangeModel()).future).timeout(
+            NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+          );
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _error = null;
+        _initialLoadError = null;
+        _criticalBanner = null;
+        _hasSuccessfulCriticalLoad = true;
         _calls = critical.calls;
         _recentCalls = critical.recentCalls;
         _successSummary = critical.successSummary;
       });
     } on TimeoutException {
-      if (mounted && version == _loadVersion) {
-        setState(() => _error = 'Dashboard request timed out. Pull to refresh or check your connection.');
-      }
+      _applyCriticalFailure(
+        version,
+        'Dashboard request timed out. Pull to refresh or check your connection.',
+      );
     } catch (e) {
-      if (mounted && version == _loadVersion) setState(() => _error = e.toString());
+      _applyCriticalFailure(version, e.toString());
     }
+  }
+
+  void _applyCriticalFailure(int version, String message) {
+    if (!mounted || version != _loadVersion) return;
+    final hasCache = _hasSuccessfulCriticalLoad ||
+        _calls.isNotEmpty ||
+        _recentCalls.isNotEmpty ||
+        _successSummary != null;
+    setState(() {
+      if (hasCache) {
+        _criticalBanner = message;
+        _initialLoadError = null;
+      } else {
+        _initialLoadError = message;
+        _criticalBanner = null;
+      }
+    });
   }
 
   Future<void> _fetchDeferred({required int version}) async {
@@ -323,13 +349,48 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 
   Widget _buildMainContent() {
-    if (_loading) {
+    if (_loading && !_hasSuccessfulCriticalLoad) {
       return const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
     }
-    if (_error != null) {
-      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, style: TextStyle(color: NeyvoTheme.error))));
+    if (_initialLoadError != null && !_hasSuccessfulCriticalLoad) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_initialLoadError!, style: TextStyle(color: NeyvoTheme.error)),
+              const SizedBox(height: 16),
+              TextButton(onPressed: _load, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
     }
-    return _buildExecutiveContent();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_criticalBanner != null) ...[
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: NeyvoTheme.borderSubtle),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning),
+              title: Text(
+                _criticalBanner!,
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoTheme.textPrimary),
+              ),
+              trailing: TextButton(onPressed: _load, child: const Text('Retry')),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _buildExecutiveContent(),
+      ],
+    );
   }
 
   Widget _buildComingSoon() {

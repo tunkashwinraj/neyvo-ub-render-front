@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/neyvo_api.dart';
@@ -14,8 +13,6 @@ import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 import '../services/user_timezone_service.dart';
-import '../ui/components/ai_orb/neyvo_ai_orb.dart';
-import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../features/agents/create_agent_wizard.dart';
 
 class PulseDashboardPage extends ConsumerStatefulWidget {
@@ -26,9 +23,13 @@ class PulseDashboardPage extends ConsumerStatefulWidget {
 }
 
 class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
-  bool _loading = false;
   bool _criticalLoading = false;
+  /// Set after first successful critical load; avoids replacing the whole page on later failures.
+  bool _hasSuccessfulCriticalLoad = false;
+  /// Fatal: no successful critical payload yet (full-screen retry only in that case).
   String? _error;
+  /// Non-fatal: refresh failed but KPIs from last success remain visible.
+  String? _criticalBanner;
   String? _importantError;
   String? _heavyError;
   int _loadVersion = 0;
@@ -51,9 +52,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   int _liveRescheduledCalls = 0;
   Timer? _liveCallsTimer;
 
-  bool _businessConfigured = false;
-  bool _agentAttached = false;
-  bool _numberLive = false;
   bool _firstCallCompleted = false;
   String _ubStatus = 'missing';
   int _operatorCount = 0;
@@ -88,19 +86,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     'IT Help Desk Operator',
     'General Front Desk Operator',
   ];
-
-  /// Map dashboard label to UB department id for wizard deep-link.
-  static String? _departmentIdForLabel(String label) {
-    const map = {
-      'Admissions Operator': 'admissions',
-      'Student Financial Services Operator': 'student_financial_services',
-      'Registrar Operator': 'registrar',
-      'Housing Operator': 'residential_life_and_housing',
-      'IT Help Desk Operator': 'information_technology_help_desk',
-      'General Front Desk Operator': null,
-    };
-    return map[label];
-  }
 
   @override
   void initState() {
@@ -236,26 +221,10 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     if (from == null || to == null) {
       return {'from': null, 'to': null};
     }
-    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
+    String toIsoDay(DateTime d) => d.toUtc().toIso8601String().split('T').first;
     return {
       'from': toIsoDay(from),
       'to': toIsoDay(to),
-    };
-  }
-
-  Map<String, String?> _previousIsoRange() {
-    final from = _fromDate;
-    final to = _toDate;
-    if (from == null || to == null) {
-      return {'from': null, 'to': null};
-    }
-    final days = to.difference(from).inDays + 1;
-    final prevEnd = from.subtract(const Duration(days: 1));
-    final prevStart = prevEnd.subtract(Duration(days: days - 1));
-    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
-    return {
-      'from': toIsoDay(prevStart),
-      'to': toIsoDay(prevEnd),
     };
   }
 
@@ -268,9 +237,9 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     setState(() {
       // Do not block the whole dashboard on network.
       // Render the shell immediately and hydrate sections asynchronously.
-      _loading = false;
       _criticalLoading = true;
       _error = null;
+      _criticalBanner = null;
       _importantError = null;
       _heavyError = null;
     });
@@ -285,13 +254,13 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     try {
       final critical = await ref
           .read(pulseDashboardCriticalProvider(range).future)
-          .timeout(const Duration(seconds: 3));
+          .timeout(NeyvoApi.timeoutForClass(ApiTimeoutClass.medium));
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _businessConfigured = critical.businessConfigured;
-        _agentAttached = critical.operatorCount > 0;
-        _numberLive = critical.numberLive;
+        _hasSuccessfulCriticalLoad = true;
+        _error = null;
+        _criticalBanner = null;
         _firstCallCompleted = critical.firstCallCompleted;
         _ubStatus = critical.ubStatus;
         _operatorCount = critical.operatorCount;
@@ -306,7 +275,13 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _importantError = 'Dashboard data is slow to respond. Showing partial view.';
+        const msg = 'Dashboard data is slow to respond. Showing the last loaded view where available.';
+        if (_hasSuccessfulCriticalLoad) {
+          _criticalBanner = msg;
+          _importantError = null;
+        } else {
+          _importantError = 'Dashboard data is slow to respond. Showing partial view.';
+        }
         _criticalLatencyMs = stopwatch.elapsedMilliseconds;
         _criticalLatencyAt = DateTime.now();
         _criticalLatencyDegraded = true;
@@ -316,7 +291,13 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       stopwatch.stop();
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _error = e.toString();
+        if (_hasSuccessfulCriticalLoad) {
+          _criticalBanner = e.toString();
+          _error = null;
+        } else {
+          _error = e.toString();
+          _criticalBanner = null;
+        }
         _criticalLatencyMs = stopwatch.elapsedMilliseconds;
         _criticalLatencyAt = DateTime.now();
         _criticalLatencyDegraded = true;
@@ -364,6 +345,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       'range_from=${_currentIsoRange()['from'] ?? 'n/a'}',
       'range_to=${_currentIsoRange()['to'] ?? 'n/a'}',
       if ((_error ?? '').isNotEmpty) 'error=$_error',
+      if ((_criticalBanner ?? '').isNotEmpty) 'critical_banner=$_criticalBanner',
       if ((_importantError ?? '').isNotEmpty) 'important_error=$_importantError',
       if ((_heavyError ?? '').isNotEmpty) 'heavy_error=$_heavyError',
     ].join('\n');
@@ -618,7 +600,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
+    if (_error != null && !_hasSuccessfulCriticalLoad) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -631,99 +613,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
       );
     }
 
-    final isGoodwinTenant = true;
-    final ubReady = _ubStatus == 'ready';
-
-    // Keep the dedicated "create first operator" experience only for UB.
-    // Goodwin (and other tenants) should always see the full dashboard layout,
-    // even when they have zero operators, so their home matches the UB layout.
-    final showCreateFirstOperator = !isGoodwinTenant && ubReady && _operatorCount == 0;
-
-    // Keep the dedicated "create first operator" experience for empty state.
-    if (showCreateFirstOperator) {
-      return ClipRect(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 24),
-                        const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Create your first Operator',
-                          style: NeyvoTextStyles.title.copyWith(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: NeyvoColors.textPrimary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Choose a department to create a voice operator. You can add more later.',
-                          style: NeyvoTextStyles.body,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        NeyvoGlassPanel(
-                          glowing: true,
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (var i = 0; i < _recommendedOperators.length; i++) ...[
-                                if (i > 0) const SizedBox(height: 10),
-                                FilledButton(
-                                  onPressed: () async {
-                                    final deptId = _departmentIdForLabel(_recommendedOperators[i]);
-                                    if (deptId != null) {
-                                      final created = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
-                                      );
-                                      if (created == true && mounted) {
-                                        PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                                      }
-                                    } else {
-                                      PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                                    }
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: i == 0 ? Theme.of(context).colorScheme.primary : NeyvoColors.bgRaised,
-                                    foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                  ),
-                                  child: Text(
-                                    i == 0 ? 'Create ${_recommendedOperators[i]}' : _recommendedOperators[i],
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              TextButton(
-                                onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
-                                child: const Text('Choose another department'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-    );
-    }
-
     final callOk = _firstCallCompleted;
-    final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
 
     return ClipRect(
       child: RefreshIndicator(
@@ -741,11 +631,29 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (_criticalBanner != null) ...[
+                          _SimpleCard(
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, size: 18, color: NeyvoColors.warning),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _criticalBanner!,
+                                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                                  ),
+                                ),
+                                TextButton(onPressed: _load, child: const Text('Retry')),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         if (_importantError != null || _heavyError != null) ...[
                           _buildSectionStatusBanner(),
                           const SizedBox(height: 12),
                         ],
-                        _buildHeroSection(context, orbState, callOk, contentWidth),
+                        _buildHeroSection(context, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
                         const SizedBox(height: 24),
@@ -825,7 +733,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
+  Widget _buildHeroSection(BuildContext context, bool callOk, double contentWidth) {
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
         (_perf?['total_calls'] as num?)?.toInt() ??
         _recentCalls.length;
@@ -1553,56 +1461,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     );
   }
 
-  Widget _performanceSnapshot() {
-    final calls = (_perf?['calls_total'] as num?)?.toInt();
-    final resolution = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
-        (_perf?['resolution_rate'] as num?)?.toDouble();
-    final credits = (_perf?['credits_consumed'] as num?)?.toInt() ??
-        (_perf?['credits_used'] as num?)?.toInt();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.auto_graph_outlined, color: NeyvoColors.teal),
-            const SizedBox(width: 10),
-            Text('Performance snapshot', style: NeyvoTextStyles.heading),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _metricChip('Total calls', calls?.toString() ?? '—'),
-            _metricChip('Resolution', resolution == null ? '—' : '${resolution.toStringAsFixed(1)}%'),
-            _metricChip('Credits used', credits?.toString() ?? '—'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _metricChip(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: NeyvoColors.bgRaised.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeyvoColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-          const SizedBox(height: 2),
-          Text(label, style: NeyvoTextStyles.micro),
-        ],
-      ),
-    );
-  }
-
   Widget _recentCallsTable() {
     if (_recentCalls.isEmpty) {
       return Column(
@@ -1831,22 +1689,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
     );
   }
 
-  Widget _statusRow(String label, bool ok) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(ok ? Icons.check_circle : Icons.radio_button_unchecked,
-              size: 18, color: ok ? NeyvoColors.success : NeyvoColors.textMuted),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(label, style: NeyvoTextStyles.bodyPrimary),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _actionButton({
     required IconData icon,
     required String label,
@@ -1966,19 +1808,6 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
 
       return true;
     }).toList();
-  }
-
-  Set<String> _distinctCallDepartments() {
-    final set = <String>{};
-    for (final c in _recentCalls) {
-      final department = (c['department'] ?? c['operator_department'] ?? '')
-          .toString()
-          .trim();
-      if (department.isNotEmpty) {
-        set.add(department);
-      }
-    }
-    return set;
   }
 
   String _formatDuration(int seconds) {
@@ -2293,34 +2122,6 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _TimeRangeSelector extends StatelessWidget {
-  const _TimeRangeSelector({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SegmentedButton<String>(
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        ),
-      ),
-      segments: const [
-        ButtonSegment(value: '1d', label: Text('Today')),
-        ButtonSegment(value: '7d', label: Text('7d')),
-        ButtonSegment(value: '30d', label: Text('30d')),
-      ],
-      selected: {value},
-      onSelectionChanged: (v) {
-        if (v.isNotEmpty) onChanged(v.first);
-      },
-    );
-  }
-}
-
 class _GlobalDateFilterBar extends StatelessWidget {
   const _GlobalDateFilterBar({
     required this.preset,
@@ -2591,69 +2392,6 @@ class _NextActionCompact extends StatelessWidget {
                 label,
                 style: NeyvoTextStyles.label,
                 overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NextActionCard extends StatelessWidget {
-  const _NextActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 260,
-      child: NeyvoGlassPanel(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: NeyvoColors.teal),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: NeyvoTextStyles.micro,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: onTap,
-                style: FilledButton.styleFrom(
-                  backgroundColor: NeyvoColors.teal,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-                child: Text(label),
               ),
             ),
           ],

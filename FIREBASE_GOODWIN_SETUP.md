@@ -28,22 +28,15 @@ node scripts/generate_firebase_options.js
 
 This reads `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist` (if present) and writes `lib/firebase_options.dart` so **all platforms use goodwin-neyvo**.
 
-## Step 4: Deploy web to goodwin-neyvo (Firebase Hosting + App Check)
-
-To avoid App Check 403 on goodwin-neyvo.web.app, use the **same** reCAPTCHA v3 site key in the app as in Firebase App Check:
-
-1. In Firebase Console: **goodwin-neyvo** → **App Check** → select your **Web** app → reCAPTCHA v3 provider. Note the **reCAPTCHA v3 site key** (or register one and add `goodwin-neyvo.web.app` to the reCAPTCHA admin allowed domains).
-2. Build and inject the key, then deploy:
+## Step 4: Deploy web to goodwin-neyvo (Firebase Hosting)
 
 ```bash
 cd GU_Neyvo_Front
-set RECAPTCHA_V3_SITE_KEY=your_site_key_here
-flutter build web --dart-define=RECAPTCHA_V3_SITE_KEY=your_site_key_here
-node scripts/inject_recaptcha_key.js
+flutter build web
 firebase deploy --only hosting
 ```
 
-On macOS/Linux use `export RECAPTCHA_V3_SITE_KEY=your_site_key_here` instead of `set`. The inject script updates `build/web/index.html` so the reCAPTCHA script tag uses the same key as the Dart build.
+If you use **Firebase App Check** for the web app, enable and configure it in the Console (**App Check** → your Web app). The Flutter app no longer ships a separate reCAPTCHA widget or build-time key injection.
 
 ## Step 5: Verify
 
@@ -52,7 +45,7 @@ On macOS/Linux use `export RECAPTCHA_V3_SITE_KEY=your_site_key_here` instead of 
 ## Troubleshooting
 
 - **App Check 403 / throttled**  
-  Use the same reCAPTCHA v3 site key in Firebase App Check (goodwin-neyvo) and in the build (Step 4). After a 403, Firebase may throttle for ~24 hours; fix the key and redeploy, or temporarily set App Check to Monitoring in the Console.
+  Confirm App Check settings in Firebase Console for the web app and allowed domains. After repeated 403s, Firebase may throttle for ~24 hours; temporarily set App Check to **Monitoring** in the Console while debugging, then re-enforce enforcement.
 
 - **Android 409 / “already exists”**  
   The Android app is already registered in goodwin-neyvo; use the **download** link for that app to get `google-services.json`. You don’t need to create it again.
