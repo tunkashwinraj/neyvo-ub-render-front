@@ -111,6 +111,10 @@ class StudentDetailCtrl extends _$StudentDetailCtrl {
         selectedAgentId: selected,
       );
     } catch (e) {
+      if (isPulseRequestCancelled(e)) {
+        state = state.copyWith(loading: false);
+        return;
+      }
       state = state.copyWith(loading: false, error: e.toString());
     }
   }

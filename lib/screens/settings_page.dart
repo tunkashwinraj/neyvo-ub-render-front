@@ -49,9 +49,7 @@ class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
   Map<String, dynamic>? _schoolIntegration;
   bool _schoolTokenVisible = false;
   final _memberUserIdController = TextEditingController();
-  final _linkAccountIdController = TextEditingController();
   String _newMemberRole = 'staff';
-  bool _linkingAccount = false;
 
   @override
   void initState() {
@@ -83,7 +81,6 @@ class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
     _callScript.dispose();
     _primaryPhoneController.dispose();
     _memberUserIdController.dispose();
-    _linkAccountIdController.dispose();
     super.dispose();
   }
 
@@ -182,6 +179,7 @@ class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
         });
       }
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
@@ -212,29 +210,6 @@ class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
         setState(() => _saving = false);
       }
-    }
-  }
-
-  Future<void> _linkToAccount() async {
-    final accountId = _linkAccountIdController.text.trim();
-    if (accountId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an account ID')));
-      return;
-    }
-    setState(() => _linkingAccount = true);
-    try {
-      await NeyvoPulseApi.linkUserToAccount(accountId);
-      if (!mounted) return;
-      NeyvoPulseApi.setDefaultAccountId(accountId);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Linked to account $accountId')));
-      _linkAccountIdController.clear();
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) setState(() => _linkingAccount = false);
     }
   }
 

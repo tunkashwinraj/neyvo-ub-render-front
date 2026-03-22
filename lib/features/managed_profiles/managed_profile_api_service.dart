@@ -8,12 +8,24 @@ import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
   static String get _integrationBaseUrl => resolveNeyvoApiBaseUrl();
-  static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
+
+  /// GETs use the same Dio + cancel token as [NeyvoPulseApi] tab-scoped reads so
+  /// switching sidebar tabs aborts in-flight managed-profile requests and frees
+  /// browser connections for the visible tab. Use [shellScoped] for background
+  /// loads that must complete even when the user changes tabs (e.g. launch summary).
+  static Future<Map<String, dynamic>> _get(
+    String path, {
+    Map<String, dynamic>? params,
+    bool shellScoped = false,
+  }) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       p['account_id'] = p['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return NeyvoApi.getJsonMap(path, params: p);
+    if (shellScoped) {
+      return SpeariaApi.getJsonMap(path, params: p);
+    }
+    return SpeariaApi.getJsonMapTabScoped(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
@@ -89,11 +101,11 @@ class ManagedProfileApiService {
         'direction': direction,
       });
 
-  static Future<Map<String, dynamic>> listProfiles() async =>
-      _get('/api/managed-profiles');
+  static Future<Map<String, dynamic>> listProfiles({bool shellScoped = false}) async =>
+      _get('/api/managed-profiles', shellScoped: shellScoped);
 
-  static Future<Map<String, dynamic>> getProfile(String profileId) async =>
-      _get('/api/managed-profiles/$profileId');
+  static Future<Map<String, dynamic>> getProfile(String profileId, {bool shellScoped = false}) async =>
+      _get('/api/managed-profiles/$profileId', shellScoped: shellScoped);
 
   /// True when GET returned ok but nothing was ever saved (or wrong host returned empty).
   static bool _messagingDefaultsPayloadEmpty(Map<String, dynamic> m) {

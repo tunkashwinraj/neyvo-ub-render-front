@@ -220,6 +220,10 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
         hasMore: calls.length >= state.fetchSize,
       );
     } catch (e) {
+      if (isPulseRequestCancelled(e)) {
+        state = state.copyWith(loading: false);
+        return;
+      }
       state = state.copyWith(
         loading: false,
         error: e.toString(),

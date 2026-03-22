@@ -24,21 +24,19 @@ const List<MapEntry<String, String>> kTeamPermissions = [
   MapEntry('billing', 'Billing'),
 ];
 
-class TeamPage extends ConsumerStatefulWidget {
+class TeamPage extends StatefulWidget {
   const TeamPage({super.key});
 
   @override
-  ConsumerState<TeamPage> createState() => _TeamPageState();
+  State<TeamPage> createState() => _TeamPageState();
 }
 
-class _TeamPageState extends ConsumerState<TeamPage> {
+class _TeamPageState extends State<TeamPage> {
   String? _myRole;
   String? _myEmail;
   String? _myName;
   String? _myUserId;
   List<String>? _myPermissions;
-  String? _currentAccountId;
-  List<String> _orgAccountIds = [];
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
   String? _error;
@@ -79,20 +77,10 @@ class _TeamPageState extends ConsumerState<TeamPage> {
       final results = await Future.wait([
         NeyvoPulseApi.getMyRole(),
         NeyvoPulseApi.listMembers(),
-        ref.read(accountInfoProvider.future),
-        NeyvoPulseApi.getAccountOrgs(),
       ]);
       final roleRes = results[0] as Map<String, dynamic>;
       final membersRes = results[1] as Map<String, dynamic>;
-      final accountRes = results[2] as Map<String, dynamic>;
-      final orgsRes = results[3] as Map<String, dynamic>;
       if (!mounted) return;
-      final orgsList = orgsRes['orgs'] as List? ?? [];
-      final orgIds = orgsList
-          .map((e) => (e is Map ? e['account_id'] : e?.toString())?.toString())
-          .where((s) => s != null && s.isNotEmpty)
-          .cast<String>()
-          .toList();
       final permsRaw = roleRes['permissions'];
       final permsList = permsRaw is List
           ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
@@ -108,28 +96,15 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         _members = List<Map<String, dynamic>>.from(
           membersRes['members'] as List? ?? [],
         );
-        _currentAccountId = accountRes['account_id']?.toString();
-        _orgAccountIds = orgIds;
         _loading = false;
       });
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _switchOrg(String accountId) async {
-    if (accountId == _currentAccountId) return;
-    try {
-      await NeyvoPulseApi.linkUserToAccount(accountId);
-      if (!mounted) return;
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
     }
   }
 

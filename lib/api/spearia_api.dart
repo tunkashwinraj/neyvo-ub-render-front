@@ -8,6 +8,8 @@ import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart' as ul;
 
+import '../core/pulse_request_cancelled.dart';
+
 /// Thrown by SpeariaApi on non-2xx or invalid responses.
 class ApiException implements Exception {
   final int? statusCode;
@@ -48,6 +50,18 @@ class SpeariaApi {
 
   static Dio? _dio;
   static String _dioBaseUrl = "";
+
+  /// Cancels in-flight tab-scoped GETs (see [getJsonMapTabScoped]). Call when the
+  /// user selects a different main Pulse sidebar tab so the previous screen stops
+  /// competing for bandwidth with the new one.
+  static CancelToken? _pulseTabCancelToken;
+
+  static void bumpPulseTabCancelToken() {
+    try {
+      _pulseTabCancelToken?.cancel('pulse tab switched');
+    } catch (_) {}
+    _pulseTabCancelToken = CancelToken();
+  }
 
   /// Dio client mirroring the behavior of the SpeariaApi HTTP helpers.
   /// This is used by some Riverpod providers (e.g. billing) that call
@@ -612,6 +626,58 @@ class SpeariaApi {
     throw ApiException('Expected JSON object but got ${v.runtimeType}', uri: _uri(path, params: params));
   }
 
+  /// Same as [getJsonMap] but uses Dio with a shared cancel token. [bumpPulseTabCancelToken]
+  /// should be called when switching main Pulse tabs so stale reads stop immediately.
+  static Future<Map<String, dynamic>> getJsonMapTabScoped(
+    String path, {
+    Map<String, dynamic>? params,
+    Duration? timeout,
+    bool adminAuth = false,
+  }) async {
+    _ensureBaseUrlOrThrow();
+    final p = Map<String, dynamic>.from(_withAccountId(params) ?? {});
+    _pulseTabCancelToken ??= CancelToken();
+    final token = _pulseTabCancelToken!;
+    final dioClient = SpeariaApi().dio;
+    try {
+      final resp = await dioClient.get<dynamic>(
+        path,
+        queryParameters: p.isEmpty ? null : p,
+        cancelToken: token,
+        options: Options(
+          receiveTimeout: timeout ?? _defaultTimeout,
+          responseType: ResponseType.json,
+        ),
+      );
+      final data = resp.data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      throw ApiException(
+        'Expected JSON object but got ${data.runtimeType}',
+        uri: _uri(path, params: params),
+      );
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        throw const PulseRequestCancelled();
+      }
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      String msg = e.message ?? 'HTTP error';
+      if (body is Map && body['error'] != null) {
+        msg = body['error'].toString();
+      } else if (body is String && body.isNotEmpty) {
+        msg = body;
+      }
+      throw ApiException(
+        msg,
+        statusCode: status,
+        uri: e.requestOptions.uri,
+        payload: body,
+      );
+    }
+  }
+
   static Future<List<dynamic>> getJsonList(
       String path, {
         Map<String, dynamic>? params,
@@ -641,6 +707,8 @@ class SpeariaApi {
       }) async {
     try {
       return await op();
+    } on PulseRequestCancelled {
+      return null;
     } on ApiException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(friendlyError ?? e.message)),

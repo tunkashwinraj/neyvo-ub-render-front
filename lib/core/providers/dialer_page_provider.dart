@@ -85,7 +85,7 @@ class DialerPageCtrl extends _$DialerPageCtrl {
       final results = await Future.wait([
         NeyvoPulseApi.getOutboundCapacity(),
         ManagedProfileApiService.listProfiles(),
-        NeyvoPulseApi.listNumbers(),
+        NeyvoPulseApi.listNumbers(shellScoped: true),
         NeyvoPulseApi.listStudents().catchError((_) => <String, dynamic>{'students': []}),
       ]);
       final cap = results[0] as Map<String, dynamic>;
@@ -178,7 +178,7 @@ class DialerPageCtrl extends _$DialerPageCtrl {
     }
 
     try {
-      final wallet = await NeyvoPulseApi.getBillingWallet();
+      final wallet = await NeyvoPulseApi.getBillingWallet(shellScoped: true);
       final credits = (wallet['credits'] as num?)?.toInt() ??
           (wallet['wallet_credits'] as num?)?.toInt() ??
           0;

@@ -4,6 +4,8 @@
 
 import '../api/neyvo_api.dart';
 
+export '../core/pulse_request_cancelled.dart';
+
 class NeyvoPulseApi {
   static String _defaultAccountId = '';
 
@@ -78,14 +80,22 @@ class NeyvoPulseApi {
     return null;
   }
 
+  /// Call when the user selects a different main Pulse sidebar tab. Cancels in-flight
+  /// tab-scoped GETs so the previous screen does not keep loading ahead of the new tab.
+  static void bumpTabRequestPriority() => SpeariaApi.bumpPulseTabCancelToken();
+
   static Future<Map<String, dynamic>> _get(
     String path, {
     Map<String, dynamic>? params,
     Duration? timeout,
+    bool shellScoped = false,
   }) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (_defaultAccountId.isNotEmpty) p['account_id'] = p['account_id'] ?? _defaultAccountId;
-    return SpeariaApi.getJsonMap(path, params: p, timeout: timeout);
+    if (shellScoped) {
+      return SpeariaApi.getJsonMap(path, params: p, timeout: timeout);
+    }
+    return SpeariaApi.getJsonMapTabScoped(path, params: p, timeout: timeout);
   }
 
   static Future<Map<String, dynamic>> _post(
@@ -104,7 +114,7 @@ class NeyvoPulseApi {
   }
 
   static Future<Map<String, dynamic>> health({Duration? timeout}) async =>
-      SpeariaApi.getJsonMap('/api/pulse/health', timeout: timeout);
+      _get('/api/pulse/health', timeout: timeout, shellScoped: true);
 
   /// Inbound health check: validate Twilio webhook and Vapi endpoint wiring.
   /// GET /api/pulse/health/inbound
@@ -121,7 +131,7 @@ class NeyvoPulseApi {
         now.difference(_cachedAccountInfoAt!) < _cacheTtl) {
       return _cachedAccountInfo!;
     }
-    final res = await _get('/api/pulse/account', timeout: timeout);
+    final res = await _get('/api/pulse/account', timeout: timeout, shellScoped: true);
     _cachedAccountInfo = res;
     _cachedAccountInfoAt = now;
     return res;
@@ -148,16 +158,6 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getUbStatus({Duration? timeout}) async =>
       _get('/api/ub/status', timeout: timeout);
 
-  /// GET /api/pulse/account/orgs – list of orgs (account_id) the current user is a member of. For org switcher.
-  static Future<Map<String, dynamic>> getAccountOrgs() async =>
-      _get('/api/pulse/account/orgs');
-
-  /// POST /api/pulse/account/link – link current user (X-User-Id) to an account. Body: { account_id }.
-  /// Does not use _post so we send only the new account_id (backend uses X-User-Id).
-  static Future<Map<String, dynamic>> linkUserToAccount(String accountId) async {
-    return SpeariaApi.postJsonMap('/api/pulse/account/link', body: {'account_id': accountId.trim()});
-  }
-
   // Unified dashboard: agents (GET/POST /api/agents)
   static Future<Map<String, dynamic>> listAgents({
     String? direction,
@@ -170,7 +170,7 @@ class NeyvoPulseApi {
     if (direction != null && direction.isNotEmpty) params['direction'] = direction;
     if (industry != null && industry.isNotEmpty) params['industry'] = industry;
     if (status != null && status.isNotEmpty) params['status'] = status;
-    return SpeariaApi.getJsonMap('/api/agents', params: params, timeout: timeout);
+    return _get('/api/agents', params: params, timeout: timeout);
   }
 
   /// Create agent. Pass templateId only when using a seeded template (not for "Custom agent").
@@ -206,7 +206,7 @@ class NeyvoPulseApi {
   }
 
   static Future<Map<String, dynamic>> getAgent(String agentId) async =>
-      SpeariaApi.getJsonMap('/api/agents/$agentId', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+      _get('/api/agents/$agentId', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
 
   /// GET /api/agents/{id}/knowledge — school_knowledge (education only).
   static Future<Map<String, dynamic>> getAgentKnowledge(String agentId) async =>
@@ -252,11 +252,11 @@ class NeyvoPulseApi {
     final params = <String, dynamic>{};
     if (industry != null && industry.isNotEmpty) params['industry'] = industry;
     if (direction != null && direction.isNotEmpty) params['direction'] = direction;
-    return SpeariaApi.getJsonMap('/api/templates', params: params.isEmpty ? null : params);
+    return _get('/api/templates', params: params.isEmpty ? null : params);
   }
 
   static Future<Map<String, dynamic>> getTemplate(String templateId) async =>
-      SpeariaApi.getJsonMap('/api/templates/$templateId');
+      _get('/api/templates/$templateId');
 
   /// Admin: seed agent templates (run once if templates empty). POST /api/admin/seed-templates
   static Future<Map<String, dynamic>> seedTemplates() async =>
@@ -268,7 +268,7 @@ class NeyvoPulseApi {
 
   // Voice profiles library (Studio)
   static Future<Map<String, dynamic>> listVoiceProfilesLibrary() async =>
-      SpeariaApi.getJsonMap('/api/voice-profiles/library');
+      _get('/api/voice-profiles/library');
 
   // Studio projects
   static Future<Map<String, dynamic>> listStudioProjects() async => _get('/api/studio/projects');
@@ -548,6 +548,7 @@ class NeyvoPulseApi {
     bool syncFromVapi = true,
     bool noVapi = true,
     Duration? timeout,
+    bool shellScoped = false,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
@@ -560,7 +561,8 @@ class NeyvoPulseApi {
     if (noVapi) params['no_vapi'] = '1';
     final search = (q ?? '').trim();
     if (search.isNotEmpty) params['q'] = search;
-    return _get('/api/pulse/calls', params: params.isEmpty ? null : params, timeout: timeout);
+    return _get('/api/pulse/calls',
+        params: params.isEmpty ? null : params, timeout: timeout, shellScoped: shellScoped);
   }
 
   /// Delete one or more call log entries by their ids (as returned in listCalls).
@@ -729,14 +731,15 @@ class NeyvoPulseApi {
   }
 
   /// Phase D RBAC: get current user's role
-  static Future<Map<String, dynamic>> getMyRole() async {
+  /// Use [shellScoped] true for Pulse shell / global providers so tab switches don't cancel.
+  static Future<Map<String, dynamic>> getMyRole({bool shellScoped = false}) async {
     final now = DateTime.now();
     if (_cachedMyRole != null &&
         _cachedMyRoleAt != null &&
         now.difference(_cachedMyRoleAt!) < _cacheTtl) {
       return _cachedMyRole!;
     }
-    final res = await _get('/api/pulse/members/me');
+    final res = await _get('/api/pulse/members/me', shellScoped: shellScoped);
     _cachedMyRole = res;
     _cachedMyRoleAt = now;
     return res;
@@ -979,8 +982,9 @@ class NeyvoPulseApi {
       _post('/api/pulse/integrations/calendly/event-types', {});
 
   static Future<Map<String, dynamic>> startCalendlyOAuth() async =>
-      SpeariaApi.getJsonMap('/api/pulse/integrations/calendly/oauth/start',
-          params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
+      _get('/api/pulse/integrations/calendly/oauth/start',
+          params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null,
+          shellScoped: true);
 
   static Future<Map<String, dynamic>> disconnectCalendly() async =>
       _post('/api/pulse/integrations/calendly/disconnect', {});
@@ -1449,14 +1453,15 @@ class NeyvoPulseApi {
   // Billing (wallet, tier, usage)
   // -------------------------------------------------------------------------
 
-  static Future<Map<String, dynamic>> getBillingWallet({Duration? timeout}) async {
+  /// Use [shellScoped] true for Pulse shell / global billing providers.
+  static Future<Map<String, dynamic>> getBillingWallet({Duration? timeout, bool shellScoped = false}) async {
     final now = DateTime.now();
     if (_cachedBillingWallet != null &&
         _cachedBillingWalletAt != null &&
         now.difference(_cachedBillingWalletAt!) < _cacheTtl) {
       return _cachedBillingWallet!;
     }
-    final res = await _get('/api/billing/wallet', timeout: timeout);
+    final res = await _get('/api/billing/wallet', timeout: timeout, shellScoped: shellScoped);
     _cachedBillingWallet = res;
     _cachedBillingWalletAt = now;
     return res;
@@ -1505,11 +1510,13 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getBillingUsage({
     String? from,
     String? to,
+    bool shellScoped = false,
   }) async {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/billing/usage', params: params.isEmpty ? null : params);
+    return _get('/api/billing/usage',
+        params: params.isEmpty ? null : params, shellScoped: shellScoped);
   }
 
   static Future<Map<String, dynamic>> getBillingTier() async =>
@@ -1535,8 +1542,8 @@ class NeyvoPulseApi {
   // Subscription (plan selector: subscribe, cancel, upgrade)
   // -------------------------------------------------------------------------
 
-  static Future<Map<String, dynamic>> getSubscription() async =>
-      _get('/api/billing/subscription');
+  static Future<Map<String, dynamic>> getSubscription({bool shellScoped = false}) async =>
+      _get('/api/billing/subscription', shellScoped: shellScoped);
 
   static Future<Map<String, dynamic>> subscribe(String plan) async =>
       _post('/api/billing/subscribe', {'plan': plan});
@@ -1625,14 +1632,16 @@ class NeyvoPulseApi {
   // -------------------------------------------------------------------------
 
   /// GET /api/numbers – list owned numbers (includes attached primary from org). Sends account_id so backend returns merged list.
-  static Future<Map<String, dynamic>> listNumbers({Duration? timeout}) async {
+  /// Use [shellScoped] true for Pulse shell / global numbers providers.
+  static Future<Map<String, dynamic>> listNumbers({Duration? timeout, bool shellScoped = false}) async {
     final now = DateTime.now();
     if (_cachedNumbers != null &&
         _cachedNumbersAt != null &&
         now.difference(_cachedNumbersAt!) < _cacheTtl) {
       return _cachedNumbers!;
     }
-    final res = await _get('/api/numbers', params: {'account_id': _defaultAccountId}, timeout: timeout);
+    final res = await _get('/api/numbers',
+        params: {'account_id': _defaultAccountId}, timeout: timeout, shellScoped: shellScoped);
     _cachedNumbers = res;
     _cachedNumbersAt = now;
     return res;

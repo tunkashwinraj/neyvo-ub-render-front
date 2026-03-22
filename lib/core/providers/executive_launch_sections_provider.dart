@@ -219,7 +219,8 @@ final launchCriticalProvider = FutureProvider<LaunchCriticalData>((ref) async {
     ttl: const Duration(seconds: 45),
     loader: () async {
       final results = await Future.wait<dynamic>([
-        NeyvoPulseApi.getBillingWallet(timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium)),
+        NeyvoPulseApi.getBillingWallet(
+            timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium), shellScoped: true),
         SetupStatusApiService.getStatus(),
       ]);
       final wallet = Map<String, dynamic>.from(results[0] as Map);
@@ -240,9 +241,13 @@ final launchDeferredProvider = FutureProvider<LaunchDeferredData>((ref) async {
     ttl: const Duration(seconds: 90),
     loader: () async {
       final results = await Future.wait<dynamic>([
-        ManagedProfileApiService.listProfiles(),
-        NeyvoPulseApi.listNumbers(timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium)),
-        NeyvoPulseApi.listCalls(limit: 120, timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy)),
+        ManagedProfileApiService.listProfiles(shellScoped: true),
+        NeyvoPulseApi.listNumbers(
+            timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium), shellScoped: true),
+        NeyvoPulseApi.listCalls(
+            limit: 120,
+            timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+            shellScoped: true),
         ref.read(accountInfoProvider.future).catchError((_) => <String, dynamic>{}),
       ]);
       final profiles = Map<String, dynamic>.from(results[0] as Map);

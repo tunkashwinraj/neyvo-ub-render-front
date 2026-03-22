@@ -42,9 +42,10 @@ class VoiceTierPageCtrl extends _$VoiceTierPageCtrl {
   Future<void> load() async {
     state = state.copyWith(loading: true, clearError: true);
     try {
-      final w = await NeyvoPulseApi.getBillingWallet();
+      final w = await NeyvoPulseApi.getBillingWallet(shellScoped: true);
       state = state.copyWith(loading: false, wallet: w);
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       state = state.copyWith(loading: false, error: e.toString());
     }
   }

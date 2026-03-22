@@ -32,10 +32,10 @@ class BillingNotifier extends _$BillingNotifier {
     final toStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final results = await Future.wait([
-      NeyvoPulseApi.getBillingWallet(),
-      NeyvoPulseApi.getBillingUsage(from: fromStr, to: toStr),
-      NeyvoPulseApi.getSubscription(),
-      NeyvoPulseApi.listNumbers(),
+      NeyvoPulseApi.getBillingWallet(shellScoped: true),
+      NeyvoPulseApi.getBillingUsage(from: fromStr, to: toStr, shellScoped: true),
+      NeyvoPulseApi.getSubscription(shellScoped: true),
+      NeyvoPulseApi.listNumbers(shellScoped: true),
     ]);
     return BillingData(
       wallet: Map<String, dynamic>.from(results[0] as Map),

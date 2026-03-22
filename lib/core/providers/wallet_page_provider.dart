@@ -57,7 +57,7 @@ class WalletPageCtrl extends _$WalletPageCtrl {
     state = state.copyWith(loading: true, clearError: true, offset: 0);
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getBillingWallet(),
+        NeyvoPulseApi.getBillingWallet(shellScoped: true),
         NeyvoPulseApi.getBillingTransactions(
           limit: WalletPageUiState.pageSize,
           offset: 0,
@@ -73,6 +73,7 @@ class WalletPageCtrl extends _$WalletPageCtrl {
         offset: 0,
       );
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       state = state.copyWith(loading: false, error: e.toString());
     }
   }

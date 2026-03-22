@@ -152,6 +152,24 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     return items.isEmpty ? <_NavItem>[_allNavItems.first] : items;
   }
 
+  /// Current main-sidebar route (for stable tab content keys).
+  String? get _currentPulseRoute {
+    final items = _navItems;
+    if (_selectedIndex < 0 || _selectedIndex >= items.length) return null;
+    return items[_selectedIndex].route;
+  }
+
+  void _onPulseSidebarTabChanged(int index, {required String route}) {
+    if (index != _selectedIndex) {
+      NeyvoPulseApi.bumpTabRequestPriority();
+    }
+    setState(() {
+      _selectedIndex = index;
+      _userHasChangedTab = true;
+    });
+    if (kIsWeb) url_helper.updateBrowserUrl(route);
+  }
+
   bool _canAccess(String permissionKey) {
     final enumRole = ref.watch(userRoleProvider);
     if (enumRole == UserRole.owner || enumRole == UserRole.admin) return true;
@@ -331,7 +349,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
 
   Future<void> _loadWalletCredits() async {
     try {
-      final w = await NeyvoPulseApi.getBillingWallet();
+      final w = await NeyvoPulseApi.getBillingWallet(shellScoped: true);
       if (mounted) {
         final credits = (w['credits'] as num?)?.toInt();
         final shield = w['addon_shield_numbers'] as List? ?? [];
@@ -351,7 +369,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
 
   Future<void> _loadMyRoleAndPermissions() async {
     try {
-      final res = await NeyvoPulseApi.getMyRole();
+      final res = await NeyvoPulseApi.getMyRole(shellScoped: true);
       if (!mounted) return;
       if (res['ok'] == true) {
         final role = res['role']?.toString();
@@ -412,7 +430,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
 
   Future<void> _loadNumbersSummary() async {
     try {
-      final res = await NeyvoPulseApi.listNumbers();
+      final res = await NeyvoPulseApi.listNumbers(shellScoped: true);
       if (mounted) {
         setState(() {
           _numbersCount = (res['total_numbers'] as num?)?.toInt();
@@ -432,7 +450,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   /// the system is considered "live" and whether Launch should remain visible.
   Future<void> _loadFirstCallStatus() async {
     try {
-      final res = await NeyvoPulseApi.listCalls();
+      final res = await NeyvoPulseApi.listCalls(shellScoped: true);
       final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final hasCompleted = calls.any((c) {
         final status = (c['status'] as String?)?.toLowerCase();
@@ -509,11 +527,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                         hoverBgColor: sidebarHoverColor,
                         accentColor: sidebarAccentColor,
                         onTap: () {
-                          setState(() {
-                            _selectedIndex = i;
-                            _userHasChangedTab = true;
-                          });
-                          if (kIsWeb) url_helper.updateBrowserUrl(item.route);
+                          _onPulseSidebarTabChanged(i, route: item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
                           if (item.label == 'Lines') _loadNumbersSummary();
                         },
@@ -671,8 +685,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                               var idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
                               if (idx < 0) idx = items.indexWhere((n) => n.route == PulseRouteNames.settings);
                               if (idx >= 0) {
-                                setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
-                                if (kIsWeb) url_helper.updateBrowserUrl(items[idx].route);
+                                _onPulseSidebarTabChanged(idx, route: items[idx].route);
                               }
                             },
                             borderRadius: BorderRadius.circular(100),
@@ -771,7 +784,12 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                 Expanded(
                   child: Stack(
                               children: [
-                                ClipRect(child: _buildCurrentPage()),
+                                ClipRect(
+                                  child: KeyedSubtree(
+                                    key: ValueKey<String>(_currentPulseRoute ?? 'pulse'),
+                                    child: _buildCurrentPage(),
+                                  ),
+                                ),
                                 if (_incomingCall != null)
                                   IncomingCallOverlay(
                                     agentName: (_incomingCall?['agent_name'] ?? _incomingCall?['agent'] ?? '').toString(),
@@ -806,85 +824,8 @@ extension on _PulseShellState {
     final items = _navItems;
     final idx = items.indexWhere((n) => n.route == route);
     if (idx >= 0) {
-      // ignore: invalid_use_of_protected_member
-      setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
-      if (kIsWeb) url_helper.updateBrowserUrl(route);
+      _onPulseSidebarTabChanged(idx, route: items[idx].route);
     }
-  }
-
-  Future<void> _showOrgSwitchDialog() async {
-    final controller = TextEditingController();
-    bool working = false;
-    String? err;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setInner) => AlertDialog(
-            backgroundColor: NeyvoColors.bgBase,
-            title: const Text('Switch org'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Enter an Account ID to switch organizations.', style: NeyvoTextStyles.body),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      labelText: 'Account ID',
-                      hintText: 'e.g. 12345678',
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  if (err != null) ...[
-                    const SizedBox(height: 10),
-                    Text(err!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: working ? null : () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: working
-                    ? null
-                    : () async {
-                        final id = controller.text.trim();
-                        if (id.isEmpty) {
-                          setInner(() => err = 'Enter an account id.');
-                          return;
-                        }
-                        setInner(() {
-                          working = true;
-                          err = null;
-                        });
-                        try {
-                          await NeyvoPulseApi.linkUserToAccount(id);
-                          NeyvoPulseApi.setDefaultAccountId(id);
-                          if (!mounted) return;
-                          await _resolveAccountThenLoad();
-                          if (ctx.mounted) Navigator.of(ctx).pop();
-                        } catch (e) {
-                          setInner(() {
-                            working = false;
-                            err = e.toString();
-                          });
-                        }
-                      },
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.secondary),
-                child: working
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
-                    : const Text('Switch'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    controller.dispose();
   }
 
   /// Map the currently selected nav route to the active page widget.
