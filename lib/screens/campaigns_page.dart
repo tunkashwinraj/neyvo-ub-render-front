@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
 import '../core/providers/campaigns_provider.dart';
 import '../core/providers/account_provider.dart';
@@ -125,7 +126,40 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    final swrKey = '${NeyvoPulseApi.defaultAccountId}_campaigns';
+    final cachedCamp = ApiResponseCache.get(swrKey);
+    if (cachedCamp is Map<String, dynamic>) {
+      setState(() {
+        _students = List<Map<String, dynamic>>.from(
+          (cachedCamp['students'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _campaigns = List<Map<String, dynamic>>.from(
+          (cachedCamp['campaigns'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _agents = List<Map<String, dynamic>>.from(
+          (cachedCamp['agents'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _operatorsForCampaign = List<Map<String, dynamic>>.from(
+          (cachedCamp['operators'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _templates = List<Map<String, dynamic>>.from(
+          (cachedCamp['templates'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _isEducationOrg = cachedCamp['isEdu'] == true;
+        _hasPhoneNumber = cachedCamp['hasPhone'] == true;
+        _outboundPhoneNumbers = List<Map<String, dynamic>>.from(
+          (cachedCamp['outbound'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        final wc = cachedCamp['walletCredits'];
+        if (wc is int) _walletCredits = wc;
+        final cpm = cachedCamp['creditsPerMinute'];
+        if (cpm is int) _creditsPerMinute = cpm;
+        _loading = false;
+        _error = null;
+      });
+    } else {
+      setState(() => _loading = true);
+    }
     try {
       // Ensure account context so operator list (managed profiles) is scoped to current org
       if (NeyvoPulseApi.defaultAccountId.isEmpty) {
@@ -224,6 +258,22 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         creditsPerMinute = (wallet['credits_per_minute'] ?? 25) as int?;
         if (creditsPerMinute == null) creditsPerMinute = int.tryParse((wallet['credits_per_minute'] ?? 25).toString()) ?? 25;
       } catch (_) {}
+      ApiResponseCache.set(
+        swrKey,
+        <String, dynamic>{
+          'students': _students,
+          'campaigns': _campaigns,
+          'agents': _agents,
+          'operators': _operatorsForCampaign,
+          'templates': _templates,
+          'isEdu': isEdu,
+          'hasPhone': hasNumber,
+          'outbound': outbound,
+          'walletCredits': walletCredits,
+          'creditsPerMinute': creditsPerMinute ?? 25,
+        },
+        ttl: const Duration(seconds: 60),
+      );
       if (mounted) setState(() {
         _isEducationOrg = isEdu;
         _hasPhoneNumber = hasNumber;
@@ -251,10 +301,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             'Point API_BASE_URL to the full Neyvo backend that exposes GET /api/pulse/campaigns.';
       }
       if (mounted) {
-        setState(() {
-          _error = msg;
-          _loading = false;
-        });
+        if (cachedCamp == null) {
+          setState(() {
+            _error = msg;
+            _loading = false;
+          });
+        }
       }
     } catch (e) {
       _recordCampaignDiagnostic(
@@ -262,10 +314,14 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         backendMessage: e.toString(),
         success: false,
       );
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        if (cachedCamp == null) {
+          setState(() {
+            _error = e.toString();
+            _loading = false;
+          });
+        }
+      }
     }
   }
 

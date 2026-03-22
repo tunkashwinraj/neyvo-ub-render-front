@@ -7,7 +7,7 @@ part of 'call_history_provider.dart';
 // **************************************************************************
 
 String _$callHistoryNotifierHash() =>
-    r'7b75d46c6e7ecca214bba4926bd3b1e803259bc3';
+    r'380f7305197f9e4fcf07f2c35439a484d735ce6b';
 
 /// See also [CallHistoryNotifier].
 @ProviderFor(CallHistoryNotifier)

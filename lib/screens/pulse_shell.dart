@@ -14,6 +14,8 @@ import '../pulse_route_names.dart';
 import '../core/models/user_role.dart';
 import '../core/providers/account_provider.dart';
 import '../core/providers/role_provider.dart';
+import '../core/providers/timezone_provider.dart';
+import '../services/user_timezone_service.dart';
 import 'pulse_dashboard_page.dart';
 import 'settings_page.dart';
 import 'campaigns_page.dart';
@@ -259,14 +261,15 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     final resolveStart = DateTime.now().millisecondsSinceEpoch;
     debugSessionLog('pulse_shell.dart:_resolveAccountThenLoad', 'resolveAccountThenLoad start', {'initialRoute': widget.initialRouteName}, 'B');
     // #endregion
-    await _loadAccountInfo();
-    if (!mounted) return;
-    await _loadMyRoleAndPermissions();
+    await Future.wait<void>([
+      _loadAccountInfo(),
+      _loadMyRoleAndPermissions(),
+    ]);
     if (!mounted) return;
     _loadWalletCredits();
     _loadNumbersSummary();
     _loadUsageSummary();
-    await _loadFirstCallStatus();
+    unawaited(_loadFirstCallStatus());
     // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
     // Otherwise Firestore rules typically deny access and we get permission-denied. Wallet
     // data still loads via _loadWalletCredits() (API) above.
@@ -369,6 +372,13 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
 
   Future<void> _loadMyRoleAndPermissions() async {
     try {
+      final acc = await ref
+          .read(accountInfoProvider.future)
+          .timeout(const Duration(seconds: 12));
+      if (acc['ok'] == true && acc['account_id'] != null) {
+        final accountId = acc['account_id']?.toString() ?? '';
+        if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
+      }
       final res = await NeyvoPulseApi.getMyRole(shellScoped: true);
       if (!mounted) return;
       if (res['ok'] == true) {
@@ -414,7 +424,18 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
           _voiceStudioEnabled = (res['studio_enabled'] == true);
           _agencyMode = (res['agency_mode'] == true) || (res['is_agency'] == true);
         });
+        unawaited(_syncTimezoneFromSettings());
       }
+    } catch (_) {}
+  }
+
+  Future<void> _syncTimezoneFromSettings() async {
+    try {
+      final settingsRes =
+          await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 6));
+      final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
+      UserTimezoneService.setTimezone(tzStr);
+      ref.read(userTimezoneProvider.notifier).syncFromService();
     } catch (_) {}
   }
 
@@ -543,7 +564,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Account ID: ${_accountIdDisplay ?? '—'}',
+                        'Account ID: ${_accountIdDisplay != null && _accountIdDisplay!.trim().isNotEmpty ? _accountIdDisplay! : 'Loading…'}',
                         style: NeyvoTextStyles.micro.copyWith(
                           color: NeyvoColors.white.withOpacity(0.75),
                         ),
@@ -677,7 +698,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                         },
                       ),
                       if (_walletCredits != null)
-                          Material(
+                        Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
@@ -712,6 +733,16 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                                 ),
                               ),
                             ),
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 80,
+                          height: 28,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.textSecondary.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(100),
                           ),
                         ),
                       PopupMenuButton<String>(

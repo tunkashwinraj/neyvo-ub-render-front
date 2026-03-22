@@ -2,6 +2,7 @@
 // Neyvo Pulse – API client. All data is keyed by account_id.
 // Account id is set dynamically from GET /api/pulse/account (no hardcoded values).
 
+import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
 
 export '../core/pulse_request_cancelled.dart';
@@ -19,8 +20,13 @@ class NeyvoPulseApi {
   static DateTime? _cachedNumbersAt;
   static Map<String, dynamic>? _cachedMyRole;
   static DateTime? _cachedMyRoleAt;
+  static Map<String, dynamic>? _cachedListAgents;
+  static DateTime? _cachedListAgentsAt;
+  static String? _cachedListAgentsKey;
 
   static const Duration _cacheTtl = Duration(seconds: 60);
+  static const Duration _cacheTtlAccountRole = Duration(seconds: 120);
+  static const Duration _cacheTtlAgents = Duration(seconds: 30);
 
   static String get defaultAccountId => _defaultAccountId;
 
@@ -41,6 +47,10 @@ class NeyvoPulseApi {
     _cachedNumbersAt = null;
     _cachedMyRole = null;
     _cachedMyRoleAt = null;
+    _cachedListAgents = null;
+    _cachedListAgentsAt = null;
+    _cachedListAgentsKey = null;
+    ApiResponseCache.clear();
   }
 
   // High-level campaign error codes used by the frontend for tailored UX.
@@ -89,13 +99,14 @@ class NeyvoPulseApi {
     Map<String, dynamic>? params,
     Duration? timeout,
     bool shellScoped = false,
+    Map<String, String>? extraHeaders,
   }) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (_defaultAccountId.isNotEmpty) p['account_id'] = p['account_id'] ?? _defaultAccountId;
     if (shellScoped) {
-      return SpeariaApi.getJsonMap(path, params: p, timeout: timeout);
+      return SpeariaApi.getJsonMap(path, params: p, timeout: timeout, headers: extraHeaders);
     }
-    return SpeariaApi.getJsonMapTabScoped(path, params: p, timeout: timeout);
+    return SpeariaApi.getJsonMapTabScoped(path, params: p, timeout: timeout, extraHeaders: extraHeaders);
   }
 
   static Future<Map<String, dynamic>> _post(
@@ -128,10 +139,14 @@ class NeyvoPulseApi {
     final now = DateTime.now();
     if (_cachedAccountInfo != null &&
         _cachedAccountInfoAt != null &&
-        now.difference(_cachedAccountInfoAt!) < _cacheTtl) {
+        now.difference(_cachedAccountInfoAt!) < _cacheTtlAccountRole) {
       return _cachedAccountInfo!;
     }
-    final res = await _get('/api/pulse/account', timeout: timeout, shellScoped: true);
+    final res = await SpeariaApi.runWithRetry(
+      () => _get('/api/pulse/account', timeout: timeout, shellScoped: true),
+      maxAttempts: 3,
+      delay: const Duration(seconds: 3),
+    );
     _cachedAccountInfo = res;
     _cachedAccountInfoAt = now;
     return res;
@@ -170,7 +185,20 @@ class NeyvoPulseApi {
     if (direction != null && direction.isNotEmpty) params['direction'] = direction;
     if (industry != null && industry.isNotEmpty) params['industry'] = industry;
     if (status != null && status.isNotEmpty) params['status'] = status;
-    return _get('/api/agents', params: params, timeout: timeout);
+    final cacheKey =
+        '${_defaultAccountId}|${direction ?? ''}|${industry ?? ''}|${status ?? ''}';
+    final now = DateTime.now();
+    if (_cachedListAgents != null &&
+        _cachedListAgentsAt != null &&
+        _cachedListAgentsKey == cacheKey &&
+        now.difference(_cachedListAgentsAt!) < _cacheTtlAgents) {
+      return _cachedListAgents!;
+    }
+    final res = await _get('/api/agents', params: params, timeout: timeout);
+    _cachedListAgents = res;
+    _cachedListAgentsAt = now;
+    _cachedListAgentsKey = cacheKey;
+    return res;
   }
 
   /// Create agent. Pass templateId only when using a seeded template (not for "Custom agent").
@@ -321,7 +349,12 @@ class NeyvoPulseApi {
     final params = <String, dynamic>{};
     if (from != null) params['from'] = from;
     if (to != null) params['to'] = to;
-    return _get('/api/analytics/comms', params: params.isEmpty ? null : params, timeout: timeout);
+    return _get(
+      '/api/analytics/comms',
+      params: params.isEmpty ? null : params,
+      timeout: timeout,
+      extraHeaders: const {'Accept-Encoding': 'identity'},
+    );
   }
   static Future<Map<String, dynamic>> getAnalyticsStudio({String? from, String? to}) async {
     final params = <String, dynamic>{};
@@ -565,6 +598,50 @@ class NeyvoPulseApi {
         params: params.isEmpty ? null : params, timeout: timeout, shellScoped: shellScoped);
   }
 
+  /// Same as [listCalls] with cold-start retries (Render wake-up).
+  static Future<Map<String, dynamic>> listCallsWithRetry({
+    String? studentId,
+    String? from,
+    String? to,
+    int? limit,
+    int? offset,
+    String? q,
+    bool syncFromVapi = true,
+    bool noVapi = true,
+    Duration? timeout,
+    bool shellScoped = false,
+  }) async {
+    return SpeariaApi.runWithRetry(
+      () => listCalls(
+        studentId: studentId,
+        from: from,
+        to: to,
+        limit: limit,
+        offset: offset,
+        q: q,
+        syncFromVapi: syncFromVapi,
+        noVapi: noVapi,
+        timeout: timeout,
+        shellScoped: shellScoped,
+      ),
+      maxAttempts: 2,
+      delay: const Duration(seconds: 2),
+    );
+  }
+
+  /// Same as [getCallsSuccessSummary] with cold-start retries.
+  static Future<Map<String, dynamic>> getCallsSuccessSummaryWithRetry({
+    String? from,
+    String? to,
+    Duration? timeout,
+  }) async {
+    return SpeariaApi.runWithRetry(
+      () => getCallsSuccessSummary(from: from, to: to, timeout: timeout),
+      maxAttempts: 2,
+      delay: const Duration(seconds: 2),
+    );
+  }
+
   /// Delete one or more call log entries by their ids (as returned in listCalls).
   /// Uses DELETE /api/pulse/calls?ids=id1,id2,...
   static Future<Map<String, dynamic>> deleteCalls(List<String> callIds) async {
@@ -736,7 +813,7 @@ class NeyvoPulseApi {
     final now = DateTime.now();
     if (_cachedMyRole != null &&
         _cachedMyRoleAt != null &&
-        now.difference(_cachedMyRoleAt!) < _cacheTtl) {
+        now.difference(_cachedMyRoleAt!) < _cacheTtlAccountRole) {
       return _cachedMyRole!;
     }
     final res = await _get('/api/pulse/members/me', shellScoped: shellScoped);

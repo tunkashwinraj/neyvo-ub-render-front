@@ -6,12 +6,12 @@ part of 'numbers_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$numbersNotifierHash() => r'26bf432fcba2c209deb0551c15949a184c68d3e5';
+String _$numbersNotifierHash() => r'27fbf6f9692dc635123619c49884810f988987cb';
 
 /// See also [NumbersNotifier].
 @ProviderFor(NumbersNotifier)
 final numbersNotifierProvider =
-    AutoDisposeAsyncNotifierProvider<NumbersNotifier, NumbersData>.internal(
+    AsyncNotifierProvider<NumbersNotifier, NumbersData>.internal(
       NumbersNotifier.new,
       name: r'numbersNotifierProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -21,7 +21,7 @@ final numbersNotifierProvider =
       allTransitiveDependencies: null,
     );
 
-typedef _$NumbersNotifier = AutoDisposeAsyncNotifier<NumbersData>;
+typedef _$NumbersNotifier = AsyncNotifier<NumbersData>;
 String _$numbersSyncBusyHash() => r'fe72cafe18f3fe5c2342e5831747fd56b371e094';
 
 /// See also [NumbersSyncBusy].

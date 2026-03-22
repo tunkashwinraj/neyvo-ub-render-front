@@ -51,6 +51,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   int _liveVoicemailCalls = 0;
   int _liveRescheduledCalls = 0;
   Timer? _liveCallsTimer;
+  DateTime? _lastLiveRefreshAt;
 
   bool _firstCallCompleted = false;
   String _ubStatus = 'missing';
@@ -384,6 +385,13 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   /// This is lightweight compared to the full dashboard load and is safe to run
   /// periodically while calls are in progress.
   Future<void> _loadLiveCallStats() async {
+    final now = DateTime.now();
+    if (_lastLiveRefreshAt != null &&
+        now.difference(_lastLiveRefreshAt!) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastLiveRefreshAt = now;
+
     final range = _currentIsoRange();
     final from = range['from'];
     final to = range['to'];
@@ -480,7 +488,7 @@ class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
   void _ensureLiveTimer(bool hasRunningCalls) {
     if (hasRunningCalls) {
       if (_liveCallsTimer == null || !_liveCallsTimer!.isActive) {
-        _liveCallsTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        _liveCallsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           _loadLiveCallStats();
         });
       }

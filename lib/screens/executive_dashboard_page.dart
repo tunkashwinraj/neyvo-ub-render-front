@@ -1,6 +1,6 @@
 // Executive Dashboard – rebuild per spec: tabs, date filter, KPIs from listCalls,
 // Live Call Activity, Call Resolution, CSAT, Recent Call Logs, Quick Actions.
-// Data from NeyvoPulseApi; 5s auto-refresh. Call Resolution donut is custom-painted.
+// Data from NeyvoPulseApi; 60s auto-refresh (45s min gap). Call Resolution donut is custom-painted.
 
 import 'dart:async';
 import 'dart:math' show pi;
@@ -50,6 +50,32 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
 
   Timer? _refreshTimer;
   late AnimationController _pulseController;
+  /// Skips overlapping periodic refreshes (timer is 60s; min gap 45s).
+  DateTime? _lastRefreshAt;
+  int _consecutiveRefreshFailures = 0;
+  static const int _baseRefreshSeconds = 60;
+  static const int _maxRefreshSeconds = 300;
+
+  void _schedulePeriodicRefresh({required int seconds}) {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(Duration(seconds: seconds), (_) => _refresh());
+  }
+
+  void _onRefreshSuccess() {
+    if (_consecutiveRefreshFailures > 0) {
+      _consecutiveRefreshFailures = 0;
+      _schedulePeriodicRefresh(seconds: _baseRefreshSeconds);
+    }
+  }
+
+  void _onRefreshFailure() {
+    _consecutiveRefreshFailures++;
+    if (_consecutiveRefreshFailures >= 3) {
+      final newSeconds = (_baseRefreshSeconds * _consecutiveRefreshFailures)
+          .clamp(_baseRefreshSeconds, _maxRefreshSeconds);
+      _schedulePeriodicRefresh(seconds: newSeconds);
+    }
+  }
 
   @override
   void initState() {
@@ -59,7 +85,7 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
     _load();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    _schedulePeriodicRefresh(seconds: _baseRefreshSeconds);
   }
 
   @override
@@ -162,6 +188,11 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   Future<void> _refresh() async {
     if (_loading || _selectedTabIndex != 0) return;
     if (!mounted) return;
+    final now = DateTime.now();
+    if (_lastRefreshAt != null && now.difference(_lastRefreshAt!) < const Duration(seconds: 45)) {
+      return;
+    }
+    _lastRefreshAt = now;
     setState(() => _refreshing = true);
     ref.invalidate(executiveCriticalProvider(_rangeModel()));
     ref.invalidate(executiveDeferredProvider(_rangeModel()));
@@ -194,6 +225,7 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
         _recentCalls = critical.recentCalls;
         _successSummary = critical.successSummary;
       });
+      _onRefreshSuccess();
     } on TimeoutException {
       _applyCriticalFailure(
         version,
@@ -210,6 +242,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
         _calls.isNotEmpty ||
         _recentCalls.isNotEmpty ||
         _successSummary != null;
+    if (hasCache) {
+      _onRefreshFailure();
+    }
     setState(() {
       if (hasCache) {
         _criticalBanner = message;
@@ -350,7 +385,7 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
 
   Widget _buildMainContent() {
     if (_loading && !_hasSuccessfulCriticalLoad) {
-      return const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
+      return _buildExecutiveFirstLoadSkeleton();
     }
     if (_initialLoadError != null && !_hasSuccessfulCriticalLoad) {
       return Center(
@@ -406,6 +441,149 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
           ),
         ),
       ),
+    );
+  }
+
+  /// Layout-matched placeholders for first critical load (replaces a lone spinner).
+  Widget _buildExecutiveFirstLoadSkeleton() {
+    Widget skeletonPanel() {
+      return SizedBox(
+        height: _kTopPanelHeight,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: NeyvoTheme.borderSubtle),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 160,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: NeyvoTheme.textMuted.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 120,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: NeyvoTheme.textMuted.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const Spacer(),
+                Center(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: NeyvoTheme.textMuted.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 800;
+        final grid = narrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  skeletonPanel(),
+                  const SizedBox(height: 16),
+                  skeletonPanel(),
+                  const SizedBox(height: 16),
+                  skeletonPanel(),
+                  const SizedBox(height: 16),
+                  skeletonPanel(),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: skeletonPanel()),
+                      const SizedBox(width: 16),
+                      Expanded(child: skeletonPanel()),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: skeletonPanel()),
+                      const SizedBox(width: 16),
+                      Expanded(child: skeletonPanel()),
+                    ],
+                  ),
+                ],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildTabs(),
+            const SizedBox(height: 12),
+            grid,
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 180,
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: NeyvoTheme.borderSubtle),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 140,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: NeyvoTheme.textMuted.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(
+                        4,
+                        (i) => Padding(
+                          padding: EdgeInsets.only(bottom: i < 3 ? 8 : 0),
+                          child: Container(
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: NeyvoTheme.textMuted.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

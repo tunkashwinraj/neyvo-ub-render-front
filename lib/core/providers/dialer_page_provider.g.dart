@@ -6,7 +6,7 @@ part of 'dialer_page_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$dialerPageCtrlHash() => r'7e542789788fcfd09a835e3389de5f0ccb4d1ca6';
+String _$dialerPageCtrlHash() => r'efb156797e20788c313cf646ddba5d7a1c78be08';
 
 /// See also [DialerPageCtrl].
 @ProviderFor(DialerPageCtrl)

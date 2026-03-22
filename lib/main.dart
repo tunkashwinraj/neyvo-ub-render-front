@@ -5,14 +5,11 @@
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-  import 'package:shared_preferences/shared_preferences.dart';
-  import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 import 'api/neyvo_api.dart';
 import 'core/providers/account_provider.dart';
 import 'core/providers/theme_provider.dart';
-import 'core/providers/timezone_provider.dart';
-import 'services/user_timezone_service.dart';
 import 'firebase_options.dart';
 import 'neyvo_pulse_api.dart';
 import 'pulse_route_names.dart';
@@ -23,7 +20,6 @@ import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
 import 'config/backend_urls.dart';
 
-  const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
 /// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
 /// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=757763
 String get _kFallbackAccountId {
@@ -146,7 +142,7 @@ class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
   }
 }
 
-  /// After login: load account then show PulseShell (Goodwin-only; no tenant switching).
+  /// After login: show PulseShell immediately; account and settings load inside the shell.
   class _PostAuthGate extends ConsumerStatefulWidget {
     const _PostAuthGate();
 
@@ -187,85 +183,54 @@ class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
   }
 
   class _PostAuthGateState extends ConsumerState<_PostAuthGate> {
-    bool _loaded = false;
+    bool _handled403 = false;
 
     @override
     void initState() {
       super.initState();
-      _loadAccount();
+      if (_kFallbackAccountId.isNotEmpty) {
+        NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
+      }
     }
 
-    Future<void> _loadAccount() async {
-      try {
-        final res = await ref.read(accountInfoProvider.future).timeout(const Duration(seconds: 12));
-        final ok = res['ok'] == true;
-        final accountId = res['account_id'] as String?;
-        final onboardingFromApi = res['onboarding_completed'];
-        if (ok && accountId != null && accountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(accountId);
-        } else if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        // Load user timezone from settings for date display
-        try {
-          final settingsRes = await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 6));
-          final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
-          UserTimezoneService.setTimezone(tzStr);
-          ref.read(userTimezoneProvider.notifier).syncFromService();
-        } catch (_) {}
-        // If API says not completed, check local persistence (so we don't loop when backend doesn't persist)
-        bool completed = onboardingFromApi == true;
-        if (!completed) {
-          final prefs = await SharedPreferences.getInstance();
-          completed = prefs.getBool(_kOnboardingCompletedKey) == true;
-        }
-        if (mounted) {
-          setState(() {
-            _loaded = true;
-          });
-        }
-      } on ApiException catch (e) {
-        // 403 = account not authorized for Goodwin University (single-tenant app).
-        if (e.statusCode == 403) {
-          if (!mounted) return;
-          NeyvoPulseApi.clearAccountInfoCache();
-          NeyvoPulseApi.setDefaultAccountId(null);
-          await showDialog<void>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Not authorized'),
-              content: const Text(
-                'This account is not authorized for Goodwin University.\n\n'
-                'Please sign in with a Goodwin University account or contact your administrator.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
+    Future<void> _showForbiddenAndSignOut() async {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Not authorized'),
+          content: const Text(
+            'This account is not authorized for Goodwin University.\n\n'
+            'Please sign in with a Goodwin University account or contact your administrator.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
             ),
-          );
-          await FirebaseAuth.instance.signOut();
-          return;
-        }
-        if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        if (mounted) setState(() { _loaded = true; });
-      } catch (_) {
-        if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        if (mounted) setState(() { _loaded = true; });
-      }
+          ],
+        ),
+      );
+      await FirebaseAuth.instance.signOut();
     }
 
     @override
     Widget build(BuildContext context) {
-      if (!_loaded) {
-        return const NeyvoLoadingScreen();
-      }
+      ref.listen<AsyncValue<Map<String, dynamic>>>(
+        accountInfoProvider,
+        (prev, next) {
+          next.whenOrNull(
+            error: (e, st) {
+              if (_handled403) return;
+              if (e is! ApiException || e.statusCode != 403) return;
+              _handled403 = true;
+              NeyvoPulseApi.clearAccountInfoCache();
+              NeyvoPulseApi.setDefaultAccountId(null);
+              unawaited(_showForbiddenAndSignOut());
+            },
+          );
+        },
+      );
       // Goodwin-only: no separate onboarding; go straight to shell.
       // On web refresh: use URL path so /pulse/operators (etc.) opens the correct tab instead of a blank/wrong view.
       final path = kIsWeb ? Uri.base.path : null;

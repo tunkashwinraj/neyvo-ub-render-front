@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
 import '../core/providers/students_hub_tab_provider.dart';
 import '../core/providers/students_provider.dart';
@@ -582,11 +583,31 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
   }
 
+  String get _studentsSwrKey =>
+      '${NeyvoPulseApi.defaultAccountId}_students_$_filterStatus';
+
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final cachedEntry = ApiResponseCache.get(_studentsSwrKey);
+    if (cachedEntry is Map<String, dynamic>) {
+      setState(() {
+        _isEducationOrg = cachedEntry['isEdu'] == true;
+        _allStudents = List<Map<String, dynamic>>.from(
+          (cachedEntry['students'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+        );
+        _filteredStudents = _allStudents;
+        _loading = false;
+        _error = null;
+      });
+      _filterStudents();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _runTableEntryAnimation();
+      });
+    } else {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final agentsRes = await NeyvoPulseApi.listAgents();
       final agents =
@@ -619,6 +640,11 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
       final list = (res['students'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      ApiResponseCache.set(
+        _studentsSwrKey,
+        <String, dynamic>{'isEdu': isEducation, 'students': list},
+        ttl: const Duration(seconds: 60),
+      );
       if (mounted) {
         setState(() {
           _isEducationOrg = isEducation;
@@ -633,10 +659,12 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
+        if (cachedEntry == null) {
+          setState(() {
+            _error = e.toString();
+            _loading = false;
+          });
+        }
       }
     }
   }

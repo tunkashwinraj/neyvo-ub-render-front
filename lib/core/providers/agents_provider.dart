@@ -34,7 +34,7 @@ class AgentProfile {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class AgentsNotifier extends _$AgentsNotifier {
   @override
   Future<List<AgentProfile>> build() async {

@@ -59,7 +59,7 @@ final stripeCheckoutUrlProvider = AutoDisposeFutureProvider<String>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef StripeCheckoutUrlRef = AutoDisposeFutureProviderRef<String>;
-String _$billingNotifierHash() => r'18a93930f166f159b53d268fa98ea1322c536026';
+String _$billingNotifierHash() => r'283c6862d9b5ef24a228d1130a607624b37deaca';
 
 /// See also [BillingNotifier].
 @ProviderFor(BillingNotifier)

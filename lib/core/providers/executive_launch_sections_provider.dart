@@ -26,13 +26,11 @@ class ExecutiveRange {
 
 class ExecutiveCriticalData {
   const ExecutiveCriticalData({
-    required this.comms,
     required this.calls,
     required this.successSummary,
     required this.recentCalls,
   });
 
-  final Map<String, dynamic> comms;
   final List<Map<String, dynamic>> calls;
   final Map<String, dynamic>? successSummary;
   final List<Map<String, dynamic>> recentCalls;
@@ -115,47 +113,62 @@ final executiveCriticalProvider =
     key: 'exec-critical:${range.key}',
     ttl: const Duration(seconds: 45),
     loader: () async {
-      final results = await Future.wait<dynamic>([
-        NeyvoPulseApi.getAnalyticsComms(
-          from: range.from,
-          to: range.to,
-          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ).catchError((_) => <String, dynamic>{'ok': false}),
-        NeyvoPulseApi.listCalls(
-          from: range.from,
-          to: range.to,
-          limit: 150,
-          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
-        NeyvoPulseApi.listCalls(
-          from: range.priorFrom,
-          to: range.priorTo,
-          limit: 150,
-          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
-        NeyvoPulseApi.getCallsSuccessSummary(
-          from: range.from,
-          to: range.to,
-          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
-        ).catchError((_) => <String, dynamic>{}),
-        NeyvoPulseApi.listCalls(
-          limit: 5,
-          noVapi: true,
-          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast),
-        ).catchError((_) => <String, dynamic>{'calls': <dynamic>[]}),
-        ref.read(accountInfoProvider.future).catchError((_) => <String, dynamic>{}),
-      ]);
-      final callsRes = Map<String, dynamic>.from(results[1] as Map);
-      final recentRes = Map<String, dynamic>.from(results[4] as Map);
-      final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final recent = (recentRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final success = Map<String, dynamic>.from(results[3] as Map);
-      return ExecutiveCriticalData(
-        comms: Map<String, dynamic>.from(results[0] as Map),
-        calls: calls,
-        recentCalls: recent,
-        successSummary: success['ok'] == true ? success : null,
-      );
+      try {
+        final results = await Future.wait<dynamic>(
+          [
+            NeyvoPulseApi.listCallsWithRetry(
+              from: range.from,
+              to: range.to,
+              limit: 150,
+              timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+            ).catchError(
+              (_) => <String, dynamic>{
+                'calls': <dynamic>[],
+                'ok': false,
+                '_error': true,
+              },
+            ),
+            NeyvoPulseApi.getCallsSuccessSummaryWithRetry(
+              from: range.from,
+              to: range.to,
+              timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+            ).catchError(
+              (_) => <String, dynamic>{
+                'ok': false,
+                '_error': true,
+              },
+            ),
+            NeyvoPulseApi.listCallsWithRetry(
+              limit: 5,
+              noVapi: true,
+              timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast),
+            ).catchError(
+              (_) => <String, dynamic>{
+                'calls': <dynamic>[],
+                'ok': false,
+                '_error': true,
+              },
+            ),
+          ],
+          eagerError: false,
+        );
+        final callsRes = Map<String, dynamic>.from(results[0] as Map);
+        final recentRes = Map<String, dynamic>.from(results[2] as Map);
+        final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+        final recent = (recentRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+        final success = Map<String, dynamic>.from(results[1] as Map);
+        return ExecutiveCriticalData(
+          calls: calls,
+          recentCalls: recent,
+          successSummary: success['ok'] == true ? success : null,
+        );
+      } catch (_) {
+        return ExecutiveCriticalData(
+          calls: const <Map<String, dynamic>>[],
+          recentCalls: const <Map<String, dynamic>>[],
+          successSummary: null,
+        );
+      }
     },
   );
 });
@@ -248,12 +261,15 @@ final launchDeferredProvider = FutureProvider<LaunchDeferredData>((ref) async {
             limit: 120,
             timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
             shellScoped: true),
-        ref.read(accountInfoProvider.future).catchError((_) => <String, dynamic>{}),
       ]);
       final profiles = Map<String, dynamic>.from(results[0] as Map);
       final numbers = Map<String, dynamic>.from(results[1] as Map);
       final calls = Map<String, dynamic>.from(results[2] as Map);
-      final account = Map<String, dynamic>.from(results[3] as Map);
+      final accountSnap = ref.read(accountInfoProvider);
+      final account = Map<String, dynamic>.from(
+        accountSnap.valueOrNull ??
+            await ref.read(accountInfoProvider.future).catchError((_) => <String, dynamic>{}),
+      );
       final agentsCount = ((profiles['profiles'] as List?)?.length ?? 0);
       final numbersCount = ((numbers['numbers'] as List?)?.length ?? 0);
       final callsList = (calls['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];

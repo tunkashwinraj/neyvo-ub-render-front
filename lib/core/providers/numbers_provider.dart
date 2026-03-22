@@ -19,7 +19,7 @@ class NumbersData {
   final List<Map<String, dynamic>> profiles;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class NumbersNotifier extends _$NumbersNotifier {
   @override
   Future<NumbersData> build() async {

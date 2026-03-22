@@ -9,11 +9,10 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
   return AccountRepository(ref);
 });
 
-@riverpod
+@Riverpod(keepAlive: true)
 class AccountInfo extends _$AccountInfo {
   @override
   Future<Map<String, dynamic>> build() async {
-    ref.keepAlive();
     final repo = ref.watch(accountRepositoryProvider);
     return repo.getAccountInfo();
   }

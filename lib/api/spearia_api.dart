@@ -631,6 +631,7 @@ class SpeariaApi {
   static Future<Map<String, dynamic>> getJsonMapTabScoped(
     String path, {
     Map<String, dynamic>? params,
+    Map<String, String>? extraHeaders,
     Duration? timeout,
     bool adminAuth = false,
   }) async {
@@ -647,6 +648,7 @@ class SpeariaApi {
         options: Options(
           receiveTimeout: timeout ?? _defaultTimeout,
           responseType: ResponseType.json,
+          headers: extraHeaders,
         ),
       );
       final data = resp.data;
@@ -734,5 +736,30 @@ class SpeariaApi {
         SnackBar(content: Text('Ping failed: $e')),
       );
     }
+  }
+
+  /// Retries only on transient network failures (not [ApiException] 4xx/5xx).
+  /// Handles [DioException] (tab-scoped Dio) and [TimeoutException] (http package paths).
+  static Future<T> runWithRetry<T>(
+    Future<T> Function() op, {
+    int maxAttempts = 3,
+    Duration delay = const Duration(milliseconds: 400),
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await op();
+      } on DioException catch (e) {
+        final retryable = e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        if (!retryable || attempt >= maxAttempts) rethrow;
+        await Future<void>.delayed(delay * attempt);
+      } on TimeoutException {
+        if (attempt >= maxAttempts) rethrow;
+        await Future<void>.delayed(delay * attempt);
+      }
+    }
+    throw StateError('runWithRetry: exhausted after $maxAttempts attempts');
   }
 }

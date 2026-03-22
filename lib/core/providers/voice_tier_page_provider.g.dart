@@ -6,7 +6,7 @@ part of 'voice_tier_page_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$voiceTierPageCtrlHash() => r'4f2a6c0a9097c39fb7664b38119fa4288d5a7617';
+String _$voiceTierPageCtrlHash() => r'97460deb8853a9abae16d001c3f83cbc12e22e3a';
 
 /// See also [VoiceTierPageCtrl].
 @ProviderFor(VoiceTierPageCtrl)

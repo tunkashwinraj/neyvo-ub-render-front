@@ -3,9 +3,8 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/providers/account_provider.dart';
+import '../api/api_response_cache.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
@@ -68,11 +67,37 @@ class _TeamPageState extends State<TeamPage> {
     super.dispose();
   }
 
+  String get _swrKey => '${NeyvoPulseApi.defaultAccountId}_team';
+
+  void _applyTeamCache(Map<String, dynamic> c) {
+    final permsRaw = c['permissions'];
+    final permsList = permsRaw is List
+        ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
+        : null;
+    _myRole = c['myRole'] as String?;
+    _myEmail = c['myEmail'] as String?;
+    _myName = c['myName'] as String?;
+    _myUserId = c['myUserId'] as String?;
+    _myPermissions = permsList;
+    _members = List<Map<String, dynamic>>.from(
+      c['members'] as List? ?? [],
+    );
+  }
+
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final cached = ApiResponseCache.get(_swrKey);
+    if (cached is Map<String, dynamic>) {
+      setState(() {
+        _applyTeamCache(cached);
+        _loading = false;
+        _error = null;
+      });
+    } else {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         NeyvoPulseApi.getMyRole(),
@@ -85,6 +110,17 @@ class _TeamPageState extends State<TeamPage> {
       final permsList = permsRaw is List
           ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
           : null;
+      final snap = <String, dynamic>{
+        'myRole': roleRes['role']?.toString(),
+        'myEmail': roleRes['email']?.toString(),
+        'myName': (roleRes['name'] ?? '').toString().trim().isNotEmpty
+            ? roleRes['name']?.toString().trim()
+            : null,
+        'myUserId': roleRes['user_id']?.toString(),
+        'permissions': permsRaw,
+        'members': membersRes['members'] as List? ?? [],
+      };
+      ApiResponseCache.set(_swrKey, snap, ttl: const Duration(seconds: 60));
       setState(() {
         _myRole = roleRes['role']?.toString();
         _myEmail = roleRes['email']?.toString();
@@ -101,10 +137,12 @@ class _TeamPageState extends State<TeamPage> {
     } catch (e) {
       if (isPulseRequestCancelled(e)) return;
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (cached == null) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
