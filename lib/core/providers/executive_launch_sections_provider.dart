@@ -36,6 +36,16 @@ class ExecutiveCriticalData {
   final List<Map<String, dynamic>> recentCalls;
 }
 
+class ExecutiveResolutionData {
+  const ExecutiveResolutionData({
+    required this.calls,
+    required this.successSummary,
+  });
+
+  final List<Map<String, dynamic>> calls;
+  final Map<String, dynamic>? successSummary;
+}
+
 class ExecutiveDeferredData {
   const ExecutiveDeferredData({
     required this.runningCampaignId,
@@ -219,6 +229,93 @@ final executiveDeferredProvider =
         campaignItems: items,
         campaignMetrics: metrics,
       );
+    },
+  );
+});
+
+final executiveResolutionProvider =
+    FutureProvider.family<ExecutiveResolutionData, ExecutiveRange>((ref, range) async {
+  ref.watch(
+    accountInfoProvider.select(
+      (async) => async.valueOrNull?['account_id']?.toString() ?? '',
+    ),
+  );
+  return _cachedFetch<ExecutiveResolutionData>(
+    key: 'exec-resolution:${range.key}',
+    ttl: const Duration(seconds: 45),
+    loader: () async {
+      try {
+        final results = await Future.wait<dynamic>(
+          [
+            NeyvoPulseApi.listCallsWithRetry(
+              from: range.from,
+              to: range.to,
+              limit: 150,
+              syncFromVapi: false,
+              timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+            ).catchError(
+              (_) => <String, dynamic>{
+                'calls': <dynamic>[],
+                'ok': false,
+              },
+            ),
+            NeyvoPulseApi.getCallsSuccessSummaryWithRetry(
+              from: range.from,
+              to: range.to,
+              timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+            ).catchError(
+              (_) => <String, dynamic>{
+                'ok': false,
+              },
+            ),
+          ],
+          eagerError: false,
+        );
+        final callsRes = Map<String, dynamic>.from(results[0] as Map);
+        final successRes = Map<String, dynamic>.from(results[1] as Map);
+        final calls = (callsRes['calls'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            const <Map<String, dynamic>>[];
+        return ExecutiveResolutionData(
+          calls: calls,
+          successSummary: successRes['ok'] == true ? successRes : null,
+        );
+      } catch (_) {
+        return const ExecutiveResolutionData(
+          calls: <Map<String, dynamic>>[],
+          successSummary: null,
+        );
+      }
+    },
+  );
+});
+
+final executiveRecentCallsProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, ExecutiveRange>((ref, range) async {
+  ref.watch(
+    accountInfoProvider.select(
+      (async) => async.valueOrNull?['account_id']?.toString() ?? '',
+    ),
+  );
+  return _cachedFetch<List<Map<String, dynamic>>>(
+    key: 'exec-recent-calls:${range.key}',
+    ttl: const Duration(seconds: 45),
+    loader: () async {
+      try {
+        final res = await NeyvoPulseApi.listCallsWithRetry(
+          limit: 5,
+          noVapi: true,
+          syncFromVapi: false,
+          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast),
+        );
+        return (res['calls'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            const <Map<String, dynamic>>[];
+      } catch (_) {
+        return const <Map<String, dynamic>>[];
+      }
     },
   );
 });

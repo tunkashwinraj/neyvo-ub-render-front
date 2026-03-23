@@ -180,10 +180,8 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
       _criticalBanner = null;
       _deferredError = null;
     });
-    // Start critical + deferred fetches asynchronously so the dashboard shell
-    // renders immediately (API calls can take time on Render/cold start).
+    // Start staged dashboard fetch asynchronously so shell renders immediately.
     unawaited(_fetchCritical(version: version));
-    unawaited(_fetchDeferred(version: version));
     if (mounted) setState(() => _loading = false);
   }
 
@@ -198,8 +196,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     setState(() => _refreshing = true);
     ref.invalidate(executiveCriticalProvider(_rangeModel()));
     ref.invalidate(executiveDeferredProvider(_rangeModel()));
+    ref.invalidate(executiveResolutionProvider(_rangeModel()));
+    ref.invalidate(executiveRecentCallsProvider(_rangeModel()));
     await _fetchCritical(version: _loadVersion);
-    unawaited(_fetchDeferred(version: _loadVersion));
     if (mounted) setState(() => _refreshing = false);
   }
 
@@ -214,42 +213,39 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 
   Future<void> _fetchCritical({required int version}) async {
-    // Soft-timeout: show an error only if nothing succeeded yet, but still
-    // wait for the actual request to finish so late responses can clear the banner.
-    final timeoutDuration = NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy);
-    Timer? timeoutTimer;
     try {
-      final criticalFuture =
-          ref.read(executiveCriticalProvider(_rangeModel()).future);
+      // Stage 1: Live Call Activity input (campaign/deferred data).
+      await _fetchDeferred(version: version);
+      if (!mounted || version != _loadVersion) return;
 
-      timeoutTimer = Timer(timeoutDuration, () {
-        if (!mounted || version != _loadVersion) return;
-        final hasCache = _hasSuccessfulCriticalLoad ||
-            _calls.isNotEmpty ||
-            _recentCalls.isNotEmpty ||
-            _successSummary != null;
-        if (hasCache) return;
-        setState(() {
-          _initialLoadError =
-              'Dashboard request timed out. Pull to refresh or check your connection.';
-          _criticalBanner = null;
-        });
-      });
-
-      final critical = await criticalFuture;
-      timeoutTimer.cancel();
+      // Stage 2: Call Resolution input (calls + success summary).
+      final resolution = await ref
+          .read(executiveResolutionProvider(_rangeModel()).future)
+          .timeout(NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy));
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _initialLoadError = null;
         _criticalBanner = null;
         _hasSuccessfulCriticalLoad = true;
-        _calls = critical.calls;
-        _recentCalls = critical.recentCalls;
-        _successSummary = critical.successSummary;
+        _calls = resolution.calls;
+        _successSummary = resolution.successSummary;
       });
       _onRefreshSuccess();
+
+      // Stage 3: Recent Call Logs (last section to hydrate).
+      final recent = await ref
+          .read(executiveRecentCallsProvider(_rangeModel()).future)
+          .timeout(NeyvoApi.timeoutForClass(ApiTimeoutClass.medium));
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _recentCalls = recent;
+      });
+    } on TimeoutException {
+      _applyCriticalFailure(
+        version,
+        'Dashboard request timed out. Pull to refresh or check your connection.',
+      );
     } catch (e) {
-      timeoutTimer?.cancel();
       _applyCriticalFailure(version, e.toString());
     }
   }
