@@ -196,8 +196,6 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
   }
 
   int _activeLoadToken = 0;
-  bool _autoLoadRunning = false;
-  // Auto-load continues until `state.hasMore == false`.
 
   Future<void> _loadMoreOnce(int expectedToken) async {
     if (!state.hasMore || state.loadingMore || state.loading) return;
@@ -231,20 +229,6 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
         return;
       }
       state = state.copyWith(loadingMore: false);
-    }
-  }
-
-  Future<void> _autoLoadMore(int expectedToken) async {
-    if (_autoLoadRunning) return;
-    _autoLoadRunning = true;
-    try {
-      while (expectedToken == _activeLoadToken && state.hasMore) {
-        await _loadMoreOnce(expectedToken);
-        // Give the UI a chance to paint the latest appended calls.
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-      }
-    } finally {
-      _autoLoadRunning = false;
     }
   }
 
@@ -302,12 +286,7 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
 
   Future<void> reload() async {
     _activeLoadToken++;
-    final token = _activeLoadToken;
-    _autoLoadRunning = false;
     await _loadPage(1, showFullLoader: true);
-    if (state.hasMore) {
-      unawaited(_autoLoadMore(token));
-    }
   }
 
   Future<void> loadMore() async => _loadMoreOnce(_activeLoadToken);

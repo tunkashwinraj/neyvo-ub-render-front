@@ -35,6 +35,17 @@ class ManagedProfileApiService {
     return NeyvoApi.postJsonMap(path, body: body);
   }
 
+  static Future<Map<String, dynamic>> _postWithTimeout(
+    String path,
+    Map<String, dynamic> body, {
+    required Duration timeout,
+  }) async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
+    }
+    return NeyvoApi.postJsonMap(path, body: body, timeout: timeout);
+  }
+
   static Future<void> _delete(String path, {Map<String, dynamic>? body}) async {
     final params = Map<String, dynamic>.from(body ?? {});
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
@@ -63,7 +74,11 @@ class ManagedProfileApiService {
       _post('/api/managed-profiles/preview_v2', body);
 
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
-      _post('/api/managed-profiles', body);
+      _postWithTimeout(
+        '/api/managed-profiles',
+        body,
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Create a raw Vapi assistant that is driven directly by a full VAPI JSON config (no wizard/tier overrides).
   /// Body should at minimum include profile_name and custom_system_prompt.
@@ -366,11 +381,19 @@ class ManagedProfileApiService {
 
   /// Universal wizard v3: AI craft system prompt, voicemail, and operator summary from wizardMeta.
   static Future<Map<String, dynamic>> aiCraftPromptV3(Map<String, dynamic> wizardMeta) async =>
-      _post('/api/managed-profiles/ai-craft-prompt-v3', {'wizardMeta': wizardMeta});
+      _postWithTimeout(
+        '/api/managed-profiles/ai-craft-prompt-v3',
+        {'wizardMeta': wizardMeta},
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Universal wizard: generate refining questions from goal (OpenAI). Returns { "questions": [ { "id", "text", "type", "options" }, ... ] }.
   static Future<Map<String, dynamic>> aiGoalQuestions(String goal) async =>
-      _post('/api/managed-profiles/ai-goal-questions', {'goal': goal});
+      _postWithTimeout(
+        '/api/managed-profiles/ai-goal-questions',
+        {'goal': goal},
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Fetch a prebuilt prompt template (e.g. "sfs" for Student Financial Services).
   static Future<Map<String, dynamic>> getPromptTemplate(String templateId) async =>

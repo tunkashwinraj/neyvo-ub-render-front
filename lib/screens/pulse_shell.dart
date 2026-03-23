@@ -259,13 +259,14 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     final resolveStart = DateTime.now().millisecondsSinceEpoch;
     debugSessionLog('pulse_shell.dart:_resolveAccountThenLoad', 'resolveAccountThenLoad start', {'initialRoute': widget.initialRouteName}, 'B');
     // #endregion
-    // Prioritize shell/header readiness: resolve account first so credits can load immediately.
+    // Prioritize shell/sidebar readiness first, then hydrate credits.
     await _loadAccountInfo();
     if (!mounted) return;
+    // Sidebar tab visibility comes from role/permissions, so start this first.
+    unawaited(_loadMyRoleAndPermissions());
+    // Credits can hydrate right after sidebar tabs start resolving.
     unawaited(_loadWalletCredits());
     unawaited(_loadUsageSummary());
-    // Role/permission is important but should not block first paint.
-    unawaited(_loadMyRoleAndPermissions());
     unawaited(_loadFirstCallStatus());
     // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
     // Otherwise Firestore rules typically deny access and we get permission-denied. Wallet

@@ -224,8 +224,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
           .timeout(NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy));
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _initialLoadError = null;
-        _criticalBanner = null;
         _hasSuccessfulCriticalLoad = true;
         _calls = resolution.calls;
         _successSummary = resolution.successSummary;
@@ -240,34 +238,16 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
       setState(() {
         _recentCalls = recent;
       });
-    } on TimeoutException {
-      _applyCriticalFailure(
-        version,
-        'Dashboard request timed out. Pull to refresh or check your connection.',
-      );
     } catch (e) {
-      _applyCriticalFailure(version, e.toString());
+      // Silent failure: keep the dashboard rendered and hydrate on next refresh.
+      if (!mounted || version != _loadVersion) return;
+      _onRefreshFailure();
     }
   }
 
   void _applyCriticalFailure(int version, String message) {
     if (!mounted || version != _loadVersion) return;
-    final hasCache = _hasSuccessfulCriticalLoad ||
-        _calls.isNotEmpty ||
-        _recentCalls.isNotEmpty ||
-        _successSummary != null;
-    if (hasCache) {
-      _onRefreshFailure();
-    }
-    setState(() {
-      if (hasCache) {
-        _criticalBanner = message;
-        _initialLoadError = null;
-      } else {
-        _initialLoadError = message;
-        _criticalBanner = null;
-      }
-    });
+    _onRefreshFailure();
   }
 
   Future<void> _fetchDeferred({required int version}) async {
@@ -280,9 +260,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
         _campaignMetrics = deferred.campaignMetrics;
         _deferredError = null;
       });
-    } catch (e) {
+    } catch (_) {
+      // Silent failure; this section will hydrate on next refresh.
       if (!mounted || version != _loadVersion) return;
-      setState(() => _deferredError = e.toString());
     }
   }
 
@@ -401,63 +381,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     if (_loading && !_hasSuccessfulCriticalLoad) {
       return _buildExecutiveFirstLoadSkeleton();
     }
-    // Keep the full-page fallback only for very first paint while still loading.
-    // Once the shell is rendered, show non-blocking banner style errors instead.
-    if (_initialLoadError != null && !_hasSuccessfulCriticalLoad && _loading) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_initialLoadError!, style: TextStyle(color: NeyvoTheme.error)),
-              const SizedBox(height: 16),
-              TextButton(onPressed: _load, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_initialLoadError != null && !_hasSuccessfulCriticalLoad) ...[
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: NeyvoTheme.borderSubtle),
-            ),
-            child: ListTile(
-              leading:
-                  const Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning),
-              title: Text(
-                _initialLoadError!,
-                style: NeyvoTextStyles.body.copyWith(color: NeyvoTheme.textPrimary),
-              ),
-              trailing: TextButton(onPressed: _load, child: const Text('Retry')),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (_criticalBanner != null) ...[
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: NeyvoTheme.borderSubtle),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning),
-              title: Text(
-                _criticalBanner!,
-                style: NeyvoTextStyles.body.copyWith(color: NeyvoTheme.textPrimary),
-              ),
-              trailing: TextButton(onPressed: _load, child: const Text('Retry')),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
         _buildExecutiveContent(),
       ],
     );
@@ -626,21 +552,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_deferredError != null) ...[
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: NeyvoTheme.borderSubtle),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.info_outline, color: NeyvoColors.warning),
-              title: const Text('Some advanced metrics are delayed. Core dashboard remains available.'),
-              trailing: TextButton(onPressed: () => _fetchDeferred(version: _loadVersion), child: const Text('Retry')),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
         // Two rows, two columns: [Quick Actions | Live Call Activity], [Call Resolution | CSAT]
         LayoutBuilder(
           builder: (context, constraints) {

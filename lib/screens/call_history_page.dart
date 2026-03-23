@@ -41,6 +41,7 @@ class CallHistoryPage extends ConsumerStatefulWidget {
 
 class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
   final _searchController = TextEditingController();
+  final ScrollController _mobileScrollController = ScrollController();
 
   @override
   void initState() {
@@ -58,7 +59,17 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _mobileScrollController.dispose();
     super.dispose();
+  }
+
+  bool _onScrollLoadMore(ScrollNotification notification, CallHistoryState s, CallHistoryNotifier n) {
+    if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 160) {
+      if (s.hasMore && !s.loadingMore && !s.loading) {
+        n.loadMore();
+      }
+    }
+    return false;
   }
 
   /// Duration in seconds (int) or duration string from backend
@@ -227,91 +238,91 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => n.reload(),
-            child: filtered.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(NeyvoSpacing.xl),
-                        child: Column(
-                          children: [
-                            Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
-                            const SizedBox(height: NeyvoSpacing.md),
-                            Text(
-                              s.allCalls.isEmpty
-                                  ? 'No calls yet. Assign a phone number to an agent to start receiving calls.'
-                                  : 'No calls found',
-                              style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: NeyvoSpacing.sm,
-                      vertical: NeyvoSpacing.sm,
-                    ),
-                    itemCount: filtered.length + 1 + (s.hasMore ? 1 : 0),
-                    itemBuilder: (context, i) {
-                      if (i == 0) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: NeyvoSpacing.sm,
-                            vertical: NeyvoSpacing.sm,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) => _onScrollLoadMore(notification, s, n),
+              child: filtered.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(NeyvoSpacing.xl),
+                          child: Column(
                             children: [
+                              Icon(Icons.phone_outlined, size: 64, color: NeyvoTheme.textMuted),
+                              const SizedBox(height: NeyvoSpacing.md),
                               Text(
-                                'Calls (${filtered.length})',
-                                style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
+                                s.allCalls.isEmpty
+                                    ? 'No calls yet. Assign a phone number to an agent to start receiving calls.'
+                                    : 'No calls found',
+                                style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textMuted),
+                                textAlign: TextAlign.center,
                               ),
-                              if (filtered.length != s.allCalls.length)
-                                TextButton(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    n.clearSearch();
-                                    n.setFilterStatus('all');
-                                    n.setFilterOutcome('all');
-                                  },
-                                  child: const Text('Clear filters'),
-                                ),
                             ],
                           ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: NeyvoSpacing.sm,
+                        vertical: NeyvoSpacing.sm,
+                      ),
+                      itemCount: filtered.length + 1 + (s.loadingMore ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: NeyvoSpacing.sm,
+                              vertical: NeyvoSpacing.sm,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Calls (${filtered.length})',
+                                  style: NeyvoType.headlineMedium.copyWith(color: NeyvoTheme.textPrimary),
+                                ),
+                                if (filtered.length != s.allCalls.length)
+                                  TextButton(
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      n.clearSearch();
+                                      n.setFilterStatus('all');
+                                      n.setFilterOutcome('all');
+                                    },
+                                    child: const Text('Clear filters'),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }
+                        if (s.loadingMore && i == filtered.length + 1) {
+                          return const Padding(
+                            padding: EdgeInsets.only(
+                              left: NeyvoSpacing.md,
+                              right: NeyvoSpacing.md,
+                              bottom: NeyvoSpacing.lg,
+                            ),
+                            child: Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+                        final idx = i - 1;
+                        final call = filtered[idx] as Map<String, dynamic>;
+                        return _buildCallRowCard(
+                          context: context,
+                          call: call,
+                          selected: selected,
+                          onSelect: onSelect,
                         );
-                      }
-                      if (i == filtered.length + 1) {
-                        return Padding(
-                          padding: const EdgeInsets.only(
-                            left: NeyvoSpacing.md,
-                            right: NeyvoSpacing.md,
-                            bottom: NeyvoSpacing.lg,
-                          ),
-                          child: OutlinedButton(
-                            onPressed: s.loadingMore ? null : () => n.loadMore(),
-                            child: s.loadingMore
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Text('Load more calls'),
-                          ),
-                        );
-                      }
-                      final idx = i - 1;
-                      final call = filtered[idx] as Map<String, dynamic>;
-                      return _buildCallRowCard(
-                        context: context,
-                        call: call,
-                        selected: selected,
-                        onSelect: onSelect,
-                      );
-                    },
-                  ),
+                      },
+                    ),
+            ),
           ),
         ),
       ],
@@ -758,7 +769,10 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                 )
               : RefreshIndicator(
                   onRefresh: () => n.reload(),
-                  child: SingleChildScrollView(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) => _onScrollLoadMore(notification, s, n),
+                    child: SingleChildScrollView(
+                    controller: _mobileScrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     child: Column(
                       children: [
@@ -788,7 +802,7 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                             ),
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: filtered.length + 1 + (s.hasMore ? 1 : 0),
+                            itemCount: filtered.length + 1 + (s.loadingMore ? 1 : 0),
                             itemBuilder: (context, i) {
                               if (i == 0) {
                                 return Padding(
@@ -817,22 +831,19 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                                   ),
                                 );
                               }
-                              if (i == filtered.length + 1) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(
+                              if (s.loadingMore && i == filtered.length + 1) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(
                                     left: NeyvoSpacing.md,
                                     right: NeyvoSpacing.md,
                                     bottom: NeyvoSpacing.lg,
                                   ),
-                                  child: OutlinedButton(
-                                    onPressed: s.loadingMore ? null : () => n.loadMore(),
-                                    child: s.loadingMore
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Text('Load more calls'),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
                                   ),
                                 );
                               }
@@ -848,6 +859,7 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                           ),
                         ],
                       ],
+                    ),
                     ),
                   ),
                 ),
