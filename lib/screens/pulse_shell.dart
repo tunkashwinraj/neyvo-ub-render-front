@@ -450,7 +450,10 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   /// the system is considered "live" and whether Launch should remain visible.
   Future<void> _loadFirstCallStatus() async {
     try {
-      final res = await NeyvoPulseApi.listCalls(shellScoped: true);
+      final res = await NeyvoPulseApi.listCalls(
+        shellScoped: true,
+        syncFromVapi: false,
+      );
       final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final hasCompleted = calls.any((c) {
         final status = (c['status'] as String?)?.toLowerCase();

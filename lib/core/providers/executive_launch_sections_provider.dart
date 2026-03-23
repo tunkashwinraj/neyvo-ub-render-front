@@ -120,6 +120,7 @@ final executiveCriticalProvider =
               from: range.from,
               to: range.to,
               limit: 150,
+              syncFromVapi: false,
               timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
             ).catchError(
               (_) => <String, dynamic>{
@@ -141,6 +142,7 @@ final executiveCriticalProvider =
             NeyvoPulseApi.listCallsWithRetry(
               limit: 5,
               noVapi: true,
+              syncFromVapi: false,
               timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast),
             ).catchError(
               (_) => <String, dynamic>{
@@ -259,6 +261,7 @@ final launchDeferredProvider = FutureProvider<LaunchDeferredData>((ref) async {
             timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium), shellScoped: true),
         NeyvoPulseApi.listCalls(
             limit: 120,
+            syncFromVapi: false,
             timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
             shellScoped: true),
       ]);
