@@ -89,9 +89,6 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   int? _walletCredits;
   final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
   final GlobalKey<ManagedProfilesPageState> _managedProfilesListKey = GlobalKey<ManagedProfilesPageState>();
-  int? _numbersCount; // kept for future analytics panels
-  int? _callsTodayCapacity;
-  int? _callsTodayUsed;
   double? _usageSpend;
   int _addonsCount = 0;
   String? _subscriptionStatus;
@@ -267,7 +264,6 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     ]);
     if (!mounted) return;
     _loadWalletCredits();
-    _loadNumbersSummary();
     _loadUsageSummary();
     unawaited(_loadFirstCallStatus());
     // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
@@ -444,26 +440,8 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
       final now = DateTime.now();
       final from = '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
       final to = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final u = await NeyvoPulseApi.getBillingUsage(from: from, to: to);
+      final u = await NeyvoPulseApi.getBillingUsage(from: from, to: to, shellScoped: true);
       if (mounted) setState(() => _usageSpend = (u['total_dollars_spent'] as num?)?.toDouble());
-    } catch (_) {}
-  }
-
-  Future<void> _loadNumbersSummary() async {
-    try {
-      final res = await NeyvoPulseApi.listNumbers(shellScoped: true);
-      if (mounted) {
-        setState(() {
-          _numbersCount = (res['total_numbers'] as num?)?.toInt();
-          _callsTodayCapacity = (res['total_daily_capacity'] as num?)?.toInt();
-          final numbers = res['numbers'] as List? ?? [];
-          int used = 0;
-          for (final n in numbers) {
-            used += (n['calls_today'] as num?)?.toInt() ?? 0;
-          }
-          _callsTodayUsed = used;
-        });
-      }
     } catch (_) {}
   }
 
@@ -550,7 +528,6 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                         onTap: () {
                           _onPulseSidebarTabChanged(i, route: item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
-                          if (item.label == 'Lines') _loadNumbersSummary();
                         },
                       );
                     },

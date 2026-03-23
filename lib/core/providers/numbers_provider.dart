@@ -26,7 +26,8 @@ class NumbersNotifier extends _$NumbersNotifier {
     ref.watch(speariaApiProvider);
     final results = await Future.wait([
       ref.read(accountInfoProvider.future),
-      NeyvoPulseApi.listNumbers(shellScoped: true),
+      // Tab-scoped Dio (same transport as managed-profiles + cancel token); no duplicate shell GET.
+      NeyvoPulseApi.listNumbers(),
       ManagedProfileApiService.listProfiles(),
     ]);
     final account = Map<String, dynamic>.from(results[0] as Map);
