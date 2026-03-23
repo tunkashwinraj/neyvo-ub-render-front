@@ -28,6 +28,11 @@ class OperatorsListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Operators'),
         actions: [
+          TextButton.icon(
+            onPressed: () => _openAriaCreatePopup(context),
+            icon: const Icon(Icons.mic_external_on_outlined),
+            label: const Text('Create Operator with ARIA'),
+          ),
           IconButton(
             tooltip: 'Create ARIA operator (popup)',
             onPressed: () => _openAriaCreatePopup(context),

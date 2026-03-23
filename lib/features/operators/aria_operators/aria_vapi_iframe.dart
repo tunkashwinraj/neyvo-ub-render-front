@@ -270,7 +270,8 @@ class AriaVapiSessionIframe {
   </div>
 
   <script type="module">
-    import Vapi from "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.esm.js";
+    // Match neyvo-website: @vapi-ai/web ^2.5.2 (pinned for stable ESM in iframe)
+    import Vapi from "https://esm.sh/@vapi-ai/web@2.5.2";
 
     const vapi = new Vapi("'''+pKey+'''");
     const assistantId = "'''+aId+'''";
@@ -292,14 +293,17 @@ class AriaVapiSessionIframe {
     const progressBar = document.getElementById("progressBar");
 
     let muted = false;
-    let startedAt = Date.now();
+    let startedAt = null;
     function fmt(ms) {
       const s = Math.floor(ms/1000);
       const m = Math.floor(s/60);
       const r = s % 60;
       return String(m).padStart(2,'0') + ':' + String(r).padStart(2,'0');
     }
-    setInterval(() => { timerEl.textContent = fmt(Date.now() - startedAt); }, 500);
+    setInterval(() => {
+      if (startedAt == null) return;
+      timerEl.textContent = fmt(Date.now() - startedAt);
+    }, 500);
 
     function postToFlutter(payload) {
       try {
@@ -323,6 +327,20 @@ class AriaVapiSessionIframe {
       line.appendChild(msgEl);
       transcriptEl.appendChild(line);
       transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    }
+
+    let phaseIdx = 0;
+    let seenUserLines = 0;
+
+    function recordUserTranscript(who, trimmed) {
+      const kind = who === "You" ? "you" : "aria";
+      appendLine(who, trimmed, kind);
+      if (kind === "you") {
+        seenUserLines += 1;
+        phaseIdx = Math.min(5, Math.floor(seenUserLines / 2));
+        setPhase(phaseIdx, 6);
+      }
+      postToFlutter({ type: "aria_transcript", session_id: sessionId, who: who, text: trimmed });
     }
 
     function setStateListening() {
@@ -350,14 +368,54 @@ class AriaVapiSessionIframe {
       progressBar.style.width = pct + "%";
     }
 
-    let phaseIdx = 0;
-    let seenUserLines = 0;
-
     // Default initial state
     setStateListening();
     setPhase(0, 6);
 
-    vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+    async function startAriaCall() {
+      try {
+        // In embedded iframe mode, explicitly requesting mic access first makes
+        // browser permission behavior far more reliable.
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          try {
+            stream.getTracks().forEach((t) => t.stop());
+          } catch (_) {}
+        }
+        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+      } catch (err) {
+        let msg = (err && err.message)
+          ? err.message
+          : "Could not start ARIA call (check Vapi public key / assistant id)";
+        // Browser shows 401 on api.vapi.ai/call/web when key/assistant mismatch
+        if (/401|unauthor/i.test(String(msg))) {
+          msg += " — Use the Vapi public (web) key from the dashboard (same value as NEXT_PUBLIC_VAPI_KEY on the website) and aria_operator_creator_assistant_id from the same Vapi project. Set both in Firestore businesses/{account}/operators/aria_operator_creator or env VAPI_PUBLIC_KEY / ARIA_OPERATOR_CREATOR_ASSISTANT_ID.";
+        }
+        postToFlutter({ type: "aria_call_error", session_id: sessionId, message: msg });
+      }
+    }
+
+    startAriaCall();
+
+    // Same pattern as neyvo-website VapiDemo: final transcripts often arrive on `message`
+    vapi.on("message", (m) => {
+      try {
+        if (!m || typeof m !== "object") return;
+        if (m.type === "transcript" && m.transcriptType === "final") {
+          const text = String(m.transcript || m.text || "").trim();
+          if (!text) return;
+          const role = String(m.role || "").toLowerCase();
+          const who = role === "user" ? "You" : "ARIA";
+          recordUserTranscript(who, text);
+        }
+      } catch (_) {}
+    });
+
+    vapi.on("call-start", () => {
+      startedAt = Date.now();
+      timerEl.textContent = "00:00";
+      setStateListening();
+    });
 
     vapi.on("speech-start", () => {
       setStateSpeaking();
@@ -385,16 +443,7 @@ class AriaVapiSessionIframe {
 
       // Speaker normalization: treat user vs aria by heuristic.
       const who = (String(speaker).toLowerCase().includes("user") ? "You" : "ARIA");
-      const kind = who === "You" ? "you" : "aria";
-      appendLine(who, trimmed, kind);
-
-      if (kind === "you") {
-        seenUserLines += 1;
-        phaseIdx = Math.min(5, Math.floor(seenUserLines / 2));
-        setPhase(phaseIdx, 6);
-      }
-
-      postToFlutter({ type: "aria_transcript", session_id: sessionId, who: who, text: trimmed });
+      recordUserTranscript(who, trimmed);
     });
 
     vapi.on("call-end", () => {
@@ -472,7 +521,7 @@ class AriaVapiSessionIframe {
   </div>
 
   <script type="module">
-    import Vapi from "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.esm.js";
+    import Vapi from "https://esm.sh/@vapi-ai/web@2.5.2";
     const vapi = new Vapi("'''+pKey+'''");
     const assistantId = "'''+aId+'''";
     const sessionId = "'''+sId+'''";
@@ -514,7 +563,32 @@ class AriaVapiSessionIframe {
       }
     };
 
-    vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+    async function startOpCall() {
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        }
+        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : "Could not start call";
+        postToFlutter({ type: "aria_call_error", session_id: sessionId, operator_id: operatorId, message: msg });
+      }
+    }
+    startOpCall();
+
+    vapi.on("message", (m) => {
+      try {
+        if (!m || typeof m !== "object") return;
+        if (m.type === "transcript" && m.transcriptType === "final") {
+          const text = String(m.transcript || m.text || "").trim();
+          if (!text) return;
+          const role = String(m.role || "").toLowerCase();
+          const who = role === "user" ? "You" : "Operator";
+          appendLine(who, text);
+        }
+      } catch (_) {}
+    });
 
     vapi.on("transcript", (t) => {
       let text = "";
@@ -572,6 +646,7 @@ class _AriaIframeViewState extends State<AriaIframeView> {
           ..style.border = '0'
           ..style.width = '100%'
           ..style.height = '100%'
+          ..allow = 'microphone *; autoplay *'
           ..srcdoc = widget.htmlSrcDoc;
         return iframe;
       });

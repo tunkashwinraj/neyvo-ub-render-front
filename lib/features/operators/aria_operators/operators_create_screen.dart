@@ -19,13 +19,14 @@ class OperatorsCreateScreen extends ConsumerStatefulWidget {
 
 class _OperatorsCreateScreenState extends ConsumerState<OperatorsCreateScreen> {
   StreamSubscription? _messageSub;
+  ProviderSubscription<AriaCreateSessionState>? _sessionSub;
   late final String _sessionId = AriaVapiSessionIframe.createSessionId();
   late final String _viewType = 'aria-iframe-${_sessionId}';
 
   @override
   void initState() {
     super.initState();
-    ref.listen<AriaCreateSessionState>(ariaCreateSessionProvider, (prev, next) {
+    _sessionSub = ref.listenManual<AriaCreateSessionState>(ariaCreateSessionProvider, (prev, next) {
       if (prev != null && !prev.callEnded && next.callEnded && next.operatorId != null) {
         Navigator.pushReplacementNamed(
           context,
@@ -58,6 +59,8 @@ class _OperatorsCreateScreenState extends ConsumerState<OperatorsCreateScreen> {
 
   @override
   void dispose() {
+    _sessionSub?.close();
+    _sessionSub = null;
     _messageSub?.cancel();
     _messageSub = null;
     super.dispose();

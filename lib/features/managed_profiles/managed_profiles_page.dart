@@ -8,6 +8,7 @@ import '../../core/providers/agents_provider.dart';
 import '../agents/create_agent_wizard.dart';
 import '../agents/create_first_operator_panel.dart';
 import '../operators/universal_operator_wizard/universal_operator_wizard_screen.dart';
+import '../operators/aria_operators/operators_create_screen.dart';
 import '../../pulse_route_names.dart';
 import 'profile_detail_page.dart';
 import 'raw_assistant_detail_page.dart';
@@ -132,6 +133,29 @@ class ManagedProfilesPageState extends ConsumerState<ManagedProfilesPage> {
     }
   }
 
+  Future<void> _openAriaCreatePopup() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: SizedBox(
+            width: 1100,
+            height: 760,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: const OperatorsCreateScreen(),
+            ),
+          ),
+        );
+      },
+    );
+    if (mounted) {
+      ref.invalidate(agentsNotifierProvider);
+    }
+  }
+
   void _openProfileDetail(String profileId) {
     final onOpen = widget.onOpenProfileDetail;
     final asyncProfiles = ref.read(agentsNotifierProvider);
@@ -251,11 +275,22 @@ class ManagedProfilesPageState extends ConsumerState<ManagedProfilesPage> {
                     color: NeyvoColors.textPrimary,
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: _openUniversalWizard,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create Operator'),
-                  style: OutlinedButton.styleFrom(foregroundColor: primary),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _openAriaCreatePopup,
+                      icon: const Icon(Icons.mic_external_on_outlined, size: 18),
+                      label: const Text('Create Operator with ARIA'),
+                      style: OutlinedButton.styleFrom(foregroundColor: primary),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _openUniversalWizard,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Create Operator'),
+                      style: OutlinedButton.styleFrom(foregroundColor: primary),
+                    ),
+                  ],
                 ),
               ],
             ),

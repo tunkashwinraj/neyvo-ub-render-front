@@ -16,6 +16,7 @@ import 'aria_operator_api_service.dart';
 import 'aria_operator_providers.dart';
 import 'aria_vapi_iframe.dart';
 import 'operators_create_screen.dart';
+import 'vapi_public_key_guard.dart';
 
 // Screen: /operators/{operator_id}
 class OperatorsDetailScreen extends ConsumerStatefulWidget {
@@ -141,7 +142,10 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                     Expanded(
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.call_rounded),
-                        onPressed: status == 'live' && assistantId.isNotEmpty && vapiPublicKey.isNotEmpty
+                        onPressed: status == 'live' &&
+                                assistantId.isNotEmpty &&
+                                vapiPublicKey.isNotEmpty &&
+                                !isPlaceholderVapiPublicKey(vapiPublicKey)
                             ? () => _startOperatorCall(
                                   context: context,
                                   assistantId: assistantId,
@@ -322,6 +326,18 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
     required String assistantId,
     required String vapiPublicKey,
   }) async {
+    if (isPlaceholderVapiPublicKey(vapiPublicKey)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Vapi public key is invalid (placeholder). Fix businesses/{account}/operators/aria_operator_creator → vapi_public_key in Firestore.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     final sessionId = AriaVapiSessionIframe.createSessionId();
     final viewType = 'operator-iframe-$sessionId';
 
@@ -394,6 +410,12 @@ class _OperatorIntegrationsSection extends ConsumerStatefulWidget {
 }
 
 class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrationsSection> {
+  final _sendgridApiKey = TextEditingController();
+  final _sendgridFromEmail = TextEditingController();
+  final _sendgridFromName = TextEditingController();
+  final _twilioSid = TextEditingController();
+  final _twilioToken = TextEditingController();
+  final _twilioFrom = TextEditingController();
   final _emailTo = TextEditingController();
   final _emailSubject = TextEditingController();
   final _emailBody = TextEditingController();
@@ -403,12 +425,23 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
   final _smsBody = TextEditingController();
 
   bool _loaded = false;
+  bool _loadingOperatorIntegrations = true;
+  bool _savingSendgrid = false;
+  bool _savingTwilio = false;
+  SendgridConfig? _sendgridConfig;
+  SmsConfig? _twilioConfig;
   bool _savingEmail = false;
   bool _savingSms = false;
   String? _error;
 
   @override
   void dispose() {
+    _sendgridApiKey.dispose();
+    _sendgridFromEmail.dispose();
+    _sendgridFromName.dispose();
+    _twilioSid.dispose();
+    _twilioToken.dispose();
+    _twilioFrom.dispose();
     _emailTo.dispose();
     _emailSubject.dispose();
     _emailBody.dispose();
@@ -417,6 +450,96 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
     _smsTo.dispose();
     _smsBody.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOperatorIntegrations();
+  }
+
+  Future<void> _loadOperatorIntegrations() async {
+    setState(() {
+      _loadingOperatorIntegrations = true;
+      _error = null;
+    });
+    try {
+      final sendgrid = await AriaOperatorApiService.getOperatorSendgridConfig(widget.operatorId);
+      final twilio = await AriaOperatorApiService.getOperatorTwilioConfig(widget.operatorId);
+      if (!mounted) return;
+      setState(() {
+        _sendgridConfig = sendgrid;
+        _twilioConfig = twilio;
+        if ((sendgrid.fromEmail ?? '').trim().isNotEmpty) {
+          _sendgridFromEmail.text = (sendgrid.fromEmail ?? '').trim();
+        }
+        if ((sendgrid.fromName ?? '').trim().isNotEmpty) {
+          _sendgridFromName.text = (sendgrid.fromName ?? '').trim();
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loadingOperatorIntegrations = false);
+    }
+  }
+
+  Future<void> _saveOperatorSendgrid() async {
+    setState(() {
+      _savingSendgrid = true;
+      _error = null;
+    });
+    try {
+      await AriaOperatorApiService.connectOperatorSendgrid(
+        widget.operatorId,
+        apiKey: _sendgridApiKey.text,
+        fromEmail: _sendgridFromEmail.text,
+      );
+      if (_sendgridFromName.text.trim().isNotEmpty) {
+        await AriaOperatorApiService.verifyOperatorSendgridSender(
+          widget.operatorId,
+          fromEmail: _sendgridFromEmail.text,
+          fromName: _sendgridFromName.text,
+        );
+      }
+      await _loadOperatorIntegrations();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Operator SendGrid saved')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _savingSendgrid = false);
+    }
+  }
+
+  Future<void> _saveOperatorTwilio() async {
+    setState(() {
+      _savingTwilio = true;
+      _error = null;
+    });
+    try {
+      final cfg = await AriaOperatorApiService.saveOperatorTwilioConfig(
+        widget.operatorId,
+        accountSid: _twilioSid.text,
+        authToken: _twilioToken.text,
+        fromNumber: _twilioFrom.text,
+      );
+      if (!mounted) return;
+      setState(() => _twilioConfig = cfg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Operator Twilio saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _savingTwilio = false);
+    }
   }
 
   void _applyDefaults(Map<String, dynamic> data) {
@@ -504,10 +627,26 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                 const Text('Integrations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
                 const Text(
-                  'Set default payload fields for sendEmail and sendSMS. Tool call args still win; missing args are auto-filled from here.',
+                  'Configure operator-scoped SendGrid/Twilio credentials and defaults used by sendEmail/sendSMS for this operator only.',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
+                if (_loadingOperatorIntegrations)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else ...[
+                  Text(
+                    'SendGrid: ${_sendgridConfig?.connected == true ? 'Connected' : 'Not connected'}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
+                  Text(
+                    'Twilio: ${_twilioConfig?.configured == true ? 'Configured' : 'Not configured'}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 async.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -521,6 +660,96 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                     }
                     return const SizedBox.shrink();
                   },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Operator SendGrid', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _sendgridApiKey,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'API key'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _sendgridFromEmail,
+                  decoration: const InputDecoration(labelText: 'From email'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _sendgridFromName,
+                  decoration: const InputDecoration(labelText: 'From name (optional verify)'),
+                ),
+                const SizedBox(height: 8),
+                if ((_sendgridConfig?.fromEmail ?? '').isNotEmpty)
+                  Text(
+                    'Current from: ${_sendgridConfig?.fromEmail}${(_sendgridConfig?.senderStatus ?? '').isNotEmpty ? ' (${_sendgridConfig?.senderStatus})' : ''}',
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _savingSendgrid ? null : _saveOperatorSendgrid,
+                    child: _savingSendgrid
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Save Operator SendGrid'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Operator Twilio', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _twilioSid,
+                  decoration: const InputDecoration(labelText: 'Account SID'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _twilioToken,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Auth token'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _twilioFrom,
+                  decoration: const InputDecoration(labelText: 'From number (+1555...)'),
+                ),
+                const SizedBox(height: 8),
+                if ((_twilioConfig?.fromMasked ?? '').isNotEmpty)
+                  Text(
+                    'Current from: ${_twilioConfig?.fromMasked}',
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _savingTwilio ? null : _saveOperatorTwilio,
+                    child: _savingTwilio
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Save Operator Twilio'),
+                  ),
                 ),
               ],
             ),

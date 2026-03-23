@@ -14,10 +14,12 @@ class OperatorsBuildingScreen extends ConsumerStatefulWidget {
 }
 
 class _OperatorsBuildingScreenState extends ConsumerState<OperatorsBuildingScreen> {
+  ProviderSubscription<AsyncValue<AriaOperatorStatus>>? _buildStatusSub;
+
   @override
   void initState() {
     super.initState();
-    ref.listen<AsyncValue<AriaOperatorStatus>>(
+    _buildStatusSub = ref.listenManual<AsyncValue<AriaOperatorStatus>>(
       ariaOperatorBuildStatusProvider(widget.operatorId),
       (prev, next) {
         if (next is AsyncData<AriaOperatorStatus>) {
@@ -30,6 +32,13 @@ class _OperatorsBuildingScreenState extends ConsumerState<OperatorsBuildingScree
         }
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _buildStatusSub?.close();
+    _buildStatusSub = null;
+    super.dispose();
   }
 
   @override
