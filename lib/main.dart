@@ -15,7 +15,7 @@ import 'neyvo_pulse_api.dart';
 import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
-import 'screens/pulse_shell.dart';
+import 'screens/pulse_shell.dart' deferred as pulse_shell;
 import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
 import 'config/backend_urls.dart';
@@ -236,6 +236,25 @@ class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
       final path = kIsWeb ? Uri.base.path : null;
       final hasPaymentParam = kIsWeb && (Uri.base.queryParameters['payment'] ?? '').trim().isNotEmpty;
       final initialRoute = _initialRouteFromPath(path, hasPaymentParam: hasPaymentParam);
-      return PulseShell(initialRouteName: initialRoute);
+      return _DeferredPulseShell(initialRouteName: initialRoute);
     }
   }
+
+class _DeferredPulseShell extends StatelessWidget {
+  const _DeferredPulseShell({this.initialRouteName});
+
+  final String? initialRouteName;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: pulse_shell.loadLibrary(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const NeyvoLoadingScreen();
+        }
+        return pulse_shell.PulseShell(initialRouteName: initialRouteName);
+      },
+    );
+  }
+}

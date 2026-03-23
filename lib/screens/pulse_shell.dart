@@ -16,12 +16,12 @@ import '../core/providers/account_provider.dart';
 import '../core/providers/role_provider.dart';
 import '../core/providers/timezone_provider.dart';
 import '../services/user_timezone_service.dart';
-import 'pulse_dashboard_page.dart';
-import 'settings_page.dart';
-import 'campaigns_page.dart';
-import 'phone_numbers_page.dart';
-import 'analytics_page.dart';
-import 'executive_dashboard_page.dart';
+import 'pulse_dashboard_page.dart' deferred as pulse_dashboard_page;
+import 'settings_page.dart' deferred as settings_page;
+import 'campaigns_page.dart' deferred as campaigns_page;
+import 'phone_numbers_page.dart' deferred as phone_numbers_page;
+import 'analytics_page.dart' deferred as analytics_page;
+import 'executive_dashboard_page.dart' deferred as executive_dashboard_page;
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/raw_assistant_detail_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
@@ -31,22 +31,22 @@ import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
-import '../ui/screens/launch/launch_page.dart';
-import '../ui/screens/calls/calls_page.dart';
+import '../ui/screens/launch/launch_page.dart' deferred as launch_page;
+import '../ui/screens/calls/calls_page.dart' deferred as calls_page;
 import '../ui/screens/calls/calls_section.dart';
-import '../ui/screens/calls/test_call_page.dart';
-import '../features/billing/billing_screen.dart';
-import '../ui/screens/billing/wallet_page.dart';
-import '../ui/screens/billing/voice_tier_page.dart';
-import '../ui/screens/billing/plan_selector_page.dart';
-import '../ui/screens/integrations/integrations_page.dart';
-import '../ui/screens/voice_studio/voice_studio_page.dart';
+import '../ui/screens/calls/test_call_page.dart' deferred as test_call_page;
+import '../features/billing/billing_screen.dart' deferred as billing_screen;
+import '../ui/screens/billing/wallet_page.dart' deferred as wallet_page;
+import '../ui/screens/billing/voice_tier_page.dart' deferred as voice_tier_page;
+import '../ui/screens/billing/plan_selector_page.dart' deferred as plan_selector_page;
+import '../ui/screens/integrations/integrations_page.dart' deferred as integrations_page;
+import '../ui/screens/voice_studio/voice_studio_page.dart' deferred as voice_studio_page;
 import '../ui/components/calls/incoming_call_overlay.dart';
-import '../ui/screens/agency/agency_overview_page.dart';
-import 'students_hub_page.dart';
-import 'team_page.dart';
-import 'training_page.dart';
-import 'health_check_page.dart';
+import '../ui/screens/agency/agency_overview_page.dart' deferred as agency_overview_page;
+import 'students_hub_page.dart' deferred as students_hub_page;
+import 'team_page.dart' deferred as team_page;
+import 'training_page.dart' deferred as training_page;
+import 'health_check_page.dart' deferred as health_check_page;
 
 /// Allows navigating to a pulse tab without pushing a new PulseShell (avoids full re-init and slow load).
 /// When [navigatePulse] is used, the app pops to the root shell and switches its tab instead of pushing a second shell.
@@ -109,6 +109,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   late final Animation<double> _livePulse;
   String? _myRole;
   List<String>? _myPermissions;
+  final Map<String, Future<void>> _deferredLoads = {};
 
   /// Permission key per nav item; used to filter sidebar for staff. Admin sees all.
   static const List<_NavItem> _allNavItems = [
@@ -841,65 +842,194 @@ extension on _PulseShellState {
     // When opened via "View plans" / "View voice tiers" from Billing, show that page (not in sidebar).
     // When opened at /pulse/wallet we show Wallet page and Billing is selected; once user taps another tab, content follows _selectedIndex so other tabs work.
     final initialRoute = widget.initialRouteName;
-    if (initialRoute == PulseRouteNames.voiceTier) return const VoiceTierPage();
-    if (initialRoute == PulseRouteNames.subscriptionPlan) return const PlanSelectorPage();
+    if (initialRoute == PulseRouteNames.voiceTier) {
+      return _buildDeferredPage(
+        key: 'voice_tier',
+        loadLibrary: voice_tier_page.loadLibrary,
+        builder: () => voice_tier_page.VoiceTierPage(),
+      );
+    }
+    if (initialRoute == PulseRouteNames.subscriptionPlan) {
+      return _buildDeferredPage(
+        key: 'plan_selector',
+        loadLibrary: plan_selector_page.loadLibrary,
+        builder: () => plan_selector_page.PlanSelectorPage(),
+      );
+    }
 
     final items = _navItems;
     final route = _selectedIndex >= 0 && _selectedIndex < items.length ? items[_selectedIndex].route : null;
     final showingWalletBecauseInitial = initialRoute == PulseRouteNames.wallet && !_userHasChangedTab && route == PulseRouteNames.billing;
-    if (showingWalletBecauseInitial) return const WalletPage();
+    if (showingWalletBecauseInitial) {
+      return _buildDeferredPage(
+        key: 'wallet',
+        loadLibrary: wallet_page.loadLibrary,
+        builder: () => wallet_page.WalletPage(),
+      );
+    }
 
     if (_selectedIndex < 0 || _selectedIndex >= items.length || route == null) {
-      return const PulseDashboardPage();
+      return _buildDeferredPage(
+        key: 'dashboard',
+        loadLibrary: pulse_dashboard_page.loadLibrary,
+        builder: () => pulse_dashboard_page.PulseDashboardPage(),
+      );
     }
     switch (route) {
       case PulseRouteNames.dashboard:
-        return const ExecutiveDashboardPage();
+        return _buildDeferredPage(
+          key: 'exec_dashboard',
+          loadLibrary: executive_dashboard_page.loadLibrary,
+          builder: () => executive_dashboard_page.ExecutiveDashboardPage(),
+        );
       case PulseRouteNames.launch:
         // Launch wizard page (implemented as separate screen/route).
-        return const LaunchPage();
+        return _buildDeferredPage(
+          key: 'launch',
+          loadLibrary: launch_page.loadLibrary,
+          builder: () => launch_page.LaunchPage(),
+        );
       case PulseRouteNames.agents:
         return _buildManagedProfilesContent();
       case PulseRouteNames.phoneNumbers:
-        return _canAccess('operators') ? const PhoneNumbersPage() : const AccessDeniedScreen();
+        return _canAccess('operators')
+            ? _buildDeferredPage(
+                key: 'phone_numbers',
+                loadLibrary: phone_numbers_page.loadLibrary,
+                builder: () => phone_numbers_page.PhoneNumbersPage(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
-        return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls);
+        return _buildDeferredPage(
+          key: 'calls',
+          loadLibrary: calls_page.loadLibrary,
+          builder: () => calls_page.CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls),
+        );
       case PulseRouteNames.students:
-        return const StudentsHubPage();
+        return _buildDeferredPage(
+          key: 'students',
+          loadLibrary: students_hub_page.loadLibrary,
+          builder: () => students_hub_page.StudentsHubPage(),
+        );
       case PulseRouteNames.campaigns:
-        return _canAccess('campaigns') ? const CampaignsPage() : const AccessDeniedScreen();
+        return _canAccess('campaigns')
+            ? _buildDeferredPage(
+                key: 'campaigns',
+                loadLibrary: campaigns_page.loadLibrary,
+                builder: () => campaigns_page.CampaignsPage(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.team:
-        return const TeamPage();
+        return _buildDeferredPage(
+          key: 'team',
+          loadLibrary: team_page.loadLibrary,
+          builder: () => team_page.TeamPage(),
+        );
       case PulseRouteNames.testCall:
-        return const TestCallPage();
+        return _buildDeferredPage(
+          key: 'test_call',
+          loadLibrary: test_call_page.loadLibrary,
+          builder: () => test_call_page.TestCallPage(),
+        );
       case PulseRouteNames.analytics:
-        return const AnalyticsPage();
+        return _buildDeferredPage(
+          key: 'analytics',
+          loadLibrary: analytics_page.loadLibrary,
+          builder: () => analytics_page.AnalyticsPage(),
+        );
       case PulseRouteNames.executiveDashboard:
-        return const ExecutiveDashboardPage();
+        return _buildDeferredPage(
+          key: 'exec_dashboard',
+          loadLibrary: executive_dashboard_page.loadLibrary,
+          builder: () => executive_dashboard_page.ExecutiveDashboardPage(),
+        );
       case PulseRouteNames.health:
-        return const HealthCheckPage();
+        return _buildDeferredPage(
+          key: 'health',
+          loadLibrary: health_check_page.loadLibrary,
+          builder: () => health_check_page.HealthCheckPage(),
+        );
       case PulseRouteNames.integrations:
-        return const IntegrationsPage();
+        return _buildDeferredPage(
+          key: 'integrations',
+          loadLibrary: integrations_page.loadLibrary,
+          builder: () => integrations_page.IntegrationsPage(),
+        );
       case PulseRouteNames.billing:
-        return _canAccess('billing') ? const BillingScreen() : const AccessDeniedScreen();
+        return _canAccess('billing')
+            ? _buildDeferredPage(
+                key: 'billing',
+                loadLibrary: billing_screen.loadLibrary,
+                builder: () => billing_screen.BillingScreen(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.wallet:
-        return const WalletPage();
+        return _buildDeferredPage(
+          key: 'wallet',
+          loadLibrary: wallet_page.loadLibrary,
+          builder: () => wallet_page.WalletPage(),
+        );
       case PulseRouteNames.voiceTier:
-        return const VoiceTierPage();
+        return _buildDeferredPage(
+          key: 'voice_tier',
+          loadLibrary: voice_tier_page.loadLibrary,
+          builder: () => voice_tier_page.VoiceTierPage(),
+        );
       case PulseRouteNames.subscriptionPlan:
-        return const PlanSelectorPage();
+        return _buildDeferredPage(
+          key: 'plan_selector',
+          loadLibrary: plan_selector_page.loadLibrary,
+          builder: () => plan_selector_page.PlanSelectorPage(),
+        );
       case PulseRouteNames.settings:
-        return const PulseSettingsPage();
+        return _buildDeferredPage(
+          key: 'settings',
+          loadLibrary: settings_page.loadLibrary,
+          builder: () => settings_page.PulseSettingsPage(),
+        );
       case PulseRouteNames.training:
-        return const TrainingPage();
+        return _buildDeferredPage(
+          key: 'training',
+          loadLibrary: training_page.loadLibrary,
+          builder: () => training_page.TrainingPage(),
+        );
       case PulseRouteNames.agency:
-        return const AgencyOverviewPage();
+        return _buildDeferredPage(
+          key: 'agency',
+          loadLibrary: agency_overview_page.loadLibrary,
+          builder: () => agency_overview_page.AgencyOverviewPage(),
+        );
       case PulseRouteNames.voiceStudio:
-        return const VoiceStudioPage();
+        return _buildDeferredPage(
+          key: 'voice_studio',
+          loadLibrary: voice_studio_page.loadLibrary,
+          builder: () => voice_studio_page.VoiceStudioPage(),
+        );
       default:
-        return const PulseDashboardPage();
+        return _buildDeferredPage(
+          key: 'dashboard',
+          loadLibrary: pulse_dashboard_page.loadLibrary,
+          builder: () => pulse_dashboard_page.PulseDashboardPage(),
+        );
     }
+  }
+
+  Widget _buildDeferredPage({
+    required String key,
+    required Future<void> Function() loadLibrary,
+    required Widget Function() builder,
+  }) {
+    final future = _deferredLoads.putIfAbsent(key, loadLibrary);
+    return FutureBuilder<void>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return builder();
+      },
+    );
   }
 }
 

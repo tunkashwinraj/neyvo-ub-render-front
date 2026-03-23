@@ -403,6 +403,8 @@ class NeyvoPulseApi {
     String? dueAfter,
     /// When false, backend skips expensive call-history merge (faster first paint; follow with true to enrich).
     bool enrichCalls = true,
+    /// When true, backend includes total count of matching students (extra scan).
+    bool includeTotal = false,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
@@ -415,6 +417,7 @@ class NeyvoPulseApi {
     if (dueBefore != null) params['due_before'] = dueBefore;
     if (dueAfter != null) params['due_after'] = dueAfter;
     if (!enrichCalls) params['enrich_calls'] = false;
+    if (includeTotal) params['include_total'] = true;
     return _get('/api/pulse/students', params: params.isEmpty ? null : params);
   }
 

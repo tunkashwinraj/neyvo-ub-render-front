@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
 import '../core/providers/students_hub_tab_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
@@ -104,16 +103,23 @@ class _DirectoryTab extends StatefulWidget {
 }
 
 class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderStateMixin {
-  static const int _studentsPageSize = 50;
+  static const int _studentsPageSize = 10;
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   bool _loading = true;
   String? _error;
-  bool _isEducationOrg = false;
   /// True while a second request is merging last_call_* from call history (progressive load).
   bool _enrichingLastCalls = false;
   bool _enrichLastCallsInFlight = false;
-  bool _loadingMoreStudents = false;
+  int _currentPage = 1;
+  int _totalCount = 0;
+  bool _needsTotalCount = true;
+  bool _pageLoading = false;
+
+  int get _totalPages {
+    if (_totalCount <= 0) return 1;
+    return ((_totalCount + _studentsPageSize - 1) ~/ _studentsPageSize);
+  }
   final _searchController = TextEditingController();
   String _filterStatus = 'all';
   late AnimationController _tableAnimationController;
@@ -582,9 +588,6 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
   }
 
-  String get _studentsSwrKey =>
-      '${NeyvoPulseApi.defaultAccountId}_students_$_filterStatus';
-
   ({
     bool? hasBalance,
     bool? isOverdue,
@@ -654,15 +657,18 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     return false;
   }
 
-  Future<void> _enrichLastCalls({required bool isEducation}) async {
+  Future<void> _enrichCurrentPage({required bool isEducation}) async {
     if (_enrichLastCallsInFlight) return;
     _enrichLastCallsInFlight = true;
     final f = _studentListFilters(isEducation);
+    final offset = (_currentPage - 1) * _studentsPageSize;
     try {
       if (mounted) {
         setState(() => _enrichingLastCalls = true);
       }
       final res = await NeyvoPulseApi.listStudents(
+        limit: _studentsPageSize,
+        offset: offset,
         hasBalance: f.hasBalance,
         isOverdue: f.isOverdue,
         dueAfter: f.dueAfter,
@@ -674,15 +680,6 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
           .toList();
       if (!mounted) return;
       final merged = _mergeLastCallFields(_allStudents, enriched);
-      ApiResponseCache.set(
-        _studentsSwrKey,
-        <String, dynamic>{
-          'isEdu': isEducation,
-          'students': merged,
-          'callsEnriched': true,
-        },
-        ttl: const Duration(seconds: 60),
-      );
       setState(() {
         _allStudents = merged;
         _filteredStudents = merged;
@@ -698,98 +695,10 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
   }
 
-  Future<void> _loadRemainingStudentsPages({
-    required bool isEducation,
-    required ({
-      bool? hasBalance,
-      bool? isOverdue,
-      String? dueBefore,
-      String? dueAfter,
-    }) filters,
-    required int startOffset,
-  }) async {
-    if (_loadingMoreStudents) return;
-    _loadingMoreStudents = true;
-    var offset = startOffset;
-    try {
-      while (mounted) {
-        final res = await NeyvoPulseApi.listStudents(
-          limit: _studentsPageSize,
-          offset: offset,
-          hasBalance: filters.hasBalance,
-          isOverdue: filters.isOverdue,
-          dueAfter: filters.dueAfter,
-          dueBefore: filters.dueBefore,
-          enrichCalls: false,
-        );
-        final page = (res['students'] as List? ?? [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-        if (page.isEmpty || !mounted) break;
-        final existingIds = _allStudents
-            .map((e) => (e['id'] ?? '').toString())
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final newRows = page.where((s) {
-          final id = (s['id'] ?? '').toString();
-          return id.isEmpty || !existingIds.contains(id);
-        }).toList();
-        if (newRows.isNotEmpty) {
-          setState(() {
-            _allStudents = [..._allStudents, ...newRows];
-            _filteredStudents = _allStudents;
-          });
-          _filterStudents();
-        }
-        offset += page.length;
-        if (page.length < _studentsPageSize) break;
-      }
-      if (!mounted) return;
-      final needsEnrichment = _needsLastCallEnrichment(_allStudents);
-      ApiResponseCache.set(
-        _studentsSwrKey,
-        <String, dynamic>{
-          'isEdu': isEducation,
-          'students': _allStudents,
-          'callsEnriched': !needsEnrichment,
-        },
-        ttl: const Duration(seconds: 60),
-      );
-      if (needsEnrichment && _allStudents.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _enrichLastCalls(isEducation: isEducation);
-          }
-        });
-      } else if (mounted) {
-        setState(() => _enrichingLastCalls = false);
-      }
-    } finally {
-      _loadingMoreStudents = false;
-    }
-  }
-
-  Future<void> _load() async {
-    final cachedEntry = ApiResponseCache.get(_studentsSwrKey);
-    if (cachedEntry is Map<String, dynamic>) {
-      setState(() {
-        _isEducationOrg = cachedEntry['isEdu'] == true;
-        _allStudents = List<Map<String, dynamic>>.from(
-          (cachedEntry['students'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
-        );
-        _filteredStudents = _allStudents;
-        _loading = false;
-        _error = null;
-      });
-      _filterStudents();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _runTableEntryAnimation();
-      });
-    } else {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
+  Future<void> _fetchPage(int page, {required bool isInitial}) async {
+    if (!mounted) return;
+    if (!isInitial) {
+      setState(() => _pageLoading = true);
     }
     try {
       final agentsRes = await NeyvoPulseApi.listAgents();
@@ -799,77 +708,95 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
           (a['industry']?.toString().toLowerCase() ?? '') == 'education');
 
       final f = _studentListFilters(isEducation);
+      final offset = (page - 1) * _studentsPageSize;
+      final includeTotal = _needsTotalCount && page == 1;
+
       final res = await NeyvoPulseApi.listStudents(
         limit: _studentsPageSize,
-        offset: 0,
+        offset: offset,
         hasBalance: f.hasBalance,
         isOverdue: f.isOverdue,
         dueAfter: f.dueAfter,
         dueBefore: f.dueBefore,
         enrichCalls: false,
+        includeTotal: includeTotal,
       );
       final list = (res['students'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+
+      var totalCount = _totalCount;
+      if (includeTotal && res['total'] != null) {
+        final raw = res['total'];
+        totalCount = raw is num ? raw.toInt() : int.tryParse(raw.toString()) ?? 0;
+        _needsTotalCount = false;
+      } else if (includeTotal && res['total'] == null) {
+        totalCount = offset + list.length;
+        _needsTotalCount = false;
+      }
+
+      final tp = totalCount <= 0 ? 1 : ((totalCount + _studentsPageSize - 1) ~/ _studentsPageSize);
+      if (totalCount > 0 && page > tp) {
+        _totalCount = totalCount;
+        await _fetchPage(tp, isInitial: isInitial);
+        return;
+      }
+
       final needsEnrichment = _needsLastCallEnrichment(list);
-      final hasMorePages = list.length == _studentsPageSize;
-      ApiResponseCache.set(
-        _studentsSwrKey,
-        <String, dynamic>{
-          'isEdu': isEducation,
-          'students': list,
-          'callsEnriched': !needsEnrichment && !hasMorePages,
-        },
-        ttl: const Duration(seconds: 60),
-      );
-      if (mounted) {
-        setState(() {
-          _isEducationOrg = isEducation;
-          _allStudents = list;
-          _filteredStudents = list;
-          _loading = false;
-          _enrichingLastCalls = list.isNotEmpty && (needsEnrichment || hasMorePages);
-        });
-        _filterStudents();
+
+      if (!mounted) return;
+      setState(() {
+        _allStudents = list;
+        _filteredStudents = list;
+        _currentPage = page;
+        _totalCount = totalCount;
+        _loading = false;
+        _pageLoading = false;
+        _enrichingLastCalls = list.isNotEmpty && needsEnrichment;
+        _tableAnimationStarted = false;
+        _tableAnimationController.reset();
+      });
+      _filterStudents();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _runTableEntryAnimation();
+      });
+      if (list.isNotEmpty && needsEnrichment) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _runTableEntryAnimation();
+          if (mounted) {
+            _enrichCurrentPage(isEducation: isEducation);
+          }
         });
-        if (hasMorePages) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _loadRemainingStudentsPages(
-                isEducation: isEducation,
-                filters: f,
-                startOffset: list.length,
-              );
-            }
-          });
-        } else if (list.isNotEmpty && needsEnrichment) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _enrichLastCalls(isEducation: isEducation);
-            }
-          });
-        }
       }
     } catch (e) {
       if (mounted) {
-        if (cachedEntry is Map<String, dynamic> &&
-            cachedEntry['callsEnriched'] == false) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _enrichLastCalls(isEducation: _isEducationOrg);
-            }
-          });
-        }
-        if (cachedEntry == null) {
-          setState(() {
-            _error = e.toString();
-            _loading = false;
-          });
-        }
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+          _pageLoading = false;
+        });
       }
     }
+  }
+
+  Future<void> _goToPage(int page) async {
+    if (_pageLoading) return;
+    final tp = _totalPages;
+    var p = page;
+    if (p < 1) p = 1;
+    if (p > tp) p = tp;
+    if (p == _currentPage && !_loading) return;
+    await _fetchPage(p, isInitial: false);
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _needsTotalCount = true;
+      _currentPage = 1;
+    });
+    await _fetchPage(1, isInitial: true);
   }
 
   @override
@@ -899,7 +826,10 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () async {
+        setState(() => _needsTotalCount = true);
+        await _fetchPage(_currentPage, isInitial: false);
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
@@ -1208,6 +1138,55 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       );
                     },
                   ),
+            if (!_loading && _error == null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  NeyvoSpacing.md,
+                  NeyvoSpacing.lg,
+                  NeyvoSpacing.md,
+                  NeyvoSpacing.xl,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _pageLoading || _currentPage <= 1
+                          ? null
+                          : () => _goToPage(_currentPage - 1),
+                      icon: const Icon(Icons.chevron_left),
+                      label: const Text('Prev'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.md),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_pageLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          Text(
+                            'Page $_currentPage of $_totalPages',
+                            style: NeyvoType.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _pageLoading || _currentPage >= _totalPages
+                          ? null
+                          : () => _goToPage(_currentPage + 1),
+                      icon: const Icon(Icons.chevron_right),
+                      label: const Text('Next'),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'debug_session_log.dart';
 import 'pulse_route_names.dart';
 import 'screens/pulse_auth_page.dart';
-import 'screens/pulse_shell.dart';
+import 'screens/pulse_shell.dart' deferred as pulse_shell;
 import 'screens/training_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/agent_detail_page.dart';
@@ -57,104 +57,96 @@ class PulseRouter {
       case PulseRouteNames.onboarding:
         return MaterialPageRoute(builder: (_) => const OnboardingPage());
       case PulseRouteNames.launch:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.launch));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.launch);
       case PulseRouteNames.setupCenter:
         // Setup Center is replaced by Launch Wizard.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.launch));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.launch);
       case PulseRouteNames.agents:
         // Keep drawer visible by routing through PulseShell.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.agents));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.agents);
       case PulseRouteNames.calls:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.calls));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.calls);
       case PulseRouteNames.students:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.students));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.students);
       case PulseRouteNames.campaigns:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.campaigns));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.campaigns);
       case PulseRouteNames.team:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.team));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.team);
       case PulseRouteNames.outbound:
         // Legacy outbound route -> Calls/Dialer.
-        return MaterialPageRoute(
-          builder: (_) => const PulseShell(
-            initialRouteName: PulseRouteNames.calls,
-            initialCallsSection: CallsSection.dialer,
-          ),
+        return _pulseShellRoute(
+          initialRouteName: PulseRouteNames.calls,
+          initialCallsSection: CallsSection.dialer,
         );
       case PulseRouteNames.dialer:
-        return MaterialPageRoute(
-          builder: (_) => const PulseShell(
-            initialRouteName: PulseRouteNames.calls,
-            initialCallsSection: CallsSection.dialer,
-          ),
+        return _pulseShellRoute(
+          initialRouteName: PulseRouteNames.calls,
+          initialCallsSection: CallsSection.dialer,
         );
       case PulseRouteNames.agentDetail:
         final agentId = settings.arguments as String? ?? '';
         return MaterialPageRoute(builder: (_) => AgentDetailPage(agentId: agentId));
       case PulseRouteNames.managedProfiles:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.managedProfiles));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.managedProfiles);
       case PulseRouteNames.managedProfileDetail:
         // Open Pulse shell on Operators tab and push profile detail (use .agents so shell selects Operators, not Home).
         final profileId = settings.arguments as String?;
-        return MaterialPageRoute(
-          builder: (_) => PulseShell(
-            initialRouteName: PulseRouteNames.agents,
-            initialProfileId: profileId,
-          ),
+        return _pulseShellRoute(
+          initialRouteName: PulseRouteNames.agents,
+          initialProfileId: profileId,
         );
       case PulseRouteNames.universalOperatorWizard:
         return MaterialPageRoute(builder: (_) => const UniversalOperatorWizardScreen());
       case PulseRouteNames.analytics:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.analytics));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.analytics);
       case PulseRouteNames.executiveDashboard:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.executiveDashboard));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.executiveDashboard);
       case PulseRouteNames.billing:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.billing);
       case PulseRouteNames.wallet:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.wallet));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.wallet);
       case PulseRouteNames.usage:
       case PulseRouteNames.addons:
       case PulseRouteNames.payments:
         // Billing is unified in one page for Voice OS.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.billing));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.billing);
       case PulseRouteNames.voiceTier:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceTier));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.voiceTier);
       case PulseRouteNames.subscriptionPlan:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.subscriptionPlan));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.subscriptionPlan);
       case PulseRouteNames.developerConsole:
         return MaterialPageRoute(builder: (_) => const DeveloperConsolePage());
       case PulseRouteNames.settings:
         // Settings must stay inside PulseShell so the drawer remains visible.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.settings));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.settings);
       case PulseRouteNames.training:
         return MaterialPageRoute(builder: (_) => const TrainingPage());
       case PulseRouteNames.auditLog:
         // Audit log feature removed — land on dashboard.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.dashboard);
       case PulseRouteNames.integrations:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.integrations));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.integrations);
       case PulseRouteNames.integration:
         // Legacy alias.
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.integrations));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.integrations);
       case PulseRouteNames.phoneNumbers:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.phoneNumbers));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.phoneNumbers);
       case PulseRouteNames.agency:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.agency));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.agency);
       case PulseRouteNames.voiceStudio:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.voiceStudio));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.voiceStudio);
       case PulseRouteNames.testCall:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.testCall));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.testCall);
       case PulseRouteNames.ubModelOverview:
         return MaterialPageRoute(builder: (_) => const UbModelOverviewPage());
       case PulseRouteNames.dashboard:
-        return MaterialPageRoute(builder: (_) => const PulseShell(initialRouteName: PulseRouteNames.dashboard));
+        return _pulseShellRoute(initialRouteName: PulseRouteNames.dashboard);
       default:
         if ((settings.name ?? '').startsWith('/pulse/')) {
           // Legacy path → canonical (tab-matching) route so old deep links open the correct tab.
           final name = settings.name!;
           final canonical = _legacyPulsePathToCanonical(name);
-          return MaterialPageRoute(
-            builder: (_) => PulseShell(initialRouteName: canonical ?? name),
-          );
+          return _pulseShellRoute(initialRouteName: canonical ?? name);
         }
         if ((settings.name ?? '').startsWith('/operators/')) {
           final name = settings.name!;
@@ -209,5 +201,47 @@ class PulseRouter {
 
   static Route<dynamic> _operatorsDetailRoute({required String operatorId}) {
     return MaterialPageRoute(builder: (_) => OperatorsDetailScreen(operatorId: operatorId));
+  }
+
+  static Route<dynamic> _pulseShellRoute({
+    String? initialRouteName,
+    String? initialProfileId,
+    CallsSection? initialCallsSection,
+  }) {
+    return MaterialPageRoute(
+      builder: (_) => _DeferredPage(
+        loadLibrary: pulse_shell.loadLibrary,
+        builder: () => pulse_shell.PulseShell(
+          initialRouteName: initialRouteName,
+          initialProfileId: initialProfileId,
+          initialCallsSection: initialCallsSection,
+        ),
+      ),
+    );
+  }
+}
+
+class _DeferredPage extends StatelessWidget {
+  const _DeferredPage({
+    required this.loadLibrary,
+    required this.builder,
+  });
+
+  final Future<void> Function() loadLibrary;
+  final Widget Function() builder;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: loadLibrary(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return builder();
+      },
+    );
   }
 }

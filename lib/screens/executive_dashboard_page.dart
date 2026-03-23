@@ -180,9 +180,11 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
       _criticalBanner = null;
       _deferredError = null;
     });
-    await _fetchCritical(version: version);
-    if (mounted) setState(() => _loading = false);
+    // Start critical + deferred fetches asynchronously so the dashboard shell
+    // renders immediately (API calls can take time on Render/cold start).
+    unawaited(_fetchCritical(version: version));
     unawaited(_fetchDeferred(version: version));
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _refresh() async {
@@ -212,10 +214,30 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 
   Future<void> _fetchCritical({required int version}) async {
+    // Soft-timeout: show an error only if nothing succeeded yet, but still
+    // wait for the actual request to finish so late responses can clear the banner.
+    final timeoutDuration = NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy);
+    Timer? timeoutTimer;
     try {
-      final critical = await ref.read(executiveCriticalProvider(_rangeModel()).future).timeout(
-            NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
-          );
+      final criticalFuture =
+          ref.read(executiveCriticalProvider(_rangeModel()).future);
+
+      timeoutTimer = Timer(timeoutDuration, () {
+        if (!mounted || version != _loadVersion) return;
+        final hasCache = _hasSuccessfulCriticalLoad ||
+            _calls.isNotEmpty ||
+            _recentCalls.isNotEmpty ||
+            _successSummary != null;
+        if (hasCache) return;
+        setState(() {
+          _initialLoadError =
+              'Dashboard request timed out. Pull to refresh or check your connection.';
+          _criticalBanner = null;
+        });
+      });
+
+      final critical = await criticalFuture;
+      timeoutTimer.cancel();
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _initialLoadError = null;
@@ -226,12 +248,8 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
         _successSummary = critical.successSummary;
       });
       _onRefreshSuccess();
-    } on TimeoutException {
-      _applyCriticalFailure(
-        version,
-        'Dashboard request timed out. Pull to refresh or check your connection.',
-      );
     } catch (e) {
+      timeoutTimer?.cancel();
       _applyCriticalFailure(version, e.toString());
     }
   }
@@ -387,7 +405,9 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     if (_loading && !_hasSuccessfulCriticalLoad) {
       return _buildExecutiveFirstLoadSkeleton();
     }
-    if (_initialLoadError != null && !_hasSuccessfulCriticalLoad) {
+    // Keep the full-page fallback only for very first paint while still loading.
+    // Once the shell is rendered, show non-blocking banner style errors instead.
+    if (_initialLoadError != null && !_hasSuccessfulCriticalLoad && _loading) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -405,6 +425,25 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_initialLoadError != null && !_hasSuccessfulCriticalLoad) ...[
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: NeyvoTheme.borderSubtle),
+            ),
+            child: ListTile(
+              leading:
+                  const Icon(Icons.warning_amber_rounded, color: NeyvoColors.warning),
+              title: Text(
+                _initialLoadError!,
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoTheme.textPrimary),
+              ),
+              trailing: TextButton(onPressed: _load, child: const Text('Retry')),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (_criticalBanner != null) ...[
           Card(
             elevation: 0,

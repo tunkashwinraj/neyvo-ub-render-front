@@ -417,27 +417,6 @@ class _CallHistoryPageState extends ConsumerState<CallHistoryPage> {
                   ),
                   const SizedBox(width: NeyvoSpacing.sm),
                   SizedBox(
-                    width: 140,
-                    child: DropdownButtonFormField<int>(
-                      value: s.fetchSize,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        labelText: 'Show',
-                      ),
-                      items: CallHistoryState.fetchSizeOptions
-                          .map((sz) => DropdownMenuItem(value: sz, child: Text('$sz calls', overflow: TextOverflow.ellipsis)))
-                          .toList(),
-                      onChanged: (v) async {
-                        if (v == null) return;
-                        n.setFetchSize(v);
-                        await n.reload();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: NeyvoSpacing.sm),
-                  SizedBox(
                     width: 150,
                     child: DropdownButtonFormField<String>(
                       value: s.filterStatus,

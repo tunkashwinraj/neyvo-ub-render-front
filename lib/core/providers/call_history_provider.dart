@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../neyvo_pulse_api.dart';
@@ -13,7 +15,7 @@ class CallHistoryState {
     this.loadingMore = false,
     this.error,
     this.allCalls = const [],
-    this.fetchSize = 50,
+    this.fetchSize = 10,
     this.dateRange = 'all',
     this.filterStatus = 'all',
     this.filterOutcome = 'all',
@@ -21,6 +23,7 @@ class CallHistoryState {
     this.sortBy = CallHistorySort.dateNewest,
     this.searchQuery = '',
     this.hasMore = true,
+    this.currentPage = 1,
   });
 
   final bool loading;
@@ -35,8 +38,9 @@ class CallHistoryState {
   final CallHistorySort sortBy;
   final String searchQuery;
   final bool hasMore;
+  final int currentPage;
 
-  static const List<int> fetchSizeOptions = [20, 50, 100, 200, 500];
+  static const List<int> fetchSizeOptions = [10, 20, 50, 100, 200, 500];
 
   CallHistoryState copyWith({
     bool? loading,
@@ -51,6 +55,7 @@ class CallHistoryState {
     CallHistorySort? sortBy,
     String? searchQuery,
     bool? hasMore,
+    int? currentPage,
     bool clearError = false,
   }) {
     return CallHistoryState(
@@ -66,6 +71,7 @@ class CallHistoryState {
       sortBy: sortBy ?? this.sortBy,
       searchQuery: searchQuery ?? this.searchQuery,
       hasMore: hasMore ?? this.hasMore,
+      currentPage: currentPage ?? this.currentPage,
     );
   }
 
@@ -189,19 +195,77 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
     return const CallHistoryState(loading: true);
   }
 
+  int _activeLoadToken = 0;
+  bool _autoLoadRunning = false;
+  // Auto-load continues until `state.hasMore == false`.
+
+  Future<void> _loadMoreOnce(int expectedToken) async {
+    if (!state.hasMore || state.loadingMore || state.loading) return;
+    final existingCalls = state.allCalls;
+    final (fromStr, toStr) = state.dateRangeParams();
+    state = state.copyWith(loadingMore: true, clearError: true);
+    try {
+      final res = await NeyvoPulseApi.listCalls(
+        limit: state.fetchSize,
+        offset: existingCalls.length,
+        from: fromStr,
+        to: toStr,
+      );
+      final list = res['calls'];
+      final newCalls = list is List
+          ? list.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+          : <Map<String, dynamic>>[];
+
+      if (expectedToken != _activeLoadToken) return; // stale load; ignore
+
+      state = state.copyWith(
+        loadingMore: false,
+        allCalls: [...existingCalls, ...newCalls],
+        hasMore: newCalls.length >= state.fetchSize,
+        currentPage: state.currentPage + 1,
+      );
+    } catch (e) {
+      if (expectedToken != _activeLoadToken) return;
+      if (isPulseRequestCancelled(e)) {
+        state = state.copyWith(loadingMore: false);
+        return;
+      }
+      state = state.copyWith(loadingMore: false);
+    }
+  }
+
+  Future<void> _autoLoadMore(int expectedToken) async {
+    if (_autoLoadRunning) return;
+    _autoLoadRunning = true;
+    try {
+      while (expectedToken == _activeLoadToken && state.hasMore) {
+        await _loadMoreOnce(expectedToken);
+        // Give the UI a chance to paint the latest appended calls.
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    } finally {
+      _autoLoadRunning = false;
+    }
+  }
+
   void seedInitialDirection(String initialDirection) {
     var d = initialDirection.toLowerCase().trim();
     if (d != 'inbound' && d != 'outbound' && d != 'all') d = 'outbound';
     state = state.copyWith(filterDirection: d);
   }
 
-  Future<void> reload() async {
-    state = state.copyWith(loading: true, clearError: true);
+  Future<void> _loadPage(int page, {required bool showFullLoader}) async {
+    if (showFullLoader) {
+      state = state.copyWith(loading: true, clearError: true);
+    } else {
+      state = state.copyWith(loadingMore: true, clearError: true);
+    }
     try {
       final (fromStr, toStr) = state.dateRangeParams();
+      final offset = (page - 1) * state.fetchSize;
       final res = await NeyvoPulseApi.listCalls(
         limit: state.fetchSize,
-        offset: 0,
+        offset: offset,
         from: fromStr,
         to: toStr,
       );
@@ -215,17 +279,20 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
       }
       state = state.copyWith(
         loading: false,
+        loadingMore: false,
         error: err,
         allCalls: calls,
         hasMore: calls.length >= state.fetchSize,
+        currentPage: page,
       );
     } catch (e) {
       if (isPulseRequestCancelled(e)) {
-        state = state.copyWith(loading: false);
+        state = state.copyWith(loading: false, loadingMore: false);
         return;
       }
       state = state.copyWith(
         loading: false,
+        loadingMore: false,
         error: e.toString(),
         allCalls: const [],
         hasMore: false,
@@ -233,36 +300,23 @@ class CallHistoryNotifier extends _$CallHistoryNotifier {
     }
   }
 
-  Future<void> loadMore() async {
-    if (!state.hasMore || state.loadingMore || state.loading) return;
-    state = state.copyWith(loadingMore: true);
-    try {
-      final (fromStr, toStr) = state.dateRangeParams();
-      final res = await NeyvoPulseApi.listCalls(
-        limit: state.fetchSize,
-        offset: state.allCalls.length,
-        from: fromStr,
-        to: toStr,
-      );
-      final list = res['calls'];
-      final newCalls = list is List
-          ? list.map((e) => Map<String, dynamic>.from(e as Map)).toList()
-          : <Map<String, dynamic>>[];
-      state = state.copyWith(
-        loadingMore: false,
-        allCalls: [...state.allCalls, ...newCalls],
-        hasMore: newCalls.length >= state.fetchSize,
-      );
-    } catch (_) {
-      state = state.copyWith(loadingMore: false);
+  Future<void> reload() async {
+    _activeLoadToken++;
+    final token = _activeLoadToken;
+    _autoLoadRunning = false;
+    await _loadPage(1, showFullLoader: true);
+    if (state.hasMore) {
+      unawaited(_autoLoadMore(token));
     }
   }
 
+  Future<void> loadMore() async => _loadMoreOnce(_activeLoadToken);
+
   void setSearchQuery(String q) => state = state.copyWith(searchQuery: q);
 
-  void setFetchSize(int n) => state = state.copyWith(fetchSize: n);
+  void setFetchSize(int n) => state = state.copyWith(fetchSize: n, currentPage: 1, hasMore: true);
 
-  void setDateRange(String r) => state = state.copyWith(dateRange: r);
+  void setDateRange(String r) => state = state.copyWith(dateRange: r, currentPage: 1, hasMore: true);
 
   void setFilterStatus(String s) => state = state.copyWith(filterStatus: s);
 

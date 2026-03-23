@@ -5,7 +5,6 @@
 // Typography: Freight Sans Pro (preferred) → Roboto Slab (headings) + Open Sans (body) as web alternates.
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NEYVO COLORS — GOODWIN STYLE GUIDE
@@ -66,33 +65,63 @@ class NeyvoColors {
   static const Color sidebarHoverLight = sidebarHover;
 }
 
+TextStyle _robotoSlab({
+  double? fontSize,
+  FontWeight? fontWeight,
+  double? letterSpacing,
+  Color? color,
+}) {
+  return TextStyle(
+    fontFamily: 'Roboto Slab',
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    letterSpacing: letterSpacing,
+    color: color,
+  );
+}
+
+TextStyle _openSans({
+  double? fontSize,
+  FontWeight? fontWeight,
+  double? letterSpacing,
+  Color? color,
+}) {
+  return TextStyle(
+    fontFamily: 'Open Sans',
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    letterSpacing: letterSpacing,
+    color: color,
+  );
+}
+
 /// Typography scale — Roboto Slab (headings) + Open Sans (body) per UB style guide.
 class NeyvoTextStyles {
-  static TextStyle get display => GoogleFonts.robotoSlab(
+  static TextStyle get display => _robotoSlab(
     fontSize: 28, fontWeight: FontWeight.w700,
     letterSpacing: -0.5, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get title => GoogleFonts.robotoSlab(
+  static TextStyle get title => _robotoSlab(
     fontSize: 20, fontWeight: FontWeight.w600,
     letterSpacing: -0.3, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get heading => GoogleFonts.robotoSlab(
+  static TextStyle get heading => _robotoSlab(
     fontSize: 16, fontWeight: FontWeight.w600,
     letterSpacing: -0.2, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get body => GoogleFonts.openSans(
+  static TextStyle get body => _openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoTheme.textSecondary,
   );
-  static TextStyle get bodyPrimary => GoogleFonts.openSans(
+  static TextStyle get bodyPrimary => _openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get label => GoogleFonts.openSans(
+  static TextStyle get label => _openSans(
     fontSize: 12, fontWeight: FontWeight.w500,
     letterSpacing: 0.3, color: NeyvoTheme.textSecondary,
   );
-  static TextStyle get micro => GoogleFonts.openSans(
+  static TextStyle get micro => _openSans(
     fontSize: 11, fontWeight: FontWeight.w500,
     letterSpacing: 0.5, color: NeyvoTheme.textMuted,
   );
@@ -193,85 +222,85 @@ class NeyvoRadius {
 
 /// Typography — Roboto Slab (H1/H2) + Open Sans (body) per UB style guide.
 class NeyvoType {
-  static TextStyle get displayLarge => GoogleFonts.robotoSlab(
+  static TextStyle get displayLarge => _robotoSlab(
         fontSize: 32, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: NeyvoColors.textPrimary,
       );
-  static TextStyle get headlineLarge => GoogleFonts.robotoSlab(
+  static TextStyle get headlineLarge => _robotoSlab(
         fontSize: 24, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get headlineMedium => GoogleFonts.robotoSlab(
+  static TextStyle get headlineMedium => _robotoSlab(
         fontSize: 20, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get titleLarge => GoogleFonts.robotoSlab(
+  static TextStyle get titleLarge => _robotoSlab(
         fontSize: 18, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get titleMedium => GoogleFonts.robotoSlab(
+  static TextStyle get titleMedium => _robotoSlab(
         fontSize: 16, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodyLarge => GoogleFonts.openSans(
+  static TextStyle get bodyLarge => _openSans(
         fontSize: 16, fontWeight: FontWeight.w400,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodyMedium => GoogleFonts.openSans(
+  static TextStyle get bodyMedium => _openSans(
         fontSize: 14, fontWeight: FontWeight.w400,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodySmall => GoogleFonts.openSans(
+  static TextStyle get bodySmall => _openSans(
         fontSize: 12, fontWeight: FontWeight.w400,
         color: NeyvoColors.textSecondary,
       );
-  static TextStyle get labelLarge => GoogleFonts.openSans(
+  static TextStyle get labelLarge => _openSans(
         fontSize: 14, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get labelSmall => GoogleFonts.openSans(
+  static TextStyle get labelSmall => _openSans(
         fontSize: 11, fontWeight: FontWeight.w500,
         color: NeyvoColors.textMuted,
       );
 
   // Light theme
-  static TextStyle get displayLargeLight => GoogleFonts.robotoSlab(
+  static TextStyle get displayLargeLight => _robotoSlab(
         fontSize: 32, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get headlineLargeLight => GoogleFonts.robotoSlab(
+  static TextStyle get headlineLargeLight => _robotoSlab(
         fontSize: 24, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get headlineMediumLight => GoogleFonts.robotoSlab(
+  static TextStyle get headlineMediumLight => _robotoSlab(
         fontSize: 20, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get titleLargeLight => GoogleFonts.robotoSlab(
+  static TextStyle get titleLargeLight => _robotoSlab(
         fontSize: 18, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get titleMediumLight => GoogleFonts.robotoSlab(
+  static TextStyle get titleMediumLight => _robotoSlab(
         fontSize: 16, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodyLargeLight => GoogleFonts.openSans(
+  static TextStyle get bodyLargeLight => _openSans(
         fontSize: 16, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodyMediumLight => GoogleFonts.openSans(
+  static TextStyle get bodyMediumLight => _openSans(
         fontSize: 14, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodySmallLight => GoogleFonts.openSans(
+  static TextStyle get bodySmallLight => _openSans(
         fontSize: 12, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightSecondary,
       );
-  static TextStyle get labelLargeLight => GoogleFonts.openSans(
+  static TextStyle get labelLargeLight => _openSans(
         fontSize: 14, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get labelSmallLight => GoogleFonts.openSans(
+  static TextStyle get labelSmallLight => _openSans(
         fontSize: 11, fontWeight: FontWeight.w500,
         color: NeyvoColors.textLightMuted,
       );
