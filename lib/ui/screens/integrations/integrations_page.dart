@@ -333,6 +333,13 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                         'Transactional email for voice tools (sendEmail)',
                                         style: NeyvoTextStyles.micro,
                                       ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Spearia operator assistants now use operator-level SendGrid from the Operator detail page.',
+                                        style: NeyvoTextStyles.micro.copyWith(
+                                          color: NeyvoColors.warning,
+                                        ),
+                                      ),
                                       const SizedBox(height: 8),
                                       Text(
                                         connected
@@ -659,6 +666,14 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                           Text(
                                             'Outbound SMS for ARIA operators (sendSMS tool)',
                                             style: NeyvoTextStyles.micro,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Spearia operator assistants now use operator-level Twilio from the Operator detail page.',
+                                            style: NeyvoTextStyles.micro
+                                                .copyWith(
+                                                  color: NeyvoColors.warning,
+                                                ),
                                           ),
                                           const SizedBox(height: 8),
                                           Text(

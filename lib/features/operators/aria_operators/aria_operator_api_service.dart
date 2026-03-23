@@ -2,8 +2,9 @@
 // API client for ARIA Operators. Calls /api/operators/* endpoints.
 
 import '../../../api/neyvo_api.dart';
-import '../../../api/spearia_api.dart';
 import '../../../config/backend_urls.dart';
+import '../../../models/email_models.dart';
+import '../../../models/sms_models.dart';
 import '../../../neyvo_pulse_api.dart';
 
 class AriaOperatorApiService {
@@ -107,6 +108,118 @@ class AriaOperatorApiService {
       if (v is Map<String, dynamic>) return v;
       if (v is Map) return Map<String, dynamic>.from(v);
       throw ApiException('Unexpected messaging-defaults response');
+    }
+  }
+
+  static Future<SendgridConfig> getOperatorSendgridConfig(String operatorId) async {
+    final params = _withAccountId(<String, dynamic>{});
+    final path = '/api/operators/$operatorId/integrations/sendgrid';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SendgridConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SendgridConfig.fromJson(v);
+    }
+  }
+
+  static Future<Map<String, dynamic>> connectOperatorSendgrid(
+    String operatorId, {
+    required String apiKey,
+    required String fromEmail,
+  }) async {
+    final body = _withAccountId({
+      'api_key': apiKey.trim(),
+      'from_email': fromEmail.trim(),
+    });
+    final path = '/api/operators/$operatorId/integrations/sendgrid/connect';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await NeyvoApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  static Future<void> disconnectOperatorSendgrid(String operatorId) async {
+    final body = _withAccountId(<String, dynamic>{});
+    final path = '/api/operators/$operatorId/integrations/sendgrid/disconnect';
+    try {
+      await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      await NeyvoApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  static Future<SendgridSenderStatus> getOperatorSendgridSenderStatus(String operatorId) async {
+    final params = _withAccountId(<String, dynamic>{});
+    final path = '/api/operators/$operatorId/integrations/sendgrid/sender/status';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SendgridSenderStatus.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SendgridSenderStatus.fromJson(v);
+    }
+  }
+
+  static Future<Map<String, dynamic>> verifyOperatorSendgridSender(
+    String operatorId, {
+    required String fromEmail,
+    required String fromName,
+  }) async {
+    final body = _withAccountId({
+      'from_email': fromEmail.trim(),
+      'from_name': fromName.trim(),
+    });
+    final path = '/api/operators/$operatorId/integrations/sendgrid/sender/verify';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await NeyvoApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  static Future<SmsConfig> getOperatorTwilioConfig(String operatorId) async {
+    final params = _withAccountId(<String, dynamic>{});
+    final path = '/api/operators/$operatorId/integrations/twilio';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SmsConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SmsConfig.fromJson(v);
+    }
+  }
+
+  static Future<SmsConfig> saveOperatorTwilioConfig(
+    String operatorId, {
+    required String accountSid,
+    required String authToken,
+    required String fromNumber,
+  }) async {
+    final body = _withAccountId({
+      'account_sid': accountSid.trim(),
+      'auth_token': authToken.trim(),
+      'from_number': fromNumber.trim(),
+    });
+    final path = '/api/operators/$operatorId/integrations/twilio';
+    try {
+      final v = await SpeariaApi.putJson(path, body: body);
+      if (v is Map<String, dynamic>) return SmsConfig.fromJson(v);
+      if (v is Map) return SmsConfig.fromJson(Map<String, dynamic>.from(v));
+      throw ApiException('Unexpected operator twilio response');
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await SpeariaApi.putJson('$_integrationBaseUrl$path', body: body);
+      if (v is Map<String, dynamic>) return SmsConfig.fromJson(v);
+      if (v is Map) return SmsConfig.fromJson(Map<String, dynamic>.from(v));
+      throw ApiException('Unexpected operator twilio response');
     }
   }
 }

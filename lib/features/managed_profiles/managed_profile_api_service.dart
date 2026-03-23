@@ -2,8 +2,9 @@
 // API client for Managed Profiles only. Uses /api/managed-profiles/*.
 
 import '../../api/neyvo_api.dart';
-import '../../api/spearia_api.dart';
 import '../../config/backend_urls.dart';
+import '../../models/email_models.dart';
+import '../../models/sms_models.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
@@ -280,6 +281,40 @@ class ManagedProfileApiService {
       if (v is Map<String, dynamic>) return v;
       if (v is Map) return Map<String, dynamic>.from(v);
       throw ApiException('Unexpected messaging-defaults response');
+    }
+  }
+
+  static Future<SendgridConfig> getOperatorSendgridConfig(String profileId) async {
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+      params['business_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/sendgrid';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SendgridConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SendgridConfig.fromJson(v);
+    }
+  }
+
+  static Future<SmsConfig> getOperatorTwilioConfig(String profileId) async {
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+      params['business_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/twilio';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SmsConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SmsConfig.fromJson(v);
     }
   }
 

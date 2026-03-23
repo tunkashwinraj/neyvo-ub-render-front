@@ -81,13 +81,14 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                   : const Color(0xFF94A3B8);
 
           return DefaultTabController(
-            length: 2,
+            length: 3,
             child: Column(
               children: [
                 const TabBar(
                   tabs: [
                     Tab(text: 'Overview'),
                     Tab(text: 'Integrations'),
+                    Tab(text: 'Messaging'),
                   ],
                 ),
                 Expanded(
@@ -278,6 +279,7 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
                         ],
                       ),
                       _OperatorIntegrationsSection(operatorId: widget.operatorId),
+                      _OperatorMessagingSection(operatorId: widget.operatorId),
                     ],
                   ),
                 ),
@@ -416,22 +418,12 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
   final _twilioSid = TextEditingController();
   final _twilioToken = TextEditingController();
   final _twilioFrom = TextEditingController();
-  final _emailTo = TextEditingController();
-  final _emailSubject = TextEditingController();
-  final _emailBody = TextEditingController();
-  final _emailHtml = TextEditingController();
-  final _emailFromName = TextEditingController();
-  final _smsTo = TextEditingController();
-  final _smsBody = TextEditingController();
 
-  bool _loaded = false;
   bool _loadingOperatorIntegrations = true;
   bool _savingSendgrid = false;
   bool _savingTwilio = false;
   SendgridConfig? _sendgridConfig;
   SmsConfig? _twilioConfig;
-  bool _savingEmail = false;
-  bool _savingSms = false;
   String? _error;
 
   @override
@@ -442,13 +434,6 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
     _twilioSid.dispose();
     _twilioToken.dispose();
     _twilioFrom.dispose();
-    _emailTo.dispose();
-    _emailSubject.dispose();
-    _emailBody.dispose();
-    _emailHtml.dispose();
-    _emailFromName.dispose();
-    _smsTo.dispose();
-    _smsBody.dispose();
     super.dispose();
   }
 
@@ -542,78 +527,8 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
     }
   }
 
-  void _applyDefaults(Map<String, dynamic> data) {
-    final email = data['email'] is Map ? Map<String, dynamic>.from(data['email'] as Map) : const <String, dynamic>{};
-    final sms = data['sms'] is Map ? Map<String, dynamic>.from(data['sms'] as Map) : const <String, dynamic>{};
-    _emailTo.text = (email['to'] ?? '').toString();
-    _emailSubject.text = (email['subject'] ?? '').toString();
-    _emailBody.text = (email['body'] ?? '').toString();
-    _emailHtml.text = (email['html_body'] ?? '').toString();
-    _emailFromName.text = (email['from_name'] ?? '').toString();
-    _smsTo.text = (sms['to'] ?? '').toString();
-    _smsBody.text = (sms['body'] ?? '').toString();
-  }
-
-  Future<void> _saveEmail() async {
-    setState(() {
-      _savingEmail = true;
-      _error = null;
-    });
-    try {
-      await AriaOperatorApiService.saveEmailDefaults(
-        widget.operatorId,
-        email: {
-          'to': _emailTo.text.trim(),
-          'subject': _emailSubject.text,
-          'body': _emailBody.text,
-          'html_body': _emailHtml.text,
-          'from_name': _emailFromName.text.trim(),
-        },
-      );
-      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email defaults saved')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _savingEmail = false);
-    }
-  }
-
-  Future<void> _saveSms() async {
-    setState(() {
-      _savingSms = true;
-      _error = null;
-    });
-    try {
-      await AriaOperatorApiService.saveSmsDefaults(
-        widget.operatorId,
-        sms: {
-          'to': _smsTo.text.trim(),
-          'body': _smsBody.text,
-        },
-      );
-      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('SMS defaults saved')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _savingSms = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(operatorMessagingDefaultsProvider(widget.operatorId));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -627,7 +542,7 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                 const Text('Integrations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
                 const Text(
-                  'Configure operator-scoped SendGrid/Twilio credentials and defaults used by sendEmail/sendSMS for this operator only.',
+                  'Configure operator-scoped SendGrid and Twilio credentials for this operator.',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -647,20 +562,6 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                   ),
                   const SizedBox(height: 8),
                 ],
-                async.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  error: (e, _) => Text('Could not load defaults: $e', style: const TextStyle(color: Color(0xFFF59E0B))),
-                  data: (data) {
-                    if (!_loaded) {
-                      _applyDefaults(data);
-                      _loaded = true;
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
               ],
             ),
           ),
@@ -755,6 +656,156 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
             ),
           ),
         ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: const TextStyle(color: Color(0xFFF59E0B))),
+        ],
+      ],
+    );
+  }
+}
+
+class _OperatorMessagingSection extends ConsumerStatefulWidget {
+  final String operatorId;
+  const _OperatorMessagingSection({required this.operatorId});
+
+  @override
+  ConsumerState<_OperatorMessagingSection> createState() => _OperatorMessagingSectionState();
+}
+
+class _OperatorMessagingSectionState extends ConsumerState<_OperatorMessagingSection> {
+  final _emailTo = TextEditingController();
+  final _emailSubject = TextEditingController();
+  final _emailBody = TextEditingController();
+  final _emailHtml = TextEditingController();
+  final _emailFromName = TextEditingController();
+  final _smsTo = TextEditingController();
+  final _smsBody = TextEditingController();
+
+  bool _loaded = false;
+  bool _savingEmail = false;
+  bool _savingSms = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailTo.dispose();
+    _emailSubject.dispose();
+    _emailBody.dispose();
+    _emailHtml.dispose();
+    _emailFromName.dispose();
+    _smsTo.dispose();
+    _smsBody.dispose();
+    super.dispose();
+  }
+
+  void _applyDefaults(Map<String, dynamic> data) {
+    final email = data['email'] is Map ? Map<String, dynamic>.from(data['email'] as Map) : const <String, dynamic>{};
+    final sms = data['sms'] is Map ? Map<String, dynamic>.from(data['sms'] as Map) : const <String, dynamic>{};
+    _emailTo.text = (email['to'] ?? '').toString();
+    _emailSubject.text = (email['subject'] ?? '').toString();
+    _emailBody.text = (email['body'] ?? '').toString();
+    _emailHtml.text = (email['html_body'] ?? '').toString();
+    _emailFromName.text = (email['from_name'] ?? '').toString();
+    _smsTo.text = (sms['to'] ?? '').toString();
+    _smsBody.text = (sms['body'] ?? '').toString();
+  }
+
+  Future<void> _saveEmail() async {
+    setState(() {
+      _savingEmail = true;
+      _error = null;
+    });
+    try {
+      await AriaOperatorApiService.saveEmailDefaults(
+        widget.operatorId,
+        email: {
+          'to': _emailTo.text.trim(),
+          'subject': _emailSubject.text,
+          'body': _emailBody.text,
+          'html_body': _emailHtml.text,
+          'from_name': _emailFromName.text.trim(),
+        },
+      );
+      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email message defaults saved')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _savingEmail = false);
+    }
+  }
+
+  Future<void> _saveSms() async {
+    setState(() {
+      _savingSms = true;
+      _error = null;
+    });
+    try {
+      await AriaOperatorApiService.saveSmsDefaults(
+        widget.operatorId,
+        sms: {
+          'to': _smsTo.text.trim(),
+          'body': _smsBody.text,
+        },
+      );
+      ref.invalidate(operatorMessagingDefaultsProvider(widget.operatorId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('SMS message defaults saved')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _savingSms = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(operatorMessagingDefaultsProvider(widget.operatorId));
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          color: const Color(0xFF0B1225),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Messaging', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                const Text(
+                  'SMS and Email message defaults for this operator only.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                async.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  error: (e, _) => Text('Could not load messaging defaults: $e', style: const TextStyle(color: Color(0xFFF59E0B))),
+                  data: (data) {
+                    if (!_loaded) {
+                      _applyDefaults(data);
+                      _loaded = true;
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         Card(
           color: const Color(0xFF0B1225),
@@ -763,7 +814,7 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Email defaults (SendGrid)', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('Email Message', style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 TextField(controller: _emailTo, decoration: const InputDecoration(labelText: 'Default to')),
                 const SizedBox(height: 8),
@@ -791,7 +842,7 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                     onPressed: _savingEmail ? null : _saveEmail,
                     child: _savingEmail
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Save Email Defaults'),
+                        : const Text('Save Email Message'),
                   ),
                 ),
               ],
@@ -806,7 +857,7 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('SMS defaults (Twilio)', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('SMS Message', style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 TextField(controller: _smsTo, decoration: const InputDecoration(labelText: 'Default to')),
                 const SizedBox(height: 8),
@@ -828,7 +879,7 @@ class _OperatorIntegrationsSectionState extends ConsumerState<_OperatorIntegrati
                     onPressed: _savingSms ? null : _saveSms,
                     child: _savingSms
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Save SMS Defaults'),
+                        : const Text('Save SMS Message'),
                   ),
                 ),
               ],

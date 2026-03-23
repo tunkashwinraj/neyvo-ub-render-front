@@ -77,19 +77,20 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   bool _variableMetadataLoading = false;
   bool _messagingEmailSaving = false;
   bool _messagingSmsSaving = false;
+  bool _messagingDefaultsLoading = false;
   String? _messagingDefaultsError;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _tabs.addListener(_onMainTabChanged);
     _load();
   }
 
   void _onMainTabChanged() {
     if (_tabs.indexIsChanging) return;
-    // Reload messaging defaults when opening "Additional settings" (index 3).
+    // Reload messaging defaults when opening "Messaging" (index 3).
     if (_tabs.index == 3 && !_loading) {
       _loadMessagingDefaults();
     }
@@ -235,6 +236,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
 
   Future<void> _loadMessagingDefaults() async {
     await _ensurePulseAccountId();
+    if (mounted) setState(() => _messagingDefaultsLoading = true);
     try {
       final res = await ManagedProfileApiService.getMessagingDefaults(widget.profileId);
       final email = (res['email'] is Map)
@@ -245,6 +247,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       if (!mounted) return;
       setState(() {
         _messagingDefaultsError = null;
+        _messagingDefaultsLoading = false;
         _emailToCtrl.text = (email['to'] ?? '').toString();
         _emailSubjectCtrl.text = (email['subject'] ?? '').toString();
         _emailBodyCtrl.text = (email['body'] ?? '').toString();
@@ -256,6 +259,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _messagingDefaultsLoading = false;
         _messagingDefaultsError =
             'Could not load saved email/SMS defaults. Check network and that account_id is set. ($e)';
       });
@@ -280,7 +284,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email defaults saved')),
+        const SnackBar(content: Text('Email message defaults saved')),
       );
       await _loadMessagingDefaults();
     } catch (e) {
@@ -306,7 +310,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SMS defaults saved')),
+        const SnackBar(content: Text('SMS message defaults saved')),
       );
       await _loadMessagingDefaults();
     } catch (e) {
@@ -723,6 +727,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         Tab(text: 'Personality'),
                         Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
+                        Tab(text: 'Messaging'),
                         Tab(text: 'Additional settings'),
                       ],
                     ),
@@ -734,6 +739,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         _tabPersonality(),
                         _tabAiStudio(),
                         _tabVoice(),
+                        _tabMessaging(),
                         _tabAdditionalSettings(),
                       ],
                     ),
@@ -1908,6 +1914,120 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     );
   }
 
+  Widget _tabMessaging() {
+    final primary = Theme.of(context).colorScheme.primary;
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Messaging', style: NeyvoTextStyles.heading.copyWith(fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(
+                'SMS and Email message defaults for this operator only.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              if (_messagingDefaultsLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Email Message', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              TextField(controller: _emailToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailFromNameCtrl, decoration: const InputDecoration(labelText: 'From name helper (optional)')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailSubjectCtrl, decoration: const InputDecoration(labelText: 'Default subject')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailBodyCtrl,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailHtmlCtrl,
+                minLines: 2,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingEmailSaving ? null : _saveEmailDefaults,
+                  style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
+                  child: _messagingEmailSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save Email Message'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SMS Message', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              TextField(controller: _smsToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _smsBodyCtrl,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You can use variables like {{name}}, {{date}}, {{time}}. They are filled from tool call `variables`.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingSmsSaving ? null : _saveSmsDefaults,
+                  style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
+                  child: _messagingSmsSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save SMS Message'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        MessagingDefaultsTestPanel(
+          operatorId: widget.profileId,
+          variableDefaults: _variableDefaults,
+        ),
+        if (_messagingDefaultsError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _messagingDefaultsError!,
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _tabAdditionalSettings() {
     final allowed = (_profile['allowed_actions'] as List?)?.map((e) => e.toString()).toList() ?? const <String>[];
     return ListView(
@@ -1932,95 +2052,6 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   runSpacing: 10,
                   children: allowed.map((t) => _metric('Tool', t)).toList(),
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        NeyvoGlassPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Messaging defaults (Email + SMS)', style: NeyvoTextStyles.heading),
-              const SizedBox(height: 8),
-              Text(
-                'Saved text is stored in Firestore and overrides AI tool arguments when these fields are filled. '
-                'You can use variables like {{name}}, {{date}}, {{time}}. '
-                'If you still see an old “test” message, remove that wording from the assistant’s sendEmail/sendSMS tool or system prompt so the model does not pass it as the body.',
-                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
-              ),
-              const SizedBox(height: 12),
-              Text('Email defaults', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              TextField(controller: _emailToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
-              const SizedBox(height: 8),
-              TextField(controller: _emailFromNameCtrl, decoration: const InputDecoration(labelText: 'From name helper (optional)')),
-              const SizedBox(height: 8),
-              TextField(controller: _emailSubjectCtrl, decoration: const InputDecoration(labelText: 'Default subject')),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _emailBodyCtrl,
-                minLines: 3,
-                maxLines: 6,
-                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _emailHtmlCtrl,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: _messagingEmailSaving ? null : _saveEmailDefaults,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: NeyvoColors.white,
-                  ),
-                  child: _messagingEmailSaving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Save email defaults'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text('SMS defaults', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              TextField(controller: _smsToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _smsBodyCtrl,
-                minLines: 3,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: _messagingSmsSaving ? null : _saveSmsDefaults,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: NeyvoColors.white,
-                  ),
-                  child: _messagingSmsSaving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Save SMS defaults'),
-                ),
-              ),
-              const SizedBox(height: 20),
-              MessagingDefaultsTestPanel(
-                operatorId: widget.profileId,
-                variableDefaults: _variableDefaults,
-              ),
-              if (_messagingDefaultsError != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _messagingDefaultsError!,
-                  style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
-                ),
-              ],
             ],
           ),
         ),
