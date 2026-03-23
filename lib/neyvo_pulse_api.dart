@@ -393,21 +393,28 @@ class NeyvoPulseApi {
 
   // Students / Contacts (education: financial fields, filters)
   static Future<Map<String, dynamic>> listStudents({
+    int? limit,
+    int? offset,
     bool? hasBalance,
     bool? isOverdue,
     double? balanceMin,
     double? balanceMax,
     String? dueBefore,
     String? dueAfter,
+    /// When false, backend skips expensive call-history merge (faster first paint; follow with true to enrich).
+    bool enrichCalls = true,
   }) async {
     final params = <String, dynamic>{};
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
+    if (limit != null) params['limit'] = limit;
+    if (offset != null) params['offset'] = offset;
     if (hasBalance != null) params['has_balance'] = hasBalance;
     if (isOverdue != null) params['is_overdue'] = isOverdue;
     if (balanceMin != null) params['balance_min'] = balanceMin;
     if (balanceMax != null) params['balance_max'] = balanceMax;
     if (dueBefore != null) params['due_before'] = dueBefore;
     if (dueAfter != null) params['due_after'] = dueAfter;
+    if (!enrichCalls) params['enrich_calls'] = false;
     return _get('/api/pulse/students', params: params.isEmpty ? null : params);
   }
 

@@ -13,7 +13,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
 import '../core/providers/students_hub_tab_provider.dart';
-import '../core/providers/students_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -32,44 +31,39 @@ class StudentsHubPage extends ConsumerStatefulWidget {
 class _StudentsHubPageState extends ConsumerState<StudentsHubPage> {
   @override
   Widget build(BuildContext context) {
-    final asyncValue = ref.watch(studentsNotifierProvider);
     final tab = ref.watch(studentsHubTabProvider);
     final primary = Theme.of(context).colorScheme.primary;
-    return asyncValue.when(
-      data: (_) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Students'),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
-                  children: [
-                    _hubTabPill(0, 'Directory', tab, primary),
-                    const SizedBox(width: 8),
-                    _hubTabPill(1, 'Import', tab, primary),
-                    const SizedBox(width: 8),
-                    _hubTabPill(2, 'Sync', tab, primary),
-                  ],
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Students'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  _hubTabPill(0, 'Directory', tab, primary),
+                  const SizedBox(width: 8),
+                  _hubTabPill(1, 'Import', tab, primary),
+                  const SizedBox(width: 8),
+                  _hubTabPill(2, 'Sync', tab, primary),
+                ],
               ),
             ),
           ),
         ),
-        body: IndexedStack(
-          index: tab,
-          children: const [
-            _DirectoryTab(),
-            _ImportTab(key: ValueKey('import')),
-            _SyncTab(key: ValueKey('sync')),
-          ],
-        ),
       ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Error: $e')),
+      body: IndexedStack(
+        index: tab,
+        children: const [
+          _DirectoryTab(),
+          _ImportTab(key: ValueKey('import')),
+          _SyncTab(key: ValueKey('sync')),
+        ],
+      ),
     );
   }
 
@@ -110,11 +104,16 @@ class _DirectoryTab extends StatefulWidget {
 }
 
 class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderStateMixin {
+  static const int _studentsPageSize = 50;
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   bool _loading = true;
   String? _error;
   bool _isEducationOrg = false;
+  /// True while a second request is merging last_call_* from call history (progressive load).
+  bool _enrichingLastCalls = false;
+  bool _enrichLastCallsInFlight = false;
+  bool _loadingMoreStudents = false;
   final _searchController = TextEditingController();
   String _filterStatus = 'all';
   late AnimationController _tableAnimationController;
@@ -586,6 +585,190 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
   String get _studentsSwrKey =>
       '${NeyvoPulseApi.defaultAccountId}_students_$_filterStatus';
 
+  ({
+    bool? hasBalance,
+    bool? isOverdue,
+    String? dueBefore,
+    String? dueAfter,
+  }) _studentListFilters(bool isEducation) {
+    bool? hasBalance;
+    bool? isOverdue;
+    String? dueAfter;
+    String? dueBefore;
+    if (isEducation && _filterStatus != 'all') {
+      if (_filterStatus == 'with_balance') {
+        hasBalance = true;
+      } else if (_filterStatus == 'overdue') {
+        isOverdue = true;
+      } else if (_filterStatus == 'due_this_week') {
+        final now = DateTime.now();
+        dueAfter =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        final end = now.add(const Duration(days: 7));
+        dueBefore =
+            '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+      } else if (_filterStatus == 'no_balance') {
+        hasBalance = false;
+      }
+    }
+    return (
+      hasBalance: hasBalance,
+      isOverdue: isOverdue,
+      dueBefore: dueBefore,
+      dueAfter: dueAfter,
+    );
+  }
+
+  List<Map<String, dynamic>> _mergeLastCallFields(
+    List<Map<String, dynamic>> base,
+    List<Map<String, dynamic>> enriched,
+  ) {
+    final byId = <String, Map<String, dynamic>>{};
+    for (final e in enriched) {
+      final id = (e['id'] ?? '').toString();
+      if (id.isNotEmpty) {
+        byId[id] = e;
+      }
+    }
+    return base.map((s) {
+      final id = (s['id'] ?? '').toString();
+      final e = byId[id];
+      if (e == null) return s;
+      final m = Map<String, dynamic>.from(s);
+      if (e.containsKey('last_call_outcome')) {
+        m['last_call_outcome'] = e['last_call_outcome'];
+      }
+      if (e.containsKey('last_call_date')) {
+        m['last_call_date'] = e['last_call_date'];
+      }
+      return m;
+    }).toList();
+  }
+
+  bool _needsLastCallEnrichment(List<Map<String, dynamic>> students) {
+    for (final s in students) {
+      if (!s.containsKey('last_call_outcome') || !s.containsKey('last_call_date')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _enrichLastCalls({required bool isEducation}) async {
+    if (_enrichLastCallsInFlight) return;
+    _enrichLastCallsInFlight = true;
+    final f = _studentListFilters(isEducation);
+    try {
+      if (mounted) {
+        setState(() => _enrichingLastCalls = true);
+      }
+      final res = await NeyvoPulseApi.listStudents(
+        hasBalance: f.hasBalance,
+        isOverdue: f.isOverdue,
+        dueAfter: f.dueAfter,
+        dueBefore: f.dueBefore,
+        enrichCalls: true,
+      );
+      final enriched = (res['students'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (!mounted) return;
+      final merged = _mergeLastCallFields(_allStudents, enriched);
+      ApiResponseCache.set(
+        _studentsSwrKey,
+        <String, dynamic>{
+          'isEdu': isEducation,
+          'students': merged,
+          'callsEnriched': true,
+        },
+        ttl: const Duration(seconds: 60),
+      );
+      setState(() {
+        _allStudents = merged;
+        _filteredStudents = merged;
+        _enrichingLastCalls = false;
+      });
+      _filterStudents();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _enrichingLastCalls = false);
+      }
+    } finally {
+      _enrichLastCallsInFlight = false;
+    }
+  }
+
+  Future<void> _loadRemainingStudentsPages({
+    required bool isEducation,
+    required ({
+      bool? hasBalance,
+      bool? isOverdue,
+      String? dueBefore,
+      String? dueAfter,
+    }) filters,
+    required int startOffset,
+  }) async {
+    if (_loadingMoreStudents) return;
+    _loadingMoreStudents = true;
+    var offset = startOffset;
+    try {
+      while (mounted) {
+        final res = await NeyvoPulseApi.listStudents(
+          limit: _studentsPageSize,
+          offset: offset,
+          hasBalance: filters.hasBalance,
+          isOverdue: filters.isOverdue,
+          dueAfter: filters.dueAfter,
+          dueBefore: filters.dueBefore,
+          enrichCalls: false,
+        );
+        final page = (res['students'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        if (page.isEmpty || !mounted) break;
+        final existingIds = _allStudents
+            .map((e) => (e['id'] ?? '').toString())
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final newRows = page.where((s) {
+          final id = (s['id'] ?? '').toString();
+          return id.isEmpty || !existingIds.contains(id);
+        }).toList();
+        if (newRows.isNotEmpty) {
+          setState(() {
+            _allStudents = [..._allStudents, ...newRows];
+            _filteredStudents = _allStudents;
+          });
+          _filterStudents();
+        }
+        offset += page.length;
+        if (page.length < _studentsPageSize) break;
+      }
+      if (!mounted) return;
+      final needsEnrichment = _needsLastCallEnrichment(_allStudents);
+      ApiResponseCache.set(
+        _studentsSwrKey,
+        <String, dynamic>{
+          'isEdu': isEducation,
+          'students': _allStudents,
+          'callsEnriched': !needsEnrichment,
+        },
+        ttl: const Duration(seconds: 60),
+      );
+      if (needsEnrichment && _allStudents.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _enrichLastCalls(isEducation: isEducation);
+          }
+        });
+      } else if (mounted) {
+        setState(() => _enrichingLastCalls = false);
+      }
+    } finally {
+      _loadingMoreStudents = false;
+    }
+  }
+
   Future<void> _load() async {
     final cachedEntry = ApiResponseCache.get(_studentsSwrKey);
     if (cachedEntry is Map<String, dynamic>) {
@@ -615,34 +798,28 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
       final isEducation = agents.any((a) =>
           (a['industry']?.toString().toLowerCase() ?? '') == 'education');
 
-      bool? hasBalance;
-      bool? isOverdue;
-      String? dueAfter;
-      String? dueBefore;
-      if (isEducation && _filterStatus != 'all') {
-        if (_filterStatus == 'with_balance') hasBalance = true;
-        else if (_filterStatus == 'overdue') isOverdue = true;
-        else if (_filterStatus == 'due_this_week') {
-          final now = DateTime.now();
-          dueAfter =
-              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-          final end = now.add(const Duration(days: 7));
-          dueBefore =
-              '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
-        } else if (_filterStatus == 'no_balance') hasBalance = false;
-      }
+      final f = _studentListFilters(isEducation);
       final res = await NeyvoPulseApi.listStudents(
-        hasBalance: hasBalance,
-        isOverdue: isOverdue,
-        dueAfter: dueAfter,
-        dueBefore: dueBefore,
+        limit: _studentsPageSize,
+        offset: 0,
+        hasBalance: f.hasBalance,
+        isOverdue: f.isOverdue,
+        dueAfter: f.dueAfter,
+        dueBefore: f.dueBefore,
+        enrichCalls: false,
       );
       final list = (res['students'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      final needsEnrichment = _needsLastCallEnrichment(list);
+      final hasMorePages = list.length == _studentsPageSize;
       ApiResponseCache.set(
         _studentsSwrKey,
-        <String, dynamic>{'isEdu': isEducation, 'students': list},
+        <String, dynamic>{
+          'isEdu': isEducation,
+          'students': list,
+          'callsEnriched': !needsEnrichment && !hasMorePages,
+        },
         ttl: const Duration(seconds: 60),
       );
       if (mounted) {
@@ -651,14 +828,40 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
           _allStudents = list;
           _filteredStudents = list;
           _loading = false;
+          _enrichingLastCalls = list.isNotEmpty && (needsEnrichment || hasMorePages);
         });
         _filterStudents();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _runTableEntryAnimation();
         });
+        if (hasMorePages) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _loadRemainingStudentsPages(
+                isEducation: isEducation,
+                filters: f,
+                startOffset: list.length,
+              );
+            }
+          });
+        } else if (list.isNotEmpty && needsEnrichment) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _enrichLastCalls(isEducation: isEducation);
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
+        if (cachedEntry is Map<String, dynamic> &&
+            cachedEntry['callsEnriched'] == false) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _enrichLastCalls(isEducation: _isEducationOrg);
+            }
+          });
+        }
         if (cachedEntry == null) {
           setState(() {
             _error = e.toString();
@@ -882,8 +1085,12 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                 final email = (s['email'] as String?)?.trim();
                                                 final yearOfStudy = (s['year_of_study'] as String?)?.trim();
                                                 final importList = (s['import_name'] as String?)?.trim();
-                                                final lastStatus = _lastCallStatusLabel(s['last_call_outcome']);
-                                                final lastTime = _lastCallTimeLabel(s['last_call_date']);
+                                                final lastStatus = _enrichingLastCalls
+                                                    ? '…'
+                                                    : _lastCallStatusLabel(s['last_call_outcome']);
+                                                final lastTime = _enrichingLastCalls
+                                                    ? '…'
+                                                    : _lastCallTimeLabel(s['last_call_date']);
                                                 final statusColor = _lastCallStatusColor(lastStatus);
                                                 final rowOpacity = (animValue * (_filteredStudents.length + 4) - rowIndex).clamp(0.0, 1.0);
                                                 return DataRow(
@@ -1582,15 +1789,17 @@ class _ImportTabState extends State<_ImportTab> {
 
 // --- Sync tab ---
 
-class _SyncTab extends StatefulWidget {
+class _SyncTab extends ConsumerStatefulWidget {
   const _SyncTab({super.key});
 
   @override
-  State<_SyncTab> createState() => _SyncTabState();
+  ConsumerState<_SyncTab> createState() => _SyncTabState();
 }
 
-class _SyncTabState extends State<_SyncTab> {
-  bool _loading = true;
+class _SyncTabState extends ConsumerState<_SyncTab> {
+  /// IndexedStack keeps this subtree mounted; we only hit the network when the user opens Sync.
+  bool _syncLoadStarted = false;
+  bool _loading = false;
   String? _error;
   Map<String, dynamic>? _schoolIntegration;
   bool _schoolTokenVisible = false;
@@ -1607,7 +1816,15 @@ class _SyncTabState extends State<_SyncTab> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // If hub tab is already Sync (e.g. restored state), ref.listen may not fire — load once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tab = ref.read(studentsHubTabProvider);
+      if (tab == 2 && !_syncLoadStarted) {
+        _syncLoadStarted = true;
+        _load();
+      }
+    });
   }
 
   @override
@@ -1720,6 +1937,16 @@ class _SyncTabState extends State<_SyncTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(studentsHubTabProvider, (prev, next) {
+      if (next == 2 && !_syncLoadStarted) {
+        _syncLoadStarted = true;
+        _load();
+      }
+    });
+
+    if (!_syncLoadStarted) {
+      return const SizedBox.shrink();
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
