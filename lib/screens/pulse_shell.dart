@@ -181,6 +181,11 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     if (enumRole == UserRole.owner || enumRole == UserRole.admin) return true;
     final resolvedRole = (_myRole ?? '').trim().toLowerCase();
     if (resolvedRole == 'admin') return true;
+    // Avoid transient "Access denied" flicker on first landing while role/perms
+    // are still loading. Once loaded, normal permission checks apply.
+    if (!_rolePermsLoadStarted || (_myRole == null && _myPermissions == null)) {
+      return true;
+    }
     final perms = (_myPermissions ?? const <String>[])
         .map((p) => p.trim().toLowerCase())
         .where((p) => p.isNotEmpty)

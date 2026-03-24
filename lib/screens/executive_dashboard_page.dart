@@ -43,7 +43,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   List<Map<String, dynamic>> _recentCalls = [];
 
   String? _runningCampaignId;
-  List<Map<String, dynamic>> _campaignItems = [];
   Map<String, dynamic>? _campaignMetrics;
 
   Map<String, dynamic>? _successSummary;
@@ -256,7 +255,6 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _runningCampaignId = deferred.runningCampaignId;
-        _campaignItems = deferred.campaignItems;
         _campaignMetrics = deferred.campaignMetrics;
         _deferredError = null;
       });
@@ -638,40 +636,38 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   }
 
   Widget _buildLiveCallActivityPanel() {
-    final total = _campaignMetrics?['total_planned'] != null
-        ? (_campaignMetrics!['total_planned'] is int ? _campaignMetrics!['total_planned'] as int : int.tryParse(_campaignMetrics!['total_planned'].toString()) ?? _campaignItems.length)
-        : _campaignItems.isEmpty ? 0 : _campaignItems.length;
-    final queue = _campaignItems.where((e) => ((e['status'] as String?) ?? '').toLowerCase() == 'queued').length;
-    final ongoing = _campaignItems.where((e) {
-      final s = ((e['status'] as String?) ?? '').toLowerCase();
-      return s == 'in_progress' || s == 'dialing';
-    }).length;
-    final unanswered = _campaignItems.where((e) {
-      final o = ((e['outcome'] as String?) ?? '').toLowerCase();
-      return o == 'no_answer' || o == 'voicemail';
-    }).length;
-    final scheduled = _campaignItems.where((e) {
-      final s = ((e['status'] as String?) ?? '').toLowerCase();
-      return s == 'scheduled' || s.contains('callback');
-    }).length;
-    final failed = _campaignItems.where((e) {
-      final s = ((e['status'] as String?) ?? '').toLowerCase();
-      final o = ((e['outcome'] as String?) ?? '').toLowerCase();
-      return s == 'failed' || o == 'failed';
-    }).length;
+    int metricInt(String key, [int fallback = 0]) {
+      final v = _campaignMetrics?[key];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v != null) return int.tryParse(v.toString()) ?? fallback;
+      return fallback;
+    }
+
+    final total = metricInt('total_planned');
+    final queue = metricInt('queued_count');
+    final ongoing = metricInt('active_count');
+    // Lightweight representation: keep this row as 0 unless backend exposes
+    // a dedicated aggregate for unanswered/voicemail.
+    const unanswered = 0;
+    // Map callback/scheduled bucket to retry wait aggregate.
+    final scheduled = metricInt('retry_wait_count');
+    final failed = metricInt('failed_count');
+    final completed = metricInt('completed_count');
 
     final totalForBars = total > 0 ? total : 1;
-    final completion = total > 0 ? ((total - queue - ongoing) / total * 100) : 0.0;
+    final completion = (_campaignMetrics?['progress_percentage'] as num?)?.toDouble() ??
+        (total > 0 ? (completed / total * 100) : 0.0);
     String estimatedRemaining = '—';
-    if (_campaignMetrics != null && total > 0 && (queue + ongoing) > 0) {
+    if (_campaignMetrics != null && total > 0 && (queue + ongoing + scheduled) > 0) {
       final throughput = (_campaignMetrics!['throughput_per_minute'] as num?)?.toDouble();
       if (throughput != null && throughput > 0) {
-        final remaining = (queue + ongoing).toDouble() / throughput;
+        final remaining = (queue + ongoing + scheduled).toDouble() / throughput;
         estimatedRemaining = '~${remaining.round()} min';
       }
     }
 
-    final hasRunningCampaign = _runningCampaignId != null || _campaignItems.isNotEmpty;
+    final hasRunningCampaign = _runningCampaignId != null || total > 0 || ongoing > 0;
     final semanticColors = [
       Colors.indigo,
       Colors.amber,

@@ -191,14 +191,12 @@ final executiveDeferredProvider =
     key: 'exec-deferred:${range.key}',
     ttl: const Duration(seconds: 120),
     loader: () async {
-      final results = await Future.wait<dynamic>([
-        NeyvoPulseApi.health(timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.fast)).catchError((_) => <String, dynamic>{}),
-        NeyvoPulseApi.getUbStatus(timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium)).catchError((_) => <String, dynamic>{}),
-        NeyvoPulseApi.listAgents(status: 'active', timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium)).catchError((_) => <String, dynamic>{'agents': []}),
-        NeyvoPulseApi.listCampaigns(limit: 20, timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy)),
-      ]);
-      final campaignsRes = Map<String, dynamic>.from(results[3] as Map);
-      final campaigns = campaignsRes['campaigns'] as List? ?? const [];
+      final campaignsRes = await NeyvoPulseApi.listCampaigns(
+        limit: 20,
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      ).catchError((_) => <String, dynamic>{'campaigns': []});
+      final campaignsResMap = Map<String, dynamic>.from(campaignsRes as Map);
+      final campaigns = campaignsResMap['campaigns'] as List? ?? const [];
       String? runningId;
       for (final c in campaigns) {
         final m = Map<String, dynamic>.from(c as Map);
@@ -211,17 +209,12 @@ final executiveDeferredProvider =
       List<Map<String, dynamic>> items = const [];
       Map<String, dynamic>? metrics;
       if (runningId != null && runningId.isNotEmpty) {
-        final pair = await Future.wait([
-          NeyvoPulseApi.getCampaignCallItems(runningId, limit: 120, timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy)),
-          NeyvoPulseApi.getCampaignMetrics(runningId, timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy)),
-        ]);
-        final itemsRes = Map<String, dynamic>.from(pair[0] as Map);
-        items = (itemsRes['items'] as List?)
-                ?.map((e) => Map<String, dynamic>.from(e as Map))
-                .toList() ??
-            const [];
-        final metricsRes = Map<String, dynamic>.from(pair[1] as Map);
-        final m = metricsRes['metrics'];
+        final metricsRes = await NeyvoPulseApi.getCampaignMetrics(
+          runningId,
+          timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+        ).catchError((_) => <String, dynamic>{});
+        final metricsResMap = Map<String, dynamic>.from(metricsRes as Map);
+        final m = metricsResMap['metrics'];
         metrics = m is Map ? Map<String, dynamic>.from(m) : null;
       }
       return ExecutiveDeferredData(
