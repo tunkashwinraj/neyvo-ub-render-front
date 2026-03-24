@@ -105,6 +105,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   Set<String> _audienceCsvMatchedStudentIds = {};
   List<String> _audienceCsvErrors = [];
 
+  /// Slower polling reduces API burst during active campaigns (was 5s).
+  static const int _campaignDetailPollSeconds = 12;
+  static const int _campaignDetailCallsLimit = 200;
+  static const int _campaignDetailCallItemsLimit = 200;
+  static const int _campaignsPageCallsHintLimit = 200;
+
   @override
   void initState() {
     super.initState();
@@ -183,13 +189,17 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         final name = (a['name'] ?? 'Unnamed operator').toString();
         if (id.isNotEmpty) operators.add({'value': 'agent:$id', 'name': name, 'type': 'agent'});
       }
-      final studentsRes = await NeyvoPulseApi.listStudents();
+      final studentsRes = await NeyvoPulseApi.listStudents(enrichCalls: false);
       final studentsList = studentsRes['students'] as List? ?? [];
       _students = studentsList.cast<Map<String, dynamic>>();
 
       // Latest call time per student (best-effort; used only for small UI hints).
       try {
-        final callsRes = await NeyvoPulseApi.listCalls();
+        final callsRes = await NeyvoPulseApi.listCalls(
+          limit: _campaignsPageCallsHintLimit,
+          syncFromVapi: false,
+          noVapi: true,
+        );
         final calls = (callsRes['calls'] as List?) ?? [];
         final latest = <String, DateTime>{};
         for (final raw in calls) {
@@ -266,6 +276,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         },
         ttl: const Duration(seconds: 60),
       );
+      ref.invalidate(campaignsNotifierProvider);
       if (mounted) setState(() {
         _isEducationOrg = isEdu;
         _hasPhoneNumber = hasNumber;
@@ -673,7 +684,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
   void _startDetailAutoRefresh() {
     _detailRefreshTimer?.cancel();
-    _detailRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _detailRefreshTimer = Timer.periodic(Duration(seconds: _campaignDetailPollSeconds), (_) {
       if (!mounted || _selectedCampaignId == null) return;
       setState(() => _campaignDetailRefreshKey++);
     });
@@ -1499,13 +1510,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final asyncValue = ref.watch(campaignsNotifierProvider);
-    if (_campaigns.isEmpty && asyncValue.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_campaigns.isEmpty && asyncValue.hasError) {
-      return Center(child: Text('Error: ${asyncValue.error}'));
-    }
     if (_showCreateWizard) {
       return _buildWizard();
     }
@@ -1729,9 +1733,9 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
         final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
 
-        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 500);
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: _campaignDetailCallsLimit);
         final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
-        final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
+        final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: _campaignDetailCallItemsLimit);
         final reportF = NeyvoPulseApi.getCampaignReport(campaignId);
 
         final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
