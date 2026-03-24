@@ -102,7 +102,8 @@ class AriaCreateSessionController extends StateNotifier<AriaCreateSessionState> 
         throw Exception(
           'Vapi public key is still a placeholder (the text "vapi_public_key"). '
           'In Firestore: businesses/{account}/operators/aria_operator_creator → set field vapi_public_key '
-          'to your real public key from the Vapi dashboard (not the field name). Restart the app after fixing.',
+          'to your real public key from the Vapi dashboard (not the field name), or set backend env VAPI_PUBLIC_KEY. '
+          'Restart the app after fixing.',
         );
       }
       state = state.copyWith(

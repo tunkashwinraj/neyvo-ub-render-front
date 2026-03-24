@@ -389,7 +389,7 @@ class AriaVapiSessionIframe {
           : "Could not start ARIA call (check Vapi public key / assistant id)";
         // Browser shows 401 on api.vapi.ai/call/web when key/assistant mismatch
         if (/401|unauthor/i.test(String(msg))) {
-          msg += " — Use the Vapi public (web) key from the dashboard (same value as NEXT_PUBLIC_VAPI_KEY on the website) and aria_operator_creator_assistant_id from the same Vapi project. Set both in Firestore businesses/{account}/operators/aria_operator_creator or env VAPI_PUBLIC_KEY / ARIA_OPERATOR_CREATOR_ASSISTANT_ID.";
+          msg += " — Use the Vapi public (web) key from the dashboard (same value as NEXT_PUBLIC_VAPI_KEY on the website) and aria_operator_creator_assistant_id from the same Vapi project. Set vapi_public_key in Firestore businesses/{account}/operators/aria_operator_creator or backend env VAPI_PUBLIC_KEY (VAPI_PRIVATE_KEY is server-only).";
         }
         postToFlutter({ type: "aria_call_error", session_id: sessionId, message: msg });
       }
