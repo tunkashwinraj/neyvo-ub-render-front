@@ -53,6 +53,10 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   Timer? _detailRefreshTimer;
   // Cache last successful detail payload so auto-refresh doesn't blank the UI.
   final Map<String, Map<String, dynamic>> _campaignDetailCache = {};
+  // Track heavy detail fetch state (items/report) so first paint is fast.
+  final Map<String, bool> _campaignDetailHeavyInFlight = {};
+  final Map<String, DateTime> _campaignDetailHeavyFetchedAt = {};
+  static const Duration _campaignDetailHeavyTtl = Duration(seconds: 20);
   /// When set, builder uses cache for this campaign (report was refetched after actionable 404).
   String? _campaignReportRefetchedForActionItems;
   String _detailStatusFilter = 'all'; // all|queued|in_progress|completed|failed|retry_wait
@@ -729,6 +733,37 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Download failed: $e'), backgroundColor: NeyvoTheme.error),
       );
+    }
+  }
+
+  bool _shouldRefreshHeavyDetail(String campaignId) {
+    if (_campaignDetailHeavyInFlight[campaignId] == true) return false;
+    final last = _campaignDetailHeavyFetchedAt[campaignId];
+    if (last == null) return true;
+    return DateTime.now().difference(last) >= _campaignDetailHeavyTtl;
+  }
+
+  Future<void> _prefetchHeavyCampaignDetail(String campaignId) async {
+    if (_campaignDetailHeavyInFlight[campaignId] == true) return;
+    _campaignDetailHeavyInFlight[campaignId] = true;
+    try {
+      final results = await Future.wait<dynamic>([
+        NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 300),
+        NeyvoPulseApi.getCampaignReport(campaignId),
+      ]);
+      if (!mounted || _selectedCampaignId != campaignId) return;
+      final itemsRes = Map<String, dynamic>.from(results[0] as Map);
+      final reportRes = Map<String, dynamic>.from(results[1] as Map);
+      final existing = Map<String, dynamic>.from(_campaignDetailCache[campaignId] ?? const {});
+      existing['items'] = (itemsRes['items'] as List?) ?? const [];
+      existing['report'] = reportRes;
+      _campaignDetailCache[campaignId] = existing;
+      _campaignDetailHeavyFetchedAt[campaignId] = DateTime.now();
+      setState(() {});
+    } catch (_) {
+      // Keep existing detail visible; next refresh can retry.
+    } finally {
+      _campaignDetailHeavyInFlight[campaignId] = false;
     }
   }
 
@@ -1726,26 +1761,25 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       future: () async {
         final campaignRes = await NeyvoPulseApi.getCampaign(campaignId);
         final camp = Map<String, dynamic>.from((campaignRes['campaign'] as Map?) ?? const {});
-        final status = (camp['status'] ?? 'draft').toString().toLowerCase().trim();
-        final isTerminal = status == 'completed' || status.startsWith('stopped') || status == 'cancelled' || status == 'deleted';
-
-        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 500);
+        final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 120);
         final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
-        final itemsF = NeyvoPulseApi.getCampaignCallItems(campaignId, limit: 500);
-        final reportF = NeyvoPulseApi.getCampaignReport(campaignId);
-
-        final results = await Future.wait([callsF, metricsF, itemsF, reportF]);
+        final results = await Future.wait([callsF, metricsF]);
         final callsRes = results[0] as Map<String, dynamic>;
         final metricsRes = results[1] as Map<String, dynamic>;
-        final itemsRes = results[2] as Map<String, dynamic>;
-        final reportRes = results[3] as Map<String, dynamic>;
+        final cached = _campaignDetailCache[campaignId];
+        final cachedItems = (cached?['items'] as List?) ?? const [];
+        final cachedReport = (cached?['report'] as Map?) ?? const {};
+
+        if (_shouldRefreshHeavyDetail(campaignId)) {
+          unawaited(_prefetchHeavyCampaignDetail(campaignId));
+        }
 
         return {
           'campaign': camp,
           'calls': (callsRes['calls'] as List?) ?? [],
           'metrics': (metricsRes['metrics'] as Map?) ?? {},
-          'items': (itemsRes['items'] as List?) ?? [],
-          'report': reportRes,
+          'items': cachedItems,
+          'report': cachedReport,
         };
       }(),
       builder: (context, snapshot) {
