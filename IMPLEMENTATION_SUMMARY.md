@@ -13,7 +13,7 @@
 - ✅ Backend API connected (`https://neyvo-pulse.onrender.com`)
 - ✅ Firebase integration (client + service account)
 - ✅ Flutter app structure
-- ✅ Theme system (SpeariaTheme)
+- ✅ Theme system (NeyvoTheme)
 - ✅ API client (NeyvoPulseApi)
 - ✅ Backend connection test page
 
@@ -200,7 +200,7 @@ lib/
 - ✅ Controller disposal in dispose()
 
 ### **UI/UX**
-- ✅ Consistent theme (SpeariaTheme)
+- ✅ Consistent theme (NeyvoTheme)
 - ✅ Loading indicators
 - ✅ Empty states with helpful messages
 - ✅ Pull-to-refresh on lists

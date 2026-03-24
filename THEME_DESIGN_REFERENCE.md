@@ -1,6 +1,6 @@
 # Neyvo Pulse — Theme Design Reference (data only)
 
-Design system name: **Spearia Aura** — warm, professional, for business owners.
+Design system name: **Neyvo Aura** — warm, professional, for business owners.
 
 ---
 

@@ -335,7 +335,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Spearia operator assistants now use operator-level SendGrid from the Operator detail page.',
+                                        'Neyvo operator assistants now use operator-level SendGrid from the Operator detail page.',
                                         style: NeyvoTextStyles.micro.copyWith(
                                           color: NeyvoColors.warning,
                                         ),
@@ -669,7 +669,7 @@ class _IntegrationsPageState extends ConsumerState<IntegrationsPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            'Spearia operator assistants now use operator-level Twilio from the Operator detail page.',
+                                            'Neyvo operator assistants now use operator-level Twilio from the Operator detail page.',
                                             style: NeyvoTextStyles.micro
                                                 .copyWith(
                                                   color: NeyvoColors.warning,

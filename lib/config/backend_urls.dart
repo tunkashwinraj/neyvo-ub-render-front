@@ -10,7 +10,7 @@ const String kNeyvoBackendUrl = 'https://neyvoub-back.onrender.com';
 
 String _normalizeBaseUrl(String u) => u.trim().replaceAll(RegExp(r'/+$'), '');
 
-/// Primary Neyvo API base URL (NeyvoApi, Spearia, integration fallbacks).
+/// Primary Neyvo API base URL (NeyvoApi, integration fallbacks).
 ///
 /// Uses `--dart-define=API_BASE_URL=...` when set at build time; otherwise [kNeyvoBackendUrl].
 String resolveNeyvoApiBaseUrl() {

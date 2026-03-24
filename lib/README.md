@@ -1,12 +1,12 @@
 # Neyvo Pulse – Frontend module
 
-Dedicated folder for Neyvo Pulse (schools): screens, routes, and API client. Same colors and fonts as the main app (Spearia theme), different structure and layout.
+Dedicated folder for Neyvo Pulse (schools): screens, routes, and API client. Same colors and fonts as the main app (Neyvo theme), different structure and layout.
 
 ## Layout
 
 - **`pulse_route_names.dart`** – Route path constants.
 - **`pulse_routes.dart`** – `PulseRouter.generateRoute` for Pulse screens.
-- **`neyvo_pulse_api.dart`** – API client (outbound call, health). Uses `SpeariaApi.baseUrl`; no auth for Pulse endpoints.
+- **`neyvo_pulse_api.dart`** – API client (outbound call, health). Uses `NeyvoApi.baseUrl`; no auth for Pulse endpoints.
 - **`screens/`**
   - **`pulse_auth_page.dart`** – Sign in / Sign up (Firebase), new layout.
   - **`pulse_dashboard_page.dart`** – School dashboard: Outbound calls, Students, Reminders.
@@ -29,7 +29,7 @@ flutter run -d chrome --dart-define=NEYVO_PULSE=true --dart-define=BACKEND_BASE=
 
 To run **without opening Chrome** (faster start) and with **auto hot reload** on save, see the project root **DEV.md**.
 
-Without `NEYVO_PULSE=true`, the app uses the default Spearia Admin flow (AuthGate, onboarding, business dashboard).
+Without `NEYVO_PULSE=true`, the app uses the default Neyvo Admin flow (AuthGate, onboarding, business dashboard).
 
 ## API key usage
 

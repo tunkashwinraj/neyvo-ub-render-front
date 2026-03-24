@@ -18,7 +18,7 @@
 - [x] Backend API connected (`https://neyvo-pulse.onrender.com`)
 - [x] Firebase integration (client + service account)
 - [x] Basic Flutter app structure
-- [x] Theme system (SpeariaTheme)
+- [x] Theme system (NeyvoTheme)
 - [x] API client (NeyvoPulseApi)
 - [x] Backend connection test page
 

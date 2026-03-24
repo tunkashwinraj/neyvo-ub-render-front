@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart' as ul;
 
 import '../core/pulse_request_cancelled.dart';
 
-/// Thrown by SpeariaApi on non-2xx or invalid responses.
+/// Thrown by the HTTP client on non-2xx or invalid responses.
 class ApiException implements Exception {
   final int? statusCode;
   final String message;
@@ -32,11 +32,11 @@ enum ApiTimeoutClass { fast, medium, heavy }
 /// Centralized HTTP/URL utility for the Flutter app.
 ///
 /// Configure once (usually in main()):
-///   SpeariaApi.setBaseUrl("http://127.0.0.1:8000");
-///   SpeariaApi.setSessionToken("...");                 // <- user session (Bearer)
-///   SpeariaApi.setAdminToken("...");                   // optional admin header
-///   SpeariaApi.setDefaultAccountId("demo-biz-001");   // optional convenience
-///   SpeariaApi.setGlobalErrorHook((e) { ... });        // optional
+///   NeyvoApi.setBaseUrl("http://127.0.0.1:8000");
+///   NeyvoApi.setSessionToken("...");                 // <- user session (Bearer)
+///   NeyvoApi.setAdminToken("...");                   // optional admin header
+///   NeyvoApi.setDefaultAccountId("demo-biz-001");   // optional convenience
+///   NeyvoApi.setGlobalErrorHook((e) { ... });        // optional
 class SpeariaApi {
   static String _baseUrl = "";
   static String? _sessionToken; // <— NEW: user session (Bearer)
@@ -63,7 +63,7 @@ class SpeariaApi {
     _pulseTabCancelToken = CancelToken();
   }
 
-  /// Dio client mirroring the behavior of the SpeariaApi HTTP helpers.
+  /// Dio client mirroring the behavior of the Neyvo HTTP helpers.
   /// This is used by some Riverpod providers (e.g. billing) that call
   /// `api.dio.get(...)` per feature spec.
   Dio get dio {
@@ -181,7 +181,7 @@ class SpeariaApi {
   static void _ensureBaseUrlOrThrow() {
     if (_baseUrl.isEmpty) {
       throw ApiException(
-        'SpeariaApi baseUrl is empty. Did you call SpeariaApi.setBaseUrl(...) in main.dart?',
+        'Neyvo API baseUrl is empty. Did you call NeyvoApi.setBaseUrl(...) in main.dart?',
       );
     }
   }
@@ -313,7 +313,7 @@ class SpeariaApi {
         throw ApiException(
           'Server returned ${_looksLikeHtml(resp.body) ? 'HTML' : 'XML'} instead of JSON.\n'
           '• You probably called getJson() on a text/html or text/xml endpoint.\n'
-          '• Use SpeariaApi.getText(...) for endpoints that return TwiML/XML (e.g., /incoming-call) or plain text.\n'
+          '• Use NeyvoApi.getText(...) for endpoints that return TwiML/XML (e.g., /incoming-call) or plain text.\n'
           'URI: $uri',
           statusCode: resp.statusCode,
           uri: uri,
@@ -701,7 +701,7 @@ class SpeariaApi {
   // --------------------------- Convenience ---------------------------------
 
   /// Guard pattern to reduce try/catch in widgets:
-  /// await SpeariaApi.guardApi(context, () => SpeariaApi.getJsonMap('/api/...'));
+  /// await NeyvoApi.guardApi(context, () => NeyvoApi.getJsonMap('/api/...'));
   static Future<T?> guardApi<T>(
       BuildContext context,
       Future<T> Function() op, {
