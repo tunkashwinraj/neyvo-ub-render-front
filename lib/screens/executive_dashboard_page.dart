@@ -52,7 +52,7 @@ class _ExecutiveDashboardPageState extends ConsumerState<ExecutiveDashboardPage>
   /// Skips overlapping periodic refreshes (timer is 60s; min gap 45s).
   DateTime? _lastRefreshAt;
   int _consecutiveRefreshFailures = 0;
-  static const int _baseRefreshSeconds = 90;
+  static const int _baseRefreshSeconds = 60;
   static const int _maxRefreshSeconds = 300;
 
   void _schedulePeriodicRefresh({required int seconds}) {
