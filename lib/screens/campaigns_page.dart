@@ -40,7 +40,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   Map<String, DateTime> _lastCallAtByStudentId = {};
   /// Combined list for operator dropdown: each has 'value' (agent:id or profile:id), 'name', 'type' (agent|profile).
   List<Map<String, dynamic>> _operatorsForCampaign = [];
-  List<Map<String, dynamic>> _templates = [];
   bool _loading = true;
   String? _error;
   bool _showCreateWizard = false;
@@ -72,7 +71,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   String? _selectedOperatorValue;
   /// Raw agent id when editing (campaign.agent_id); used with _selectedOperatorValue.
   String? _selectedAgentId;
-  String? _selectedTemplateId;
   DateTime? _scheduledAt;
   bool _scheduleNow = true;
   Set<String> _selectedStudentIds = {};
@@ -95,7 +93,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   /// Wallet credits and required per call (for campaign start gating and display).
   int? _walletCredits;
   int? _creditsPerMinute;
-  bool _useTemplate = false;
   // Campaign diagnostics (one-click troubleshooting panel).
   String? _diagEndpoint;
   int? _diagStatusCode;
@@ -141,9 +138,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         );
         _operatorsForCampaign = List<Map<String, dynamic>>.from(
           (cachedCamp['operators'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
-        );
-        _templates = List<Map<String, dynamic>>.from(
-          (cachedCamp['templates'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
         );
         _isEducationOrg = cachedCamp['isEdu'] == true;
         _hasPhoneNumber = cachedCamp['hasPhone'] == true;
@@ -216,7 +210,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       } catch (_) {}
       _agents = agents;
       _operatorsForCampaign = operators;
-      _templates = await _loadTemplates();
       _campaigns = await _loadCampaigns();
       // Check if account has a number: from account info (primary) or from GET /api/numbers
       bool hasNumber = false;
@@ -265,7 +258,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           'campaigns': _campaigns,
           'agents': _agents,
           'operators': _operatorsForCampaign,
-          'templates': _templates,
           'isEdu': isEdu,
           'hasPhone': hasNumber,
           'outbound': outbound,
@@ -518,23 +510,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       _selectedStudentIds = matched;
       _selectAll = matched.isNotEmpty;
     });
-  }
-
-  Future<List<Map<String, dynamic>>> _loadTemplates() async {
-    try {
-      final res = await NeyvoPulseApi.listCallTemplates();
-      final list = res['templates'] as List? ?? [];
-      return list.cast<Map<String, dynamic>>();
-    } on ApiException catch (e) {
-      throw ApiException(
-        'Failed to load campaigns: ${e.message}',
-        statusCode: e.statusCode,
-        uri: e.uri,
-        payload: e.payload,
-      );
-    } catch (e) {
-      throw ApiException('Failed to load campaigns: $e');
-    }
   }
 
   Future<List<Map<String, dynamic>>> _loadCampaigns() async {
@@ -1708,8 +1683,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                               final pid = (c['profile_id'] ?? '').toString().trim();
                               _selectedAgentId = aid.isNotEmpty ? aid : null;
                               _selectedOperatorValue = pid.isNotEmpty ? 'profile:$pid' : (aid.isNotEmpty ? 'agent:$aid' : null);
-                              _selectedTemplateId = c['template_id']?.toString();
-                              _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
                               _selectedStudentIds = {};
                               final ids = c['student_ids'];
                               if (ids is List) _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
@@ -1827,9 +1800,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         final canEdit = status == 'draft' || status == 'scheduled';
         // Can delete any campaign except when running (soft delete preserves data)
         final canDelete = status != 'running';
-        final templateId = c['template_id']?.toString();
-        final templateList = templateId != null ? _templates.where((t) => t['id']?.toString() == templateId).toList() : <Map<String, dynamic>>[];
-        final templateName = templateList.isNotEmpty ? (templateList.first['name']?.toString() ?? templateId) : (templateId ?? '—');
+        final templateName = c['template_id']?.toString() ?? '—';
         final created = c['created_at'];
         final started = c['started_at'];
         String formatDate(dynamic v) => UserTimezoneService.format(v);
@@ -1993,8 +1964,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                       break;
                     case 'edit':
                       _nameController.text = c['name']?.toString() ?? '';
-                      _selectedTemplateId = c['template_id']?.toString();
-                      _useTemplate = (_selectedTemplateId != null && _selectedTemplateId!.isNotEmpty);
                       _selectedStudentIds = {};
                       final ids = c['student_ids'];
                       if (ids is List) {
@@ -2709,8 +2678,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 OutlinedButton.icon(
                   onPressed: () {
                     _nameController.text = campaign['name']?.toString() ?? '';
-                    _selectedTemplateId = campaign['template_id']?.toString();
-                    _useTemplate = _selectedTemplateId != null && _selectedTemplateId!.isNotEmpty;
                     _selectedStudentIds = {};
                     final ids = campaign['student_ids'];
                     if (ids is List) {

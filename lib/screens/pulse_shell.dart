@@ -109,6 +109,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   late final Animation<double> _livePulse;
   String? _myRole;
   List<String>? _myPermissions;
+  bool _rolePermsLoadStarted = false;
   final Map<String, Future<void>> _deferredLoads = {};
 
   /// Permission key per nav item; used to filter sidebar for staff. Admin sees all.
@@ -138,6 +139,11 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
       return List<_NavItem>.from(_allNavItems);
     }
     if (enumRole == UserRole.admin || resolvedRole == 'admin') {
+      return List<_NavItem>.from(_allNavItems);
+    }
+    // First paint optimization: until role/permission payload arrives, render full
+    // sidebar immediately so tabs are visible right after landing.
+    if (!_rolePermsLoadStarted || (_myRole == null && _myPermissions == null)) {
       return List<_NavItem>.from(_allNavItems);
     }
     final perms = (_myPermissions ?? const <String>[])
@@ -228,6 +234,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     _livePulse = Tween<double>(begin: 0.35, end: 1.0).animate(
       CurvedAnimation(parent: _livePulseCtrl, curve: Curves.easeInOut),
     );
+    _ensureRolePermissionsLoadStarted();
     _resolveAccountThenLoad();
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
@@ -262,8 +269,8 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     // Prioritize shell/sidebar readiness first, then hydrate credits.
     await _loadAccountInfo();
     if (!mounted) return;
-    // Sidebar tab visibility comes from role/permissions, so start this first.
-    unawaited(_loadMyRoleAndPermissions());
+    // Sidebar tab visibility comes from role/permissions; keep this running early.
+    _ensureRolePermissionsLoadStarted();
     // Credits can hydrate right after sidebar tabs start resolving.
     unawaited(_loadWalletCredits());
     unawaited(_loadUsageSummary());
@@ -388,6 +395,12 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
         });
       }
     } catch (_) {}
+  }
+
+  void _ensureRolePermissionsLoadStarted() {
+    if (_rolePermsLoadStarted) return;
+    _rolePermsLoadStarted = true;
+    unawaited(_loadMyRoleAndPermissions());
   }
 
   Future<void> _signOut() async {
