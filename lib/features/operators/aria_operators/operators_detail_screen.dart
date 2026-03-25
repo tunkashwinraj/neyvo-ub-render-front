@@ -364,6 +364,17 @@ class _OperatorsDetailScreenState extends ConsumerState<OperatorsDetailScreen> {
         _callMessageSub?.cancel();
         _callMessageSub = null;
         if (context.mounted) Navigator.of(context).pop();
+      } else if (type == 'aria_call_error') {
+        final msg = data['message']?.toString() ?? 'Unknown error';
+        _callMessageSub?.cancel();
+        _callMessageSub = null;
+        if (!context.mounted) return;
+        final localNav = Navigator.of(context);
+        final rootNav = Navigator.of(context, rootNavigator: true);
+        if (localNav.canPop()) {
+          localNav.pop();
+        }
+        rootNav.pushNamed(PulseRouteNames.operatorsAriaError, arguments: msg);
       }
     });
 

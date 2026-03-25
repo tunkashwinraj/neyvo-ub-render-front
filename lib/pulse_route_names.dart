@@ -59,6 +59,8 @@ abstract class PulseRouteNames {
   // ARIA Operators (raw paths, separate from managed_profiles)
   static const String operatorsRoot = '/operators';
   static const String operatorsNew = '/operators/new';
+  /// Full-screen ARIA / Vapi error (arguments: error message [String]).
+  static const String operatorsAriaError = '/operators/aria-error';
   // Dynamic segments handled by PulseRouter:
   // - /operators/building/{operator_id}
   // - /operators/{operator_id}

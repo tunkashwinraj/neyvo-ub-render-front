@@ -17,6 +17,7 @@ import 'features/operators/aria_operators/operators_list_screen.dart';
 import 'features/operators/aria_operators/operators_create_screen.dart';
 import 'features/operators/aria_operators/operators_building_screen.dart';
 import 'features/operators/aria_operators/operators_detail_screen.dart';
+import 'features/operators/aria_operators/operators_aria_error_screen.dart';
 import 'features/operators/aria_operators/operator_optimization_screen.dart';
 import 'ui/screens/internal/backup_rollback_page.dart';
 
@@ -159,6 +160,12 @@ class PulseRouter {
           }
           if (name == PulseRouteNames.operatorsNew) {
             return _operatorsCreateRoute();
+          }
+          if (name == PulseRouteNames.operatorsAriaError) {
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => const OperatorsAriaErrorScreen(),
+            );
           }
           if (parts.length >= 4 && parts[2] == 'building') {
             final operatorId = parts[3];

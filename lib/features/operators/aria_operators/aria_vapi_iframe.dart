@@ -235,6 +235,11 @@ class AriaVapiSessionIframe {
       </div>
 
       <div class="pulseWrap">
+        <div id="connectRow" style="text-align:center;margin-bottom:14px;width:100%;max-width:360px;">
+          <button class="btn primary" id="connectBtn" type="button">Connect microphone &amp; start ARIA</button>
+          <div class="sub" id="connectHint" style="margin-top:8px;max-width:320px;margin-left:auto;margin-right:auto;">Click here in this panel so the browser can use your microphone and play assistant audio (required for embedded calls on most browsers).</div>
+          <div class="sub" id="connectStatus" style="margin-top:6px;color:#f87171;min-height:1.2em;"></div>
+        </div>
         <div class="pulse" id="pulse">
           <div style="text-align:center;">
             <div class="pulseTitle" id="ariaState">ARIA is listening…</div>
@@ -270,10 +275,8 @@ class AriaVapiSessionIframe {
   </div>
 
   <script type="module">
-    // Match neyvo-website: @vapi-ai/web ^2.5.2 (pinned for stable ESM in iframe)
-    import Vapi from "https://esm.sh/@vapi-ai/web@2.5.2";
-
-    const vapi = new Vapi("'''+pKey+'''");
+    const publicKey = "'''+pKey+'''";
+    let vapi = null;
     const assistantId = "'''+aId+'''";
     const sessionId = "'''+sId+'''";
     const accountId = "'''+accId+'''";
@@ -291,6 +294,9 @@ class AriaVapiSessionIframe {
 
     const phaseTag = document.getElementById("phaseTag");
     const progressBar = document.getElementById("progressBar");
+    const connectBtn = document.getElementById("connectBtn");
+    const connectRow = document.getElementById("connectRow");
+    const connectStatus = document.getElementById("connectStatus");
 
     let muted = false;
     let startedAt = null;
@@ -306,9 +312,130 @@ class AriaVapiSessionIframe {
     }, 500);
 
     function postToFlutter(payload) {
+      let o = "*";
       try {
-        window.parent.postMessage(payload, "*");
-      } catch (e) {}
+        const raw = window.location.origin;
+        if (raw && raw !== "null" && raw !== "undefined") o = raw;
+      } catch (_) {}
+      try {
+        window.parent.postMessage(payload, o);
+      } catch (_) {
+        try { window.parent.postMessage(payload, "*"); } catch (e2) {}
+      }
+    }
+
+    function serializeError(e) {
+      try {
+        if (e == null || e === undefined) return "null";
+        if (typeof e === "string") return e;
+        if (e instanceof Error) {
+          return [e.name, e.message, e.stack && String(e.stack).slice(0, 600)].filter(Boolean).join(" | ");
+        }
+        if (typeof e === "object") {
+          const parts = [];
+          if (e.message) parts.push(String(e.message));
+          if (e.name) parts.push("name=" + String(e.name));
+          if (e.stack) parts.push("stack=" + String(e.stack).slice(0, 500));
+          try {
+            const j = JSON.stringify(e);
+            parts.push(j.length < 900 ? j : j.slice(0, 900) + "…");
+          } catch (_) {}
+          return parts.length ? parts.join(" | ") : String(e);
+        }
+        return String(e);
+      } catch (_) {
+        return "serializeError_failed";
+      }
+    }
+
+    function formatVapiSdkError(e) {
+      try {
+        if (e == null || e === undefined) return "Connection failed (empty error event)";
+        if (typeof e === "string") return e;
+        if (typeof e === "object" && typeof e.type === "string" && e.type.length) {
+          const inner = e.error;
+          let im = "";
+          if (inner != null && typeof inner === "object") {
+            im = String(inner.message || inner.errorMsg || inner.reason || inner.name || "").trim();
+            if (!im) {
+              try {
+                const j = JSON.stringify(inner);
+                im = j.length < 500 ? j : j.slice(0, 500) + "…";
+              } catch (_) {}
+            }
+          } else if (typeof inner === "string") {
+            im = inner.trim();
+          }
+          const stage = e.stage ? String(e.stage) : "";
+          const head = [e.type, stage].filter(Boolean).join(" — ");
+          if (/daily|start-method/i.test(e.type) || im) {
+            return im ? head + ": " + im : head;
+          }
+        }
+        if (typeof e.message === "string" && e.message.trim()) return e.message.trim();
+        const inner2 = e.error;
+        if (inner2 != null && typeof inner2 === "object") {
+          const im = inner2.message || inner2.errorMsg || inner2.error || inner2.reason;
+          const stage = e.stage || e.type || "";
+          const bits = [stage, im && String(im), inner2.stack && String(inner2.stack).slice(0, 400)].filter(Boolean);
+          if (bits.length) return bits.join(" — ");
+        }
+        const ser = serializeError(e);
+        if (ser && ser !== "{}") return ser;
+        return "Connection failed";
+      } catch (_) {
+        return "Connection failed";
+      }
+    }
+
+    function resolveVapiConstructor(mod) {
+      if (!mod || typeof mod !== "object") return null;
+      function unwrap(cur) {
+        let x = cur;
+        for (let d = 0; d < 8 && x != null; d++) {
+          if (typeof x === "function") return x;
+          if (typeof x === "object" && Object.prototype.hasOwnProperty.call(x, "default")) {
+            const n = x.default;
+            if (n === x) break;
+            x = n;
+            continue;
+          }
+          break;
+        }
+        return null;
+      }
+      const a = mod.default !== undefined && mod.default !== null ? unwrap(mod.default) : null;
+      if (typeof a === "function") return a;
+      const b = unwrap(mod);
+      if (typeof b === "function") return b;
+      if (typeof mod.Vapi === "function") return mod.Vapi;
+      return null;
+    }
+
+    async function loadVapiModule() {
+      const urls = [
+        "https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.5.2/+esm",
+        "https://esm.sh/@vapi-ai/web@2.5.2"
+      ];
+      const failures = [];
+      for (const url of urls) {
+        try {
+          const mod = await import(url);
+          const Ctor = resolveVapiConstructor(mod);
+          if (typeof Ctor === "function") return Ctor;
+          const def = mod && mod.default;
+          const tag = def == null ? "no default" : (typeof def === "function" ? "fn" : typeof def);
+          failures.push(url + ": Vapi export not constructible (default: " + tag + ")");
+        } catch (err) {
+          failures.push(url + ": " + serializeError(err));
+        }
+      }
+      postToFlutter({
+        type: "aria_call_error",
+        session_id: sessionId,
+        message: "Could not load Vapi web SDK (CDN blocked or unreachable). " + failures.join(" || "),
+      });
+      return null;
     }
 
     function appendLine(who, text, kind) {
@@ -372,33 +499,10 @@ class AriaVapiSessionIframe {
     setStateListening();
     setPhase(0, 6);
 
-    async function startAriaCall() {
-      try {
-        // In embedded iframe mode, explicitly requesting mic access first makes
-        // browser permission behavior far more reliable.
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          try {
-            stream.getTracks().forEach((t) => t.stop());
-          } catch (_) {}
-        }
-        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
-      } catch (err) {
-        let msg = (err && err.message)
-          ? err.message
-          : "Could not start ARIA call (check Vapi public key / assistant id)";
-        // Browser shows 401 on api.vapi.ai/call/web when key/assistant mismatch
-        if (/401|unauthor/i.test(String(msg))) {
-          msg += " — Use the Vapi public (web) key from the dashboard (same value as NEXT_PUBLIC_VAPI_KEY on the website) and aria_operator_creator_assistant_id from the same Vapi project. Set vapi_public_key in Firestore businesses/{account}/operators/aria_operator_creator or backend env VAPI_PUBLIC_KEY (VAPI_PRIVATE_KEY is server-only).";
-        }
-        postToFlutter({ type: "aria_call_error", session_id: sessionId, message: msg });
-      }
-    }
-
-    startAriaCall();
-
     // Same pattern as neyvo-website VapiDemo: final transcripts often arrive on `message`
-    vapi.on("message", (m) => {
+    function wireVapiEvents() {
+      if (!vapi) return;
+      vapi.on("message", (m) => {
       try {
         if (!m || typeof m !== "object") return;
         if (m.type === "transcript" && m.transcriptType === "final") {
@@ -451,20 +555,111 @@ class AriaVapiSessionIframe {
     });
 
     vapi.on("error", (e) => {
-      const msg = e && e.message ? e.message : "Connection failed";
+      const msg = formatVapiSdkError(e);
+      console.error("[ARIA iframe] vapi error", e);
       postToFlutter({ type: "aria_call_error", session_id: sessionId, message: msg });
     });
+    }
+
+    connectBtn.onclick = async function () {
+      connectBtn.disabled = true;
+      connectStatus.textContent = "Loading Vapi SDK…";
+      connectStatus.style.color = "#94a3b8";
+
+      const VapiCls = await loadVapiModule();
+      if (!VapiCls) {
+        connectStatus.textContent = "SDK load failed — allow cdn.jsdelivr.net and esm.sh or check console.";
+        connectStatus.style.color = "#f87171";
+        connectBtn.disabled = false;
+        return;
+      }
+
+      const cleanKey = String(publicKey || "").trim();
+      const hasOnlyValidChars = !/[^A-Za-z0-9._-]/.test(cleanKey);
+      const validKey = hasOnlyValidChars
+        && cleanKey.length >= 20
+        && cleanKey.length <= 200
+        && !/\s/.test(cleanKey)
+        && !cleanKey.startsWith("sk_")
+        && !cleanKey.startsWith("vapi_sk_");
+      if (!validKey) {
+        postToFlutter({
+          type: "aria_call_error",
+          session_id: sessionId,
+          message: "Vapi public key is missing or malformed. Save the raw Vapi public web key (no quotes/spaces/newlines) in Firestore businesses/{account}/operators/aria_operator_creator or backend env VAPI_PUBLIC_KEY.",
+        });
+        connectStatus.textContent = "Invalid public key configuration.";
+        connectStatus.style.color = "#f87171";
+        connectBtn.disabled = false;
+        return;
+      }
+
+      connectStatus.textContent = "Requesting microphone…";
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          postToFlutter({
+            type: "aria_call_error",
+            session_id: sessionId,
+            message: "Microphone API is unavailable in this browser context. Use HTTPS and ensure the embedded iframe allows microphone access.",
+          });
+          connectStatus.textContent = "Microphone API unavailable.";
+          connectStatus.style.color = "#f87171";
+          connectBtn.disabled = false;
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const tracks = (stream && stream.getAudioTracks) ? stream.getAudioTracks() : [];
+        const hasLiveTrack = tracks.some((t) => t && t.readyState === "live" && t.enabled !== false);
+        if (!hasLiveTrack) {
+          try { tracks.forEach((t) => t.stop()); } catch (_) {}
+          postToFlutter({
+            type: "aria_call_error",
+            session_id: sessionId,
+            message: "Microphone permission was granted but no live audio track was detected. Check browser microphone settings and iframe allow permissions.",
+          });
+          connectStatus.textContent = "No live microphone track.";
+          connectStatus.style.color = "#f87171";
+          connectBtn.disabled = false;
+          return;
+        }
+        try { tracks.forEach((t) => t.stop()); } catch (_) {}
+
+        connectStatus.textContent = "Connecting to ARIA…";
+        vapi = new VapiCls(cleanKey);
+        wireVapiEvents();
+        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+        connectRow.style.display = "none";
+      } catch (err) {
+        let msg = serializeError(err);
+        const errName = String((err && err.name) || "");
+        if (errName === "NotAllowedError") {
+          msg = "Microphone permission is blocked. Allow microphone for this site, then reload and try again.";
+        } else if (errName === "NotFoundError") {
+          msg = "No microphone input device was found. Connect a microphone and retry.";
+        } else if (errName === "NotReadableError") {
+          msg = "Microphone is already in use by another app/tab. Close other audio apps and retry.";
+        }
+        if (/401|unauthor/i.test(String(msg))) {
+          msg += " — Use the Vapi public (web) key from the dashboard (same value as NEXT_PUBLIC_VAPI_KEY on the website) and aria_operator_creator_assistant_id from the same Vapi project. Set vapi_public_key in Firestore businesses/{account}/operators/aria_operator_creator or backend env VAPI_PUBLIC_KEY (VAPI_PRIVATE_KEY is server-only).";
+        }
+        postToFlutter({ type: "aria_call_error", session_id: sessionId, message: msg });
+        console.error("[ARIA iframe] connect/start failed", err);
+        connectStatus.textContent = msg.slice(0, 220) + (msg.length > 220 ? "…" : "");
+        connectStatus.style.color = "#f87171";
+        connectBtn.disabled = false;
+      }
+    };
 
     const muteBtn = document.getElementById("muteBtn");
     muteBtn.onclick = () => {
       muted = !muted;
-      try { vapi.setMuted(muted); } catch (e) {}
+      try { if (vapi) vapi.setMuted(muted); } catch (e) {}
       muteBtn.textContent = muted ? "Unmute" : "Mute";
     };
 
     document.getElementById("endBtn").onclick = () => {
       if (confirm("Are you sure? Your operator won't be created.")) {
-        try { vapi.stop(); } catch (e) {}
+        try { if (vapi) vapi.stop(); } catch (e) {}
         postToFlutter({ type: "aria_call_end", session_id: sessionId, operator_id: operatorId, account_id: accountId, ended_by_user: true });
       }
     };
@@ -499,6 +694,7 @@ class AriaVapiSessionIframe {
     .row { display:flex; align-items:center; justify-content:space-between; gap: 10px; flex-wrap:wrap; margin-bottom: 12px; }
     .tag { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid #334155; color: #94a3b8; background: rgba(15, 23, 42, 0.6); }
     .btn { border:none; border-radius: 12px; padding: 10px 14px; font-weight: 700; cursor:pointer; background:#1f2937; color:#e5e7eb; border:1px solid #334155; }
+    .primary { background: #a5b4fc; color: #020617; border-color: rgba(165, 180, 252, 0.6); }
     .danger { background: #ef4444; border-color: rgba(239, 68, 68, 0.7); color: white; }
     .log { border:1px solid #1f2937; border-radius: 14px; padding: 12px; min-height: 260px; max-height: 60vh; overflow:auto; background: rgba(2,6,23,0.3); }
     .line { margin: 8px 0; padding: 10px 12px; border-radius: 14px; border:1px solid #0f172a; background: rgba(2,6,23,0.5); }
@@ -516,21 +712,152 @@ class AriaVapiSessionIframe {
         <button class="btn danger" id="endBtn">End call</button>
       </div>
     </div>
+    <div class="row" id="connectRowOp" style="margin-bottom:10px;">
+      <button class="btn primary" id="connectBtnOp" type="button">Connect microphone &amp; start call</button>
+    </div>
+    <div class="note" id="connectStatusOp" style="margin-bottom:8px;min-height:1.2em;color:#f87171;"></div>
     <div class="log" id="log"></div>
-    <div class="note">This is a direct test call to your operator assistant.</div>
+    <div class="note">This is a direct test call to your operator assistant. Tap Connect above first.</div>
   </div>
 
   <script type="module">
-    import Vapi from "https://esm.sh/@vapi-ai/web@2.5.2";
-    const vapi = new Vapi("'''+pKey+'''");
+    const publicKey = "'''+pKey+'''";
+    let vapi = null;
     const assistantId = "'''+aId+'''";
     const sessionId = "'''+sId+'''";
     const accountId = "'''+accId+'''";
     const operatorId = "'''+opId+'''";
     const logEl = document.getElementById("log");
+    const connectBtnOp = document.getElementById("connectBtnOp");
+    const connectRowOp = document.getElementById("connectRowOp");
+    const connectStatusOp = document.getElementById("connectStatusOp");
 
     function postToFlutter(payload) {
-      try { window.parent.postMessage(payload, "*"); } catch (e) {}
+      let o = "*";
+      try {
+        const raw = window.location.origin;
+        if (raw && raw !== "null" && raw !== "undefined") o = raw;
+      } catch (_) {}
+      try {
+        window.parent.postMessage(payload, o);
+      } catch (_) {
+        try { window.parent.postMessage(payload, "*"); } catch (e2) {}
+      }
+    }
+
+    function serializeError(e) {
+      try {
+        if (e == null || e === undefined) return "null";
+        if (typeof e === "string") return e;
+        if (e instanceof Error) {
+          return [e.name, e.message, e.stack && String(e.stack).slice(0, 600)].filter(Boolean).join(" | ");
+        }
+        if (typeof e === "object") {
+          const parts = [];
+          if (e.message) parts.push(String(e.message));
+          if (e.name) parts.push("name=" + String(e.name));
+          if (e.stack) parts.push("stack=" + String(e.stack).slice(0, 500));
+          try {
+            const j = JSON.stringify(e);
+            parts.push(j.length < 900 ? j : j.slice(0, 900) + "…");
+          } catch (_) {}
+          return parts.length ? parts.join(" | ") : String(e);
+        }
+        return String(e);
+      } catch (_) {
+        return "serializeError_failed";
+      }
+    }
+
+    function formatVapiSdkError(e) {
+      try {
+        if (e == null || e === undefined) return "Connection failed (empty error event)";
+        if (typeof e === "string") return e;
+        if (typeof e === "object" && typeof e.type === "string" && e.type.length) {
+          const inner = e.error;
+          let im = "";
+          if (inner != null && typeof inner === "object") {
+            im = String(inner.message || inner.errorMsg || inner.reason || inner.name || "").trim();
+            if (!im) {
+              try {
+                const j = JSON.stringify(inner);
+                im = j.length < 500 ? j : j.slice(0, 500) + "…";
+              } catch (_) {}
+            }
+          } else if (typeof inner === "string") {
+            im = inner.trim();
+          }
+          const stage = e.stage ? String(e.stage) : "";
+          const head = [e.type, stage].filter(Boolean).join(" — ");
+          if (/daily|start-method/i.test(e.type) || im) {
+            return im ? head + ": " + im : head;
+          }
+        }
+        if (typeof e.message === "string" && e.message.trim()) return e.message.trim();
+        const inner2 = e.error;
+        if (inner2 != null && typeof inner2 === "object") {
+          const im = inner2.message || inner2.errorMsg || inner2.error || inner2.reason;
+          const stage = e.stage || e.type || "";
+          const bits = [stage, im && String(im), inner2.stack && String(inner2.stack).slice(0, 400)].filter(Boolean);
+          if (bits.length) return bits.join(" — ");
+        }
+        const ser = serializeError(e);
+        if (ser && ser !== "{}") return ser;
+        return "Connection failed";
+      } catch (_) {
+        return "Connection failed";
+      }
+    }
+
+    function resolveVapiConstructor(mod) {
+      if (!mod || typeof mod !== "object") return null;
+      function unwrap(cur) {
+        let x = cur;
+        for (let d = 0; d < 8 && x != null; d++) {
+          if (typeof x === "function") return x;
+          if (typeof x === "object" && Object.prototype.hasOwnProperty.call(x, "default")) {
+            const n = x.default;
+            if (n === x) break;
+            x = n;
+            continue;
+          }
+          break;
+        }
+        return null;
+      }
+      const a = mod.default !== undefined && mod.default !== null ? unwrap(mod.default) : null;
+      if (typeof a === "function") return a;
+      const b = unwrap(mod);
+      if (typeof b === "function") return b;
+      if (typeof mod.Vapi === "function") return mod.Vapi;
+      return null;
+    }
+
+    async function loadVapiModule() {
+      const urls = [
+        "https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.5.2/+esm",
+        "https://esm.sh/@vapi-ai/web@2.5.2"
+      ];
+      const failures = [];
+      for (const url of urls) {
+        try {
+          const mod = await import(url);
+          const Ctor = resolveVapiConstructor(mod);
+          if (typeof Ctor === "function") return Ctor;
+          const def = mod && mod.default;
+          const tag = def == null ? "no default" : (typeof def === "function" ? "fn" : typeof def);
+          failures.push(url + ": Vapi export not constructible (default: " + tag + ")");
+        } catch (err) {
+          failures.push(url + ": " + serializeError(err));
+        }
+      }
+      postToFlutter({
+        type: "aria_call_error",
+        session_id: sessionId,
+        operator_id: operatorId,
+        message: "Could not load Vapi web SDK (CDN blocked or unreachable). " + failures.join(" || "),
+      });
+      return null;
     }
 
     function appendLine(who, text) {
@@ -548,69 +875,144 @@ class AriaVapiSessionIframe {
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    function wireOperatorVapiEvents() {
+      if (!vapi) return;
+      vapi.on("message", (m) => {
+        try {
+          if (!m || typeof m !== "object") return;
+          if (m.type === "transcript" && m.transcriptType === "final") {
+            const text = String(m.transcript || m.text || "").trim();
+            if (!text) return;
+            const role = String(m.role || "").toLowerCase();
+            const who = role === "user" ? "You" : "Operator";
+            appendLine(who, text);
+          }
+        } catch (_) {}
+      });
+
+      vapi.on("transcript", (t) => {
+        let text = "";
+        let speaker = "aria";
+        if (typeof t === "string") { text = t; }
+        else if (t && typeof t === "object") {
+          text = t.text || t.transcript || t.value || "";
+          if (t.speaker) speaker = t.speaker;
+        }
+        const trimmed = String(text || "").trim();
+        if (!trimmed) return;
+        const who = (String(speaker).toLowerCase().includes("user") ? "You" : "Operator");
+        appendLine(who, trimmed);
+      });
+
+      vapi.on("call-end", () => {
+        postToFlutter({ type: "aria_call_end", session_id: sessionId, operator_id: operatorId });
+      });
+      vapi.on("error", (e) => {
+        const msg = formatVapiSdkError(e);
+        console.error("[ARIA operator iframe] vapi error", e);
+        postToFlutter({ type: "aria_call_error", session_id: sessionId, operator_id: operatorId, message: msg });
+      });
+    }
+
+    connectBtnOp.onclick = async function () {
+      connectBtnOp.disabled = true;
+      connectStatusOp.textContent = "Loading Vapi SDK…";
+      connectStatusOp.style.color = "#94a3b8";
+
+      const VapiCls = await loadVapiModule();
+      if (!VapiCls) {
+        connectStatusOp.textContent = "SDK load failed — allow cdn.jsdelivr.net and esm.sh.";
+        connectStatusOp.style.color = "#f87171";
+        connectBtnOp.disabled = false;
+        return;
+      }
+
+      const cleanKey = String(publicKey || "").trim();
+      const hasOnlyValidChars = !/[^A-Za-z0-9._-]/.test(cleanKey);
+      const validKey = hasOnlyValidChars
+        && cleanKey.length >= 20
+        && cleanKey.length <= 200
+        && !/\s/.test(cleanKey)
+        && !cleanKey.startsWith("sk_")
+        && !cleanKey.startsWith("vapi_sk_");
+      if (!validKey) {
+        postToFlutter({
+          type: "aria_call_error",
+          session_id: sessionId,
+          operator_id: operatorId,
+          message: "Vapi public key is missing or malformed. Fix businesses/{account}/operators/aria_operator_creator vapi_public_key or VAPI_PUBLIC_KEY.",
+        });
+        connectStatusOp.textContent = "Invalid public key.";
+        connectStatusOp.style.color = "#f87171";
+        connectBtnOp.disabled = false;
+        return;
+      }
+
+      connectStatusOp.textContent = "Requesting microphone…";
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          postToFlutter({
+            type: "aria_call_error",
+            session_id: sessionId,
+            operator_id: operatorId,
+            message: "Microphone API is unavailable. Use HTTPS.",
+          });
+          connectBtnOp.disabled = false;
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const tracks = (stream && stream.getAudioTracks) ? stream.getAudioTracks() : [];
+        const hasLiveTrack = tracks.some((t) => t && t.readyState === "live" && t.enabled !== false);
+        if (!hasLiveTrack) {
+          try { tracks.forEach((t) => t.stop()); } catch (_) {}
+          postToFlutter({
+            type: "aria_call_error",
+            session_id: sessionId,
+            operator_id: operatorId,
+            message: "No live microphone track.",
+          });
+          connectBtnOp.disabled = false;
+          return;
+        }
+        try { tracks.forEach((t) => t.stop()); } catch (_) {}
+
+        connectStatusOp.textContent = "Connecting…";
+        vapi = new VapiCls(cleanKey);
+        wireOperatorVapiEvents();
+        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
+        connectRowOp.style.display = "none";
+        connectStatusOp.textContent = "";
+      } catch (err) {
+        let msg = serializeError(err);
+        const errName = String((err && err.name) || "");
+        if (errName === "NotAllowedError") msg = "Microphone permission blocked.";
+        else if (errName === "NotFoundError") msg = "No microphone found.";
+        else if (errName === "NotReadableError") msg = "Microphone in use elsewhere.";
+        if (/401|unauthor/i.test(String(msg))) {
+          msg += " — Use Vapi public key + assistant from the same project.";
+        }
+        postToFlutter({ type: "aria_call_error", session_id: sessionId, operator_id: operatorId, message: msg });
+        console.error("[ARIA operator iframe] start failed", err);
+        connectStatusOp.textContent = msg.slice(0, 220) + (msg.length > 220 ? "…" : "");
+        connectStatusOp.style.color = "#f87171";
+        connectBtnOp.disabled = false;
+      }
+    };
+
     let muted = false;
     const muteBtn = document.getElementById("muteBtn");
     muteBtn.onclick = () => {
       muted = !muted;
-      try { vapi.setMuted(muted); } catch (e) {}
+      try { if (vapi) vapi.setMuted(muted); } catch (e) {}
       muteBtn.textContent = muted ? "Unmute" : "Mute";
     };
 
     document.getElementById("endBtn").onclick = () => {
       if (confirm("End this test call?")) {
-        try { vapi.stop(); } catch (e) {}
+        try { if (vapi) vapi.stop(); } catch (e) {}
         postToFlutter({ type: "aria_call_end", session_id: sessionId, operator_id: operatorId, ended_by_user: true });
       }
     };
-
-    async function startOpCall() {
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
-        }
-        await vapi.start(assistantId, { metadata: { account_id: accountId, operator_id: operatorId, session_id: sessionId } });
-      } catch (err) {
-        const msg = (err && err.message) ? err.message : "Could not start call";
-        postToFlutter({ type: "aria_call_error", session_id: sessionId, operator_id: operatorId, message: msg });
-      }
-    }
-    startOpCall();
-
-    vapi.on("message", (m) => {
-      try {
-        if (!m || typeof m !== "object") return;
-        if (m.type === "transcript" && m.transcriptType === "final") {
-          const text = String(m.transcript || m.text || "").trim();
-          if (!text) return;
-          const role = String(m.role || "").toLowerCase();
-          const who = role === "user" ? "You" : "Operator";
-          appendLine(who, text);
-        }
-      } catch (_) {}
-    });
-
-    vapi.on("transcript", (t) => {
-      let text = "";
-      let speaker = "aria";
-      if (typeof t === "string") { text = t; }
-      else if (t && typeof t === "object") {
-        text = t.text || t.transcript || t.value || "";
-        if (t.speaker) speaker = t.speaker;
-      }
-      const trimmed = String(text || "").trim();
-      if (!trimmed) return;
-      const who = (String(speaker).toLowerCase().includes("user") ? "You" : "Operator");
-      appendLine(who, trimmed);
-    });
-
-    vapi.on("call-end", () => {
-      postToFlutter({ type: "aria_call_end", session_id: sessionId, operator_id: operatorId });
-    });
-    vapi.on("error", (e) => {
-      const msg = e && e.message ? e.message : "Connection failed";
-      postToFlutter({ type: "aria_call_error", session_id: sessionId, operator_id: operatorId, message: msg });
-    });
   </script>
 </body>
 </html>''';
@@ -642,12 +1044,20 @@ class _AriaIframeViewState extends State<AriaIframeView> {
     if (_registeredViewTypes.add(widget.viewType)) {
       // ignore: undefined_prefixed_name
       ui_web.platformViewRegistry.registerViewFactory(widget.viewType, (int _) {
+        // Use a blob: URL instead of srcdoc. about:srcdoc can yield an opaque origin
+        // ("null"), which breaks Vapi/Daily.co (postMessage targetOrigin, WebRTC).
+        final blob = html.Blob([widget.htmlSrcDoc], 'text/html');
+        final url = html.Url.createObjectUrlFromBlob(blob);
         final iframe = html.IFrameElement()
           ..style.border = '0'
           ..style.width = '100%'
           ..style.height = '100%'
-          ..allow = 'microphone *; autoplay *'
-          ..srcdoc = widget.htmlSrcDoc;
+          ..allow =
+              'microphone; autoplay; clipboard-read; clipboard-write; display-capture'
+          ..src = url;
+        iframe.onLoad.listen((_) {
+          html.Url.revokeObjectUrl(url);
+        });
         return iframe;
       });
     }

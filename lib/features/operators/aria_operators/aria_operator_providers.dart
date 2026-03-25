@@ -4,6 +4,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../api/neyvo_api.dart';
+import '../../../core/providers/account_provider.dart';
+import '../../../neyvo_pulse_api.dart';
 import 'aria_operator_api_service.dart';
 import 'aria_operator_models.dart';
 import 'vapi_public_key_guard.dart';
@@ -87,10 +90,46 @@ class AriaCreateSessionController extends StateNotifier<AriaCreateSessionState> 
   AriaCreateSessionController(this.ref) : super(AriaCreateSessionState.idle());
   final Ref ref;
 
+  /// Pulse may not have set [NeyvoPulseApi.defaultAccountId] yet (race with shell load).
+  /// Backend POST /initiate-aria-call requires `account_id` in the JSON body.
+  Future<void> _ensureAccountIdForAria() async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) return;
+
+    void applyFrom(Map<String, dynamic> r) {
+      if (r['ok'] == true) {
+        final id = (r['account_id'] ?? r['accountId'] ?? '').toString().trim();
+        if (id.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(id);
+          NeyvoApi.setDefaultAccountId(id);
+        }
+      }
+    }
+
+    try {
+      final res = await ref.read(accountInfoProvider.future);
+      applyFrom(res);
+    } catch (_) {}
+
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) return;
+
+    try {
+      final res = await NeyvoPulseApi.getAccountInfo();
+      applyFrom(res);
+    } catch (_) {}
+  }
+
   Future<void> startSession() async {
     if (state.isStarting) return;
     state = state.copyWith(isStarting: true, resetError: true);
     try {
+      await _ensureAccountIdForAria();
+      if (NeyvoPulseApi.defaultAccountId.isEmpty) {
+        throw Exception(
+          'account_id is required but none is loaded yet. '
+          'Wait for the app to finish loading your organization, refresh the page, or sign in again. '
+          'If this persists, your account may be missing from /api/pulse/account.',
+        );
+      }
       final res = await AriaOperatorApiService.initiateAriaCall();
       final opId = (res['operator_id'] ?? '').toString();
       final creatorAssistantId = (res['aria_operator_creator_assistant_id'] ?? '').toString();
@@ -104,6 +143,13 @@ class AriaCreateSessionController extends StateNotifier<AriaCreateSessionState> 
           'In Firestore: businesses/{account}/operators/aria_operator_creator → set field vapi_public_key '
           'to your real public key from the Vapi dashboard (not the field name), or set backend env VAPI_PUBLIC_KEY. '
           'Restart the app after fixing.',
+        );
+      }
+      if (isLikelyMalformedVapiPublicKey(publicKey)) {
+        throw Exception(
+          'Vapi public key format is invalid for web calls. '
+          'Save only the raw Vapi public key (no quotes/spaces/newlines) in '
+          'Firestore businesses/{account}/operators/aria_operator_creator or backend env VAPI_PUBLIC_KEY.',
         );
       }
       state = state.copyWith(
@@ -212,8 +258,26 @@ final ariaTranscriptLinesProvider =
 
 class AriaTranscriptLinesController extends StateNotifier<List<String>> {
   AriaTranscriptLinesController() : super(const []);
+
   void addLine(String line) {
     state = [...state, line];
+  }
+
+  /// Replaces the last line when [who]'s text is still growing (partial ASR/TTS
+  /// chunks); appends when the speaker changes or a new utterance starts.
+  void addOrUpdateStreamingTranscript(String who, String text) {
+    final prefix = '$who: ';
+    if (state.isNotEmpty) {
+      final last = state.last;
+      if (last.startsWith(prefix)) {
+        final prevBody = last.substring(prefix.length);
+        if (text.startsWith(prevBody) || prevBody.startsWith(text)) {
+          state = [...state.sublist(0, state.length - 1), '$prefix$text'];
+          return;
+        }
+      }
+    }
+    state = [...state, '$prefix$text'];
   }
 }
 

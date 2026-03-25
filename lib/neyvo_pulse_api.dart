@@ -395,6 +395,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> listStudents({
     int? limit,
     int? offset,
+    String? cursor,
     bool? hasBalance,
     bool? isOverdue,
     double? balanceMin,
@@ -410,6 +411,7 @@ class NeyvoPulseApi {
     if (_defaultAccountId.isNotEmpty) params['account_id'] = _defaultAccountId;
     if (limit != null) params['limit'] = limit;
     if (offset != null) params['offset'] = offset;
+    if (cursor != null) params['cursor'] = cursor;
     if (hasBalance != null) params['has_balance'] = hasBalance;
     if (isOverdue != null) params['is_overdue'] = isOverdue;
     if (balanceMin != null) params['balance_min'] = balanceMin;
@@ -419,6 +421,19 @@ class NeyvoPulseApi {
     if (!enrichCalls) params['enrich_calls'] = false;
     if (includeTotal) params['include_total'] = true;
     return _get('/api/pulse/students', params: params.isEmpty ? null : params);
+  }
+
+  /// POST /api/pulse/students/match-phones
+  /// Used by the campaign audience CSV picker to resolve student ids quickly
+  /// without loading the full contact list into the client.
+  static Future<Map<String, dynamic>> matchStudentsByCsvKeys({
+    required List<String> studentIds,
+    required List<String> phones,
+  }) async {
+    return _post('/api/pulse/students/match-phones', {
+      'student_ids': studentIds,
+      'phones': phones,
+    });
   }
 
   static Future<Map<String, dynamic>> getStudent(String studentId) async =>

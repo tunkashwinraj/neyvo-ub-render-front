@@ -15,3 +15,14 @@ bool isPlaceholderVapiPublicKey(String? value) {
   };
   return bad.contains(v);
 }
+
+bool isLikelyMalformedVapiPublicKey(String? value) {
+  final raw = (value ?? '');
+  final v = raw.trim().replaceAll('"', '').replaceAll("'", '').trim();
+  if (v.isEmpty) return true;
+  if (v.contains('\n') || v.contains('\r') || v.contains(' ')) return true;
+  // Private/secret keys must never be used in browser SDK.
+  if (v.startsWith('sk_') || v.startsWith('vapi_sk_')) return true;
+  final valid = RegExp(r'^[A-Za-z0-9._-]{20,200}$');
+  return !valid.hasMatch(v);
+}

@@ -45,17 +45,23 @@ String get _kFallbackAccountId {
 
   FirebaseAuth.instance.authStateChanges().listen((User? user) {
     NeyvoApi.setUserId(user?.uid);
-    if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
+    if (user == null) {
+      NeyvoPulseApi.setDefaultAccountId(null);
+      NeyvoApi.setDefaultAccountId(null);
+    }
   });
   NeyvoApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
-  if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
+  if (FirebaseAuth.instance.currentUser == null) {
+    NeyvoPulseApi.setDefaultAccountId(null);
+    NeyvoApi.setDefaultAccountId(null);
+  }
 
   final baseUrl = resolveNeyvoApiBaseUrl();
 
   // Configure backend base URL once. In dev you can override via:
   // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000
   NeyvoApi.setBaseUrl(baseUrl);
-  NeyvoApi.setDefaultTimeout(const Duration(seconds: 15));
+  NeyvoApi.setDefaultTimeout(const Duration(seconds: 30));
 
     tz.initializeTimeZones();
 
@@ -190,6 +196,7 @@ class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
       super.initState();
       if (_kFallbackAccountId.isNotEmpty) {
         NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
+        NeyvoApi.setDefaultAccountId(_kFallbackAccountId);
       }
     }
 
@@ -226,6 +233,7 @@ class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
               _handled403 = true;
               NeyvoPulseApi.clearAccountInfoCache();
               NeyvoPulseApi.setDefaultAccountId(null);
+              NeyvoApi.setDefaultAccountId(null);
               unawaited(_showForbiddenAndSignOut());
             },
           );

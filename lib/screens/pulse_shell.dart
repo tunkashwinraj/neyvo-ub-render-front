@@ -387,7 +387,10 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
           .timeout(const Duration(seconds: 12));
       if (acc['ok'] == true && acc['account_id'] != null) {
         final accountId = acc['account_id']?.toString() ?? '';
-        if (accountId.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(accountId);
+        if (accountId.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(accountId);
+          NeyvoApi.setDefaultAccountId(accountId);
+        }
       }
       final res = await NeyvoPulseApi.getMyRole(shellScoped: true);
       if (!mounted) return;
@@ -413,6 +416,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     NeyvoApi.setSessionToken(null);
     NeyvoApi.setUserId(null);
     NeyvoPulseApi.setDefaultAccountId(null);
+    NeyvoApi.setDefaultAccountId(null);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('neyvo_pulse_onboarding_completed');
@@ -427,6 +431,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
       if (res['ok'] == true && res['account_id'] != null) {
         final accountId = res['account_id']?.toString() ?? '';
         NeyvoPulseApi.setDefaultAccountId(accountId);
+        NeyvoApi.setDefaultAccountId(accountId);
       }
       final col = res['org_collection'] as String?;
       if (col != null && col.trim().isNotEmpty) _orgCollection = col.trim();

@@ -104,6 +104,9 @@
       if (loader) loader.remove();
     });
   </script>
+  <!-- Vapi Web SDK bridge (same-document ARIA flow; no iframe). Loads before Flutter. -->
+  <!-- Bump ?v= when neyvo_vapi_bridge.js changes (modules cache aggressively). -->
+  <script type="module" src="neyvo_vapi_bridge.js?v=20260325b"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

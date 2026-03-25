@@ -52,7 +52,7 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
     String? err;
     bool importing = false;
 
-    Future<void> submit(StateSetter setInner) async {
+    Future<void> submit(BuildContext sheetCtx, StateSetter setInner) async {
       final number = numberCtrl.text.trim();
       if (number.isEmpty || !number.startsWith('+')) {
         setInner(() => err = 'Enter a valid E.164 number (e.g. +12035551234).');
@@ -75,8 +75,9 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
         err = null;
         importing = true;
       });
+      var sheetClosed = false;
       try {
-        final res = await ref.read(numbersNotifierProvider.notifier).importNumberToOrg(
+        await ref.read(numbersNotifierProvider.notifier).importNumberToOrg(
           provider: provider,
           numberE164: number,
           friendlyName: friendlyCtrl.text.trim().isEmpty ? null : friendlyCtrl.text.trim(),
@@ -88,17 +89,40 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
           vonageApiSecret: vonageSecretCtrl.text.trim(),
         );
         if (!mounted) return;
-        Navigator.of(context).pop();
+        sheetClosed = true;
+        if (sheetCtx.mounted) {
+          Navigator.of(sheetCtx).pop();
+        }
+        ref.invalidate(numbersNotifierProvider);
         if (!mounted) return;
-        final msg = (res['message'] ?? 'Number imported and linked.').toString();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showDialog<void>(
+            context: context,
+            useRootNavigator: true,
+            builder: (dCtx) => AlertDialog(
+              title: const Text('Number added'),
+              content: const Text(
+                'Your number was added successfully. You can start using it on the Lines page and with your operators.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dCtx).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        });
       } catch (e) {
         setInner(() {
           err = e.toString();
           importing = false;
         });
       } finally {
-        if (mounted) setInner(() => importing = false);
+        if (mounted && !sheetClosed) {
+          setInner(() => importing = false);
+        }
       }
     }
 
@@ -117,141 +141,152 @@ class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
             top: 14,
             bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text('Import number to VAPI', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: importing ? null : () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Import number to VAPI', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: importing ? null : () => Navigator.of(ctx).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Import a carrier number (Twilio, Telnyx, or Vonage) into VAPI and link it to this account. The number will appear on the Phone Numbers tab and can be used by your operators.',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                ),
+                const SizedBox(height: 10),
+                if (err != null) ...[
+                  Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+                  const SizedBox(height: 10),
+                ],
+                Row(
+                  children: [
+                    Text('Account ID', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _safeStr(data.account['account_id'] ?? data.account['id'] ?? ''),
+                        style: NeyvoTextStyles.bodyPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: provider,
+                  items: const [
+                    DropdownMenuItem(value: 'twilio', child: Text('Twilio')),
+                    DropdownMenuItem(value: 'telnyx', child: Text('Telnyx')),
+                    DropdownMenuItem(value: 'vonage', child: Text('Vonage')),
+                  ],
+                  onChanged: importing ? null : (v) => setInner(() => provider = v ?? 'twilio'),
+                  decoration: const InputDecoration(labelText: 'Provider'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: numberCtrl,
+                  enabled: !importing,
+                  decoration: const InputDecoration(
+                    labelText: 'Number (E.164)',
+                    hintText: 'e.g. +12035551234',
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: friendlyCtrl,
+                  enabled: !importing,
+                  decoration: const InputDecoration(
+                    labelText: 'Friendly name (optional)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: setAsPrimary,
+                      onChanged: importing ? null : (v) => setInner(() => setAsPrimary = v ?? true),
+                    ),
+                    const Expanded(child: Text('Set as primary')),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (provider == 'twilio') ...[
+                  TextField(
+                    controller: twilioSidCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Twilio Account SID'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: twilioTokenCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
+                    obscureText: true,
+                  ),
+                ] else if (provider == 'telnyx') ...[
+                  TextField(
+                    controller: telnyxKeyCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Telnyx API Key'),
+                    obscureText: true,
+                  ),
+                ] else if (provider == 'vonage') ...[
+                  TextField(
+                    controller: vonageKeyCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Vonage API Key'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: vonageSecretCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Vonage API Secret'),
+                    obscureText: true,
                   ),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Import a carrier number (Twilio, Telnyx, or Vonage) into VAPI and link it to this account. The number will appear on the Phone Numbers tab and can be used by your operators.',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-              ),
-              const SizedBox(height: 10),
-              if (err != null) ...[
-                Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: importing ? null : () => submit(ctx, setInner),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(ctx).colorScheme.primary,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  icon: importing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
+                      : const Icon(Icons.upload, size: 18),
+                  label: Text(importing ? 'Importing…' : 'Import & assign to org'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Credentials are used one-time to import this number into VAPI and are not stored on Neyvo servers.',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                ),
               ],
-              Row(
-                children: [
-                  Text('Account ID', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-                  const SizedBox(width: 8),
-                  Text(
-                    _safeStr(data.account['account_id'] ?? data.account['id'] ?? ''),
-                    style: NeyvoTextStyles.bodyPrimary,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: provider,
-                items: const [
-                  DropdownMenuItem(value: 'twilio', child: Text('Twilio')),
-                  DropdownMenuItem(value: 'telnyx', child: Text('Telnyx')),
-                  DropdownMenuItem(value: 'vonage', child: Text('Vonage')),
-                ],
-                onChanged: importing ? null : (v) => setInner(() => provider = v ?? 'twilio'),
-                decoration: const InputDecoration(labelText: 'Provider'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: numberCtrl,
-                enabled: !importing,
-                decoration: const InputDecoration(
-                  labelText: 'Number (E.164)',
-                  hintText: 'e.g. +12035551234',
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: friendlyCtrl,
-                enabled: !importing,
-                decoration: const InputDecoration(
-                  labelText: 'Friendly name (optional)',
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Checkbox(
-                    value: setAsPrimary,
-                    onChanged: importing ? null : (v) => setInner(() => setAsPrimary = v ?? true),
-                  ),
-                  const Expanded(child: Text('Set as primary')),
-                ],
-              ),
-              const SizedBox(height: 6),
-              if (provider == 'twilio') ...[
-                TextField(
-                  controller: twilioSidCtrl,
-                  enabled: !importing,
-                  decoration: const InputDecoration(labelText: 'Twilio Account SID'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: twilioTokenCtrl,
-                  enabled: !importing,
-                  decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
-                  obscureText: true,
-                ),
-              ] else if (provider == 'telnyx') ...[
-                TextField(
-                  controller: telnyxKeyCtrl,
-                  enabled: !importing,
-                  decoration: const InputDecoration(labelText: 'Telnyx API Key'),
-                  obscureText: true,
-                ),
-              ] else if (provider == 'vonage') ...[
-                TextField(
-                  controller: vonageKeyCtrl,
-                  enabled: !importing,
-                  decoration: const InputDecoration(labelText: 'Vonage API Key'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: vonageSecretCtrl,
-                  enabled: !importing,
-                  decoration: const InputDecoration(labelText: 'Vonage API Secret'),
-                  obscureText: true,
-                ),
-              ],
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: importing ? null : () => submit(setInner),
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
-                icon: importing
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
-                    : const Icon(Icons.upload, size: 18),
-                label: Text(importing ? 'Importing…' : 'Import & assign to org'),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Credentials are used one-time to import this number into VAPI and are not stored on Neyvo servers.',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
 
-    numberCtrl.dispose();
-    friendlyCtrl.dispose();
-    twilioSidCtrl.dispose();
-    twilioTokenCtrl.dispose();
-    telnyxKeyCtrl.dispose();
-    vonageKeyCtrl.dispose();
-    vonageSecretCtrl.dispose();
+    void disposeImportControllers() {
+      numberCtrl.dispose();
+      friendlyCtrl.dispose();
+      twilioSidCtrl.dispose();
+      twilioTokenCtrl.dispose();
+      telnyxKeyCtrl.dispose();
+      vonageKeyCtrl.dispose();
+      vonageSecretCtrl.dispose();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => disposeImportControllers());
   }
 
   /// Primary number (if any) – imported or assigned as primary. Shown in its own section.
