@@ -92,7 +92,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   bool _hasPhoneNumber = false;
   /// Outbound phone numbers for campaign start (caller ID dropdown).
   List<Map<String, dynamic>> _outboundPhoneNumbers = [];
-  /// Selected VAPI phone_number_id for this campaign run (null = use default).
+  /// Selected VAPI phone_number_id for this campaign run (null = omit override; backend uses
+  /// campaign_phone_number_id if set, else operator attachment, else org primary).
   String? _selectedStartPhoneNumberId;
   /// Wallet credits and required per call (for campaign start gating and display).
   int? _walletCredits;
@@ -239,12 +240,6 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         final raw = outRes['phone_numbers'] as List? ?? [];
         outbound = raw.cast<Map<String, dynamic>>();
       } catch (_) {}
-      String? selectedPhoneId;
-      if (outbound.isNotEmpty) {
-        final first = outbound.first;
-        selectedPhoneId = (first['phone_number_id'] ?? first['id'] ?? '').toString().trim();
-        if (selectedPhoneId?.isEmpty ?? true) selectedPhoneId = null;
-      }
       // Load wallet credits for campaign start gating and display
       int? walletCredits;
       int? creditsPerMinute;
@@ -274,7 +269,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         _isEducationOrg = isEdu;
         _hasPhoneNumber = hasNumber;
         _outboundPhoneNumbers = outbound;
-        if (_selectedStartPhoneNumberId == null) _selectedStartPhoneNumberId = selectedPhoneId;
+        // Do not default _selectedStartPhoneNumberId to the first org number: leave null so
+        // startCampaign omits phone_number_id and the backend uses operator attachment / primary.
         _walletCredits = walletCredits;
         _creditsPerMinute = creditsPerMinute ?? 25;
         _loading = false;
