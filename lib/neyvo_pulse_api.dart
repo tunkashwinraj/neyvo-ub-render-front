@@ -1563,43 +1563,6 @@ class NeyvoPulseApi {
     );
   }
 
-  /// Retry candidate listing for a campaign (voicemail / not connected / hung up early / failed).
-  /// The backend decides what is auto-retry eligible vs manual-retry eligible.
-  static Future<Map<String, dynamic>> getCampaignRetryCandidates(
-    String campaignId, {
-    String mode = 'manual', // manual|auto|both|all
-    String? retryReason, // voicemail|not_connected|hungup_early|failed
-    int limit = 200,
-    int offset = 0,
-    bool sync = false,
-  }) async {
-    final params = <String, dynamic>{
-      'mode': mode,
-      'limit': limit,
-      'offset': offset,
-      'sync': sync ? '1' : '0',
-      'sync_from_call_log': sync ? '1' : '0',
-      if (retryReason != null && retryReason.isNotEmpty) 'retry_reason': retryReason,
-    };
-    return _get('/api/pulse/campaigns/$campaignId/retry-candidates', params: params);
-  }
-
-  /// Retry candidate listing for all campaigns in the account.
-  static Future<Map<String, dynamic>> getAccountRetryCandidates({
-    String mode = 'manual',
-    String? retryReason,
-    int limit = 200,
-    int offset = 0,
-  }) async {
-    final params = <String, dynamic>{
-      'mode': mode,
-      'limit': limit,
-      'offset': offset,
-      if (retryReason != null && retryReason.isNotEmpty) 'retry_reason': retryReason,
-    };
-    return _get('/api/pulse/campaigns/retry-candidates', params: params);
-  }
-
   /// Rebuild audience: deletes snapshot and unlocks audience config.
   static Future<Map<String, dynamic>> rebuildCampaignAudience(String campaignId) async =>
       _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {});
