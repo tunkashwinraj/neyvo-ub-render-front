@@ -791,12 +791,19 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
     final camp = Map<String, dynamic>.from((campaignRes['campaign'] as Map?) ?? const {});
     final callsF = NeyvoPulseApi.getCampaignCalls(campaignId, limit: 120);
     final metricsF = NeyvoPulseApi.getCampaignMetrics(campaignId);
-    final results = await Future.wait([callsF, metricsF]);
+    final retryCandidatesF = NeyvoPulseApi.getCampaignRetryCandidates(
+      campaignId,
+      mode: 'manual',
+      limit: 500,
+    );
+    final results = await Future.wait([callsF, metricsF, retryCandidatesF]);
     final callsRes = results[0] as Map<String, dynamic>;
     final metricsRes = results[1] as Map<String, dynamic>;
+    final retryCandidatesRes = results[2] as Map<String, dynamic>;
     final cached = _campaignDetailCache[campaignId];
     final cachedItems = (cached?['items'] as List?) ?? const [];
     final cachedReport = (cached?['report'] as Map?) ?? const {};
+    final cachedRetryCandidates = (cached?['retry_candidates'] as List?) ?? const [];
 
     if (_shouldRefreshHeavyDetail(campaignId)) {
       unawaited(_prefetchHeavyCampaignDetail(campaignId));
@@ -808,6 +815,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       'metrics': (metricsRes['metrics'] as Map?) ?? {},
       'items': cachedItems,
       'report': cachedReport,
+      // Candidate list is used for retry eligibility UI (voicemail / not_connected / hungup_early / failed).
+      'retry_candidates': (retryCandidatesRes['candidates'] as List?) ?? cachedRetryCandidates,
     };
   }
 
@@ -2327,6 +2336,11 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             ) ??
             const <String, int>{};
         final operatorGoal = report['operator_goal']?.toString() ?? '';
+        final retryCandidates = (data['retry_candidates'] as List?)?.cast<dynamic>().map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? const [];
+        final retryCandidatesByStudentId = <String, Map<String, dynamic>>{
+          for (final rc in retryCandidates)
+            if ((rc['student_id'] ?? '').toString().trim().isNotEmpty) (rc['student_id'] ?? '').toString().trim(): rc,
+        };
         final canStart = status == 'draft' || status == 'scheduled';
         final canRerun = status == 'completed' || status == 'running';
         final canEdit = status == 'draft' || status == 'scheduled';
@@ -2830,18 +2844,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                     const Spacer(),
                     if (isTerminal) ...[
                       Builder(builder: (context) {
-                        final eligibleIds = items.where((it) {
-                          final st = (it['status'] ?? '').toString().toLowerCase().trim();
-                          final vapiId = (it['vapi_call_id'] ?? it['call_id'] ?? '').toString().trim();
-                          final detail = vapiId.isNotEmpty ? callDetails[vapiId] : null;
-                          final derived = _deriveCampaignCallOutcome(callItem: it, callDetail: detail);
-                          final outcome = (derived['outcome'] ?? '').toString();
-                          final callbackRequested = derived['callbackRequested'] == true;
-                          if (callbackRequested) return false;
-                          if (outcome == 'Voicemail' || outcome == 'Not Connected') return true;
-                          // Some failures may still be 'failed' without details; treat as Not Connected.
-                          return st == 'failed';
-                        }).map((it) => (it['student_id'] ?? '').toString().trim()).where((id) => id.isNotEmpty).toSet().toList();
+                        final eligibleIds = retryCandidates
+                            .where((rc) => rc['manual_retry_eligible'] == true)
+                            .map((rc) => (rc['student_id'] ?? '').toString().trim())
+                            .where((id) => id.isNotEmpty)
+                            .toSet()
+                            .toList();
 
                         if (eligibleIds.isEmpty) return const SizedBox.shrink();
                         return TextButton.icon(
@@ -2983,15 +2991,19 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                             if (isTerminal && outcome == 'Answered' && callbackRequested) 'Callback requested',
                           ].where((e) => e.trim().isNotEmpty).toList();
                           final studentId = (it['student_id'] ?? it['id'] ?? '').toString().trim();
+                          final candidate = retryCandidatesByStudentId[studentId];
+                          final subtitleLinesWithRetry = List<String>.from(subtitleLines);
+                          if (isTerminal && candidate != null && (candidate['retry_reason'] ?? '').toString().isNotEmpty) {
+                            subtitleLinesWithRetry.add('Retry reason: ${(candidate['retry_reason'] ?? '').toString()}');
+                          }
                           final canRetryThis = isTerminal &&
                               studentId.isNotEmpty &&
-                              !callbackRequested &&
-                              (outcome == 'Voicemail' || outcome == 'Not Connected');
+                              retryCandidatesByStudentId.containsKey(studentId);
                           return ListTile(
                             leading: Icon(Icons.person_outline, color: statusColor(st)),
                             title: Text(name, style: NeyvoType.bodyMedium.copyWith(color: NeyvoTheme.textPrimary)),
                             subtitle: Text(
-                              subtitleLines.join('\n'),
+                              subtitleLinesWithRetry.join('\n'),
                               style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
