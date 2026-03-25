@@ -1,6 +1,7 @@
 // lib/screens/students_list_page.dart
 // Enhanced students list with search, filter, and quick actions
 
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -764,6 +765,120 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
     );
   }
 
+  Future<Map<String, dynamic>?> _showStudentsImportProgressDialog(String jobId) async {
+    Timer? timer;
+    bool cancelRequested = false;
+    bool closed = false;
+    Map<String, dynamic> lastJob = {};
+
+    try {
+      final finalJob = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx, setState) {
+              void setFromResponse(Map<String, dynamic> res) {
+                final payload = res['job'] is Map
+                    ? Map<String, dynamic>.from(res['job'] as Map)
+                    : res;
+                lastJob = Map<String, dynamic>.from(payload);
+                setState(() {});
+              }
+
+              if (timer == null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (closed) return;
+                  timer = Timer.periodic(const Duration(seconds: 2), (t) async {
+                    try {
+                      final res = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+                      setFromResponse(res);
+                      final status = (lastJob['status'] ?? '').toString();
+                      if (const {'completed', 'failed', 'cancelled'}.contains(status)) {
+                        t.cancel();
+                        if (!closed && Navigator.of(ctx).canPop()) {
+                          closed = true;
+                          Navigator.of(ctx).pop(lastJob);
+                        }
+                      }
+                    } catch (_) {
+                      // Keep polling; server-side job might be momentarily unavailable.
+                    }
+                  });
+                });
+              }
+
+              final status = (lastJob['status'] ?? 'queued').toString();
+              final processedRaw = lastJob['processed_rows'];
+              final totalRaw = lastJob['total_rows'];
+              final processed = processedRaw is num ? processedRaw.toInt() : 0;
+              final total = totalRaw is num ? totalRaw.toInt() : 0;
+
+              final progressWidget = total > 0
+                  ? LinearProgressIndicator(
+                      value: (processed / total).clamp(0.0, 1.0),
+                    )
+                  : const LinearProgressIndicator();
+
+              return AlertDialog(
+                title: const Text('Import in progress'),
+                content: SizedBox(
+                  width: 440,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      progressWidget,
+                      const SizedBox(height: NeyvoSpacing.sm),
+                      Text('Status: $status', style: NeyvoType.bodyMedium),
+                      const SizedBox(height: 6),
+                      Text(
+                        total > 0 ? 'Processed: $processed / $total' : 'Processed: $processed',
+                        style: NeyvoType.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Imported: ${(lastJob['imported'] ?? 0)} · Updated: ${(lastJob['updated'] ?? 0)} · Failed: ${(lastJob['failed'] ?? 0)}',
+                        style: NeyvoType.bodySmall,
+                      ),
+                      if (lastJob['cancel_requested'] == true) ...[
+                        const SizedBox(height: 8),
+                        Text('Cancel requested…', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                      ],
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: cancelRequested
+                        ? null
+                        : () async {
+                            try {
+                              setState(() => cancelRequested = true);
+                              await NeyvoPulseApi.cancelStudentsImportJob(jobId);
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Cancel failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      return finalJob;
+    } finally {
+      timer?.cancel();
+    }
+  }
+
   Future<void> _importCsv() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -863,17 +978,39 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
         importName: importName.isEmpty ? null : importName,
       );
       if (!mounted) return;
-      _load();
-      final imported = res['imported'] as int? ?? 0;
-      final updated = res['updated'] as int? ?? 0;
-      final failed = res['failed'] as int? ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Imported $imported, updated $updated${failed > 0 ? ', $failed failed' : ''}.',
+      final jobIdRaw = res['job_id'];
+      if (jobIdRaw != null) {
+        final jobId = jobIdRaw.toString();
+        final finalJob = await _showStudentsImportProgressDialog(jobId);
+        await _load();
+
+        final status = (finalJob?['status'] ?? res['status'] ?? '').toString();
+        final imported = finalJob?['imported'] is num ? (finalJob!['imported'] as num).toInt() : 0;
+        final updated = finalJob?['updated'] is num ? (finalJob!['updated'] as num).toInt() : 0;
+        final failed = finalJob?['failed'] is num ? (finalJob!['failed'] as num).toInt() : 0;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == 'cancelled'
+                  ? 'Import cancelled.'
+                  : 'Import finished: $imported imported, $updated updated${failed > 0 ? ', $failed failed' : ''}.',
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        await _load();
+        final imported = res['imported'] as int? ?? 0;
+        final updated = res['updated'] as int? ?? 0;
+        final failed = res['failed'] as int? ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported $imported, updated $updated${failed > 0 ? ', $failed failed' : ''}.',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1061,6 +1198,12 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   List<Map<String, String>> _validRows = [];
   List<String> _errorLines = [];
 
+  // Async import progress (Cloud Tasks job_id).
+  String? _activeJobId;
+  String _activeJobStatus = '';
+  int? _jobProcessedRows;
+  int? _jobTotalRows;
+
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -1158,6 +1301,50 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     try {
       final res = await NeyvoPulseApi.postStudentsImportCsv(_csvText);
       if (mounted) {
+        final jobIdRaw = res['job_id'];
+        if (jobIdRaw != null) {
+          final jobId = jobIdRaw.toString();
+          Map<String, dynamic> lastJob = {};
+          setState(() {
+            _activeJobId = jobId;
+            _activeJobStatus = 'queued';
+            _jobProcessedRows = null;
+            _jobTotalRows = null;
+            _loading = false;
+            _step = 3;
+          });
+          while (mounted) {
+            final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+            final payload = statusRes['job'] is Map
+                ? Map<String, dynamic>.from(statusRes['job'] as Map)
+                : statusRes;
+            lastJob = Map<String, dynamic>.from(payload);
+            final status = (lastJob['status'] ?? '').toString();
+            final processedRaw = lastJob['processed_rows'];
+            final totalRaw = lastJob['total_rows'];
+            setState(() {
+              _activeJobStatus = status;
+              _jobProcessedRows = processedRaw is num ? processedRaw.toInt() : null;
+              _jobTotalRows = totalRaw is num ? totalRaw.toInt() : null;
+            });
+            if (const {'completed', 'failed', 'cancelled'}.contains(status)) break;
+            await Future.delayed(const Duration(seconds: 2));
+          }
+
+          final errSample = (lastJob['error_sample'] as List?) ?? const [];
+          final errs = errSample.map((e) => e.toString()).toList();
+
+          setState(() {
+            _imported = lastJob['imported'] as int? ?? 0;
+            _updated = lastJob['updated'] as int? ?? 0;
+            _failed = lastJob['failed'] as int? ?? 0;
+            _errors = errs;
+            _loading = false;
+            _step = 3;
+          });
+          return;
+        }
+
         final rawErrs = res['errors'];
         final errs = <String>[];
         if (rawErrs is List) {
@@ -1179,6 +1366,10 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
           _updated = res['updated'] as int? ?? 0;
           _failed = res['failed'] as int? ?? 0;
           _errors = errs;
+          _activeJobId = null;
+          _activeJobStatus = '';
+          _jobProcessedRows = null;
+          _jobTotalRows = null;
           _loading = false;
           _step = 3;
         });
@@ -1194,7 +1385,16 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_step == 1 ? 'Import CSV' : _step == 2 ? 'Preview & validate' : 'Import complete'),
+      title: Text(
+        _step == 1
+            ? 'Import CSV'
+            : _step == 2
+                ? 'Preview & validate'
+                : (_activeJobId != null &&
+                        !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+                    ? 'Import in progress'
+                    : 'Import complete',
+      ),
       content: SizedBox(
         width: 540,
         child: _step == 1
@@ -1305,24 +1505,50 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle, size: 32, color: NeyvoColors.success),
-                      const SizedBox(height: 12),
-                      Text('Import complete', style: NeyvoType.titleMedium),
-                      const SizedBox(height: 8),
-                      Text('${_imported ?? 0} students imported | ${_updated ?? 0} updated', style: NeyvoType.bodyMedium),
-                      if ((_failed ?? 0) > 0) Text('${_failed} rows skipped', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error)),
-                      if (_errors.isNotEmpty) ...[
+                      if (_activeJobId != null &&
+                          !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+                        ...[
+                          Icon(Icons.cloud_upload_outlined, size: 32, color: NeyvoTheme.primary),
+                          const SizedBox(height: 12),
+                          Text('Import in progress', style: NeyvoType.titleMedium),
+                          const SizedBox(height: 8),
+                          _jobTotalRows != null && _jobTotalRows! > 0
+                              ? LinearProgressIndicator(
+                                  value: ((_jobProcessedRows ?? 0) / _jobTotalRows!).clamp(0.0, 1.0),
+                                )
+                              : const LinearProgressIndicator(),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_jobProcessedRows ?? 0} processed${_jobTotalRows != null ? ' / $_jobTotalRows' : ''}',
+                            style: NeyvoType.bodyMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Status: $_activeJobStatus',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+                          ),
+                        ]
+                      else ...[
+                        Icon(Icons.check_circle, size: 32, color: NeyvoColors.success),
                         const SizedBox(height: 12),
-                        ExpansionTile(
-                          title: Text('Show ${_errors.length} import errors', style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error)),
-                          children: _errors
-                              .take(50)
-                              .map((e) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(e, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13)),
-                                  ))
-                              .toList(),
-                        ),
+                        Text('Import complete', style: NeyvoType.titleMedium),
+                        const SizedBox(height: 8),
+                        Text('${_imported ?? 0} students imported | ${_updated ?? 0} updated', style: NeyvoType.bodyMedium),
+                        if ((_failed ?? 0) > 0)
+                          Text('${_failed} rows skipped', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error)),
+                        if (_errors.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ExpansionTile(
+                            title: Text('Show ${_errors.length} import errors', style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error)),
+                            children: _errors
+                                .take(50)
+                                .map((e) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Text(e, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13)),
+                                    ))
+                                .toList(),
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -1338,20 +1564,42 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
           ),
         ],
         if (_step == 3) ...[
-          TextButton(onPressed: () { widget.onDone(); }, child: const Text('View Students')),
+          if (_activeJobId != null && !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+            TextButton(
+              onPressed: () async {
+                try {
+                  await NeyvoPulseApi.cancelStudentsImportJob(_activeJobId!);
+                } catch (_) {}
+              },
+              child: const Text('Cancel'),
+            ),
+          TextButton(
+            onPressed: const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus)
+                ? () {
+                    widget.onDone();
+                  }
+                : null,
+            child: const Text('View Students'),
+          ),
           FilledButton(
-            onPressed: () {
-              setState(() {
-                _step = 1;
-                _csvText = '';
-                _imported = null;
-                _updated = null;
-                _failed = null;
-                _errors = [];
-                _validRows = [];
-                _errorLines = [];
-              });
-            },
+            onPressed: const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus)
+                ? () {
+                    setState(() {
+                      _step = 1;
+                      _csvText = '';
+                      _imported = null;
+                      _updated = null;
+                      _failed = null;
+                      _errors = [];
+                      _validRows = [];
+                      _errorLines = [];
+                      _activeJobId = null;
+                      _activeJobStatus = '';
+                      _jobProcessedRows = null;
+                      _jobTotalRows = null;
+                    });
+                  }
+                : null,
             child: const Text('Import Another'),
           ),
         ],

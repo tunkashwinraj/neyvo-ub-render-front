@@ -939,30 +939,115 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
   String _escapeCsv(String s) => s.replaceAll('"', '""');
 
-  /// Full campaign export (name, id, phone, status, outcome, action insights). Shows loading dialog; may take 5–10+ seconds.
+  /// Full campaign export (name, id, phone, status, outcome, action insights).
+  /// Uses async backend job + polling to avoid request timeout.
   Future<void> _exportCampaignFull(String campaignId) async {
     if (!mounted) return;
+    final DateTime exportStartedAt = DateTime.now();
+    int processedItems = 0;
+    int? totalItems;
+    String exportStatusLabel = 'Preparing export job...';
+    void Function(void Function())? setDialogState;
+    String _elapsedLabel() {
+      final elapsed = DateTime.now().difference(exportStartedAt);
+      final minutes = elapsed.inMinutes;
+      final seconds = elapsed.inSeconds % 60;
+      if (minutes <= 0) return '${seconds}s';
+      return '${minutes}m ${seconds}s';
+    }
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Building export'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: NeyvoSpacing.lg),
-            Text(
-              'Generating spreadsheet with action insights for all contacts. This may take 5–10 seconds or longer for large campaigns.',
-              style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-              textAlign: TextAlign.center,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, localSetState) {
+          setDialogState = localSetState;
+          final int safeTotal = totalItems ?? 0;
+          final int safeProcessed = processedItems.clamp(0, safeTotal > 0 ? safeTotal : processedItems);
+          final double? progress = safeTotal > 0 ? (safeProcessed / safeTotal).clamp(0.0, 1.0) : null;
+          return AlertDialog(
+            title: const Text('Building export'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LinearProgressIndicator(value: progress),
+                const SizedBox(height: NeyvoSpacing.md),
+                Text(
+                  exportStatusLabel,
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                if (safeTotal > 0) ...[
+                  const SizedBox(height: NeyvoSpacing.sm),
+                  Text(
+                    '$safeProcessed / $safeTotal contacts processed',
+                    style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: NeyvoSpacing.xs),
+                Text(
+                  'Elapsed: ${_elapsedLabel()}',
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: NeyvoSpacing.sm),
+                Text(
+                  'Generating spreadsheet with action insights for all contacts. This may take a few minutes for larger campaigns.',
+                  style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
     try {
-      final res = await NeyvoPulseApi.getCampaignExport(campaignId);
+      final create = await NeyvoPulseApi.createCampaignExportJob(campaignId);
+      Map<String, dynamic> res;
+      if (create['ok'] == true && (create['job_id'] ?? '').toString().isNotEmpty) {
+        setDialogState?.call(() {
+          exportStatusLabel = 'Export job started. Processing contacts...';
+        });
+        final jobId = (create['job_id'] ?? '').toString();
+        Map<String, dynamic>? terminalStatus;
+        for (int i = 0; i < 240; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+          final status = await NeyvoPulseApi.getCampaignExportJobStatus(jobId);
+          setDialogState?.call(() {
+            final int latestProcessed = (status['processed_items'] as num?)?.toInt() ?? 0;
+            final int? latestTotal = (status['total_items'] as num?)?.toInt();
+            processedItems = latestProcessed;
+            totalItems = latestTotal;
+            final stText = (status['status'] ?? '').toString();
+            exportStatusLabel = stText.isNotEmpty ? 'Status: $stText' : 'Processing contacts...';
+          });
+          final st = (status['status'] ?? '').toString().toLowerCase();
+          if (st == 'completed' || st == 'failed' || st == 'cancelled') {
+            terminalStatus = status;
+            break;
+          }
+        }
+        if (terminalStatus == null) {
+          throw Exception('Export timed out while waiting for completion');
+        }
+        final st = (terminalStatus['status'] ?? '').toString().toLowerCase();
+        if (st != 'completed') {
+          throw Exception(terminalStatus['error']?.toString() ?? 'Export ended with status: $st');
+        }
+        res = await NeyvoPulseApi.downloadCampaignExportJob(jobId);
+      } else {
+        // Fallback for environments where Cloud Tasks export queue is not enabled yet.
+        setDialogState?.call(() {
+          exportStatusLabel = 'Using direct export mode...';
+        });
+        res = await NeyvoPulseApi.getCampaignExport(
+          campaignId,
+          timeout: const Duration(minutes: 10),
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
       if (res['ok'] != true) {

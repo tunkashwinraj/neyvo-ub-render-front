@@ -1456,6 +1456,103 @@ class _ImportTabState extends State<_ImportTab> {
         importName: _importName.trim().isEmpty ? null : _importName.trim(),
       );
       if (!mounted) return;
+
+      final jobIdRaw = res['job_id'];
+      if (jobIdRaw != null) {
+        final jobId = jobIdRaw.toString();
+        final finalJob = await showDialog<Map<String, dynamic>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            Map<String, dynamic> lastJob = {};
+          bool started = false;
+
+            return StatefulBuilder(
+              builder: (ctx, setState) {
+              if (!started) {
+                started = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  // Poll until the job reaches a terminal state.
+                  while (mounted) {
+                    final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+                    final payload = statusRes['job'] is Map
+                        ? Map<String, dynamic>.from(statusRes['job'] as Map)
+                        : statusRes;
+                    lastJob = Map<String, dynamic>.from(payload);
+                    setState(() {});
+
+                    final status = (lastJob['status'] ?? '').toString();
+                    if (const {'completed', 'failed', 'cancelled'}.contains(status)) {
+                      if (Navigator.of(ctx).canPop()) {
+                        Navigator.of(ctx).pop(lastJob);
+                      }
+                      break;
+                    }
+                    await Future.delayed(const Duration(seconds: 2));
+                  }
+                });
+              }
+
+              final status = (lastJob['status'] ?? 'queued').toString();
+              final processedRaw = lastJob['processed_rows'];
+              final totalRaw = lastJob['total_rows'];
+              final processed = processedRaw is num ? processedRaw.toInt() : 0;
+              final total = totalRaw is num ? totalRaw.toInt() : 0;
+
+                return AlertDialog(
+                  title: const Text('Import in progress'),
+                  content: SizedBox(
+                    width: 440,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        total > 0
+                            ? LinearProgressIndicator(value: (processed / total).clamp(0.0, 1.0))
+                            : const LinearProgressIndicator(),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Text('Status: $status', style: NeyvoType.bodyMedium),
+                        const SizedBox(height: 6),
+                        Text(
+                          total > 0 ? 'Processed: $processed / $total' : 'Processed: $processed',
+                          style: NeyvoType.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        // Best-effort cancel; final status will be reflected by polling.
+                        try {
+                          await NeyvoPulseApi.cancelStudentsImportJob(jobId);
+                          setState(() {});
+                        } catch (_) {}
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+
+        if (!mounted) return;
+        final errSample = (finalJob?['error_sample'] as List?) ?? const [];
+        final errs = errSample.map((e) => e.toString()).toList();
+
+        setState(() {
+          _imported = finalJob?['imported'] as int? ?? 0;
+          _updated = finalJob?['updated'] as int? ?? 0;
+          _failed = finalJob?['failed'] as int? ?? 0;
+          _errors = errs;
+          _loading = false;
+          _step = 3;
+        });
+        return;
+      }
+
       final rawErrs = res['errors'];
       final errs = <String>[];
       if (rawErrs is List) {

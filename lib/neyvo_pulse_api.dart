@@ -520,10 +520,25 @@ class NeyvoPulseApi {
       SpeariaApi.getText('/api/pulse/students/import/template', params: _defaultAccountId.isNotEmpty ? {'account_id': _defaultAccountId} : null);
 
   /// POST /api/pulse/students/import/csv — send CSV content. Optional [importName] tags the batch (e.g. "Spring 2026 Nursing Cohort") for campaign targeting.
-  static Future<Map<String, dynamic>> postStudentsImportCsv(String csvContent, {String? importName}) async {
+  static Future<Map<String, dynamic>> postStudentsImportCsv(
+    String csvContent, {
+    String? importName,
+    int? chunkSize,
+  }) async {
     final body = <String, dynamic>{'csv': csvContent};
     if (importName != null && importName.trim().isNotEmpty) body['import_name'] = importName.trim();
+    if (chunkSize != null) body['chunk_size'] = chunkSize;
     return _post('/api/pulse/students/import/csv', body);
+  }
+
+  /// GET /api/pulse/students/import/jobs/{job_id}
+  static Future<Map<String, dynamic>> getStudentsImportJobStatus(String jobId) async {
+    return _get('/api/pulse/students/import/jobs/$jobId');
+  }
+
+  /// POST /api/pulse/students/import/jobs/{job_id}/cancel
+  static Future<Map<String, dynamic>> cancelStudentsImportJob(String jobId) async {
+    return _post('/api/pulse/students/import/jobs/$jobId/cancel', {});
   }
 
   // Payments
@@ -1278,9 +1293,22 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCallActionable(String campaignId, String vapiCallId) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls/${Uri.encodeComponent(vapiCallId)}/actionable');
 
-  /// Full campaign export: name, student id, phone, status, outcome, action insights (OpenAI). May take 5–10+ seconds.
-  static Future<Map<String, dynamic>> getCampaignExport(String campaignId) async =>
-      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export');
+  /// Full campaign export: name, student id, phone, status, outcome, action insights (OpenAI).
+  /// Large campaigns can take minutes, so callers can override timeout.
+  static Future<Map<String, dynamic>> getCampaignExport(
+    String campaignId, {
+    Duration timeout = const Duration(minutes: 10),
+  }) async =>
+      _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export', timeout: timeout);
+
+  static Future<Map<String, dynamic>> createCampaignExportJob(String campaignId) async =>
+      _post('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export/jobs', {});
+
+  static Future<Map<String, dynamic>> getCampaignExportJobStatus(String jobId) async =>
+      _get('/api/pulse/campaigns/export/jobs/${Uri.encodeComponent(jobId)}');
+
+  static Future<Map<String, dynamic>> downloadCampaignExportJob(String jobId) async =>
+      _get('/api/pulse/campaigns/export/jobs/${Uri.encodeComponent(jobId)}/download', timeout: const Duration(minutes: 5));
 
   /// List calls placed for a campaign (full call docs including transcript, outcome_type). Use [limit] to fetch more (e.g. 500 for "all").
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
