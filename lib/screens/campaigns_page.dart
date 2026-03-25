@@ -31,6 +31,10 @@ class CampaignsPage extends ConsumerStatefulWidget {
 
 class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   List<Map<String, dynamic>> _campaigns = [];
+  static const int _campaignsPageSize = 25;
+  String? _campaignsCursor;
+  bool _campaignsHasMore = false;
+  bool _campaignsLoadingMore = false;
   List<Map<String, dynamic>> _students = [];
   List<Map<String, dynamic>> _agents = [];
   static const int _studentsPageLimit = 50;
@@ -169,6 +173,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
         _campaigns = List<Map<String, dynamic>>.from(
           (cachedCamp['campaigns'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
         );
+        _campaignsCursor = cachedCamp['campaignsCursor'] as String?;
+        _campaignsHasMore = cachedCamp['campaignsHasMore'] is bool ? (cachedCamp['campaignsHasMore'] as bool) : false;
         _agents = List<Map<String, dynamic>>.from(
           (cachedCamp['agents'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
         );
@@ -235,7 +241,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       _lastCallAtByStudentId = {};
       _agents = agents;
       _operatorsForCampaign = operators;
-      _campaigns = await _loadCampaigns();
+      await _loadCampaigns(reset: true);
       // Check if account has a number: from account info (primary) or from GET /api/numbers
       bool hasNumber = false;
       try {
@@ -279,6 +285,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           'studentsCursor': _studentsCursor,
           'studentsHasMore': _studentsHasMore,
           'campaigns': _campaigns,
+          'campaignsCursor': _campaignsCursor,
+          'campaignsHasMore': _campaignsHasMore,
           'agents': _agents,
           'operators': _operatorsForCampaign,
           'isEdu': isEdu,
@@ -573,32 +581,67 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
     });
   }
 
-  Future<List<Map<String, dynamic>>> _loadCampaigns() async {
+  Map<String, List<String>> _buildStudentCampaignNames(List<Map<String, dynamic>> campaigns) {
+    final byStudent = <String, Set<String>>{};
+    for (final c in campaigns) {
+      final ids = c['student_ids'];
+      if (ids is! List) continue;
+      final cname = (c['name'] ?? c['id'] ?? 'Campaign').toString().trim();
+      if (cname.isEmpty) continue;
+      for (final raw in ids) {
+        final sid = (raw ?? '').toString().trim();
+        if (sid.isEmpty) continue;
+        (byStudent[sid] ??= <String>{}).add(cname);
+      }
+    }
+    return byStudent.map((k, v) => MapEntry(k, v.toList()..sort()));
+  }
+
+  Future<void> _loadCampaigns({required bool reset}) async {
+    if (_campaignsLoadingMore) return;
+    if (!reset && !_campaignsHasMore) return;
+    if (!mounted) return;
+    setState(() {
+      _campaignsLoadingMore = true;
+      if (reset) {
+        _campaignsCursor = null;
+      }
+    });
+
     try {
-      final res = await NeyvoPulseApi.listCampaigns();
+      final res = await NeyvoPulseApi.listCampaigns(
+        limit: _campaignsPageSize,
+        cursor: reset ? '__start__' : _campaignsCursor,
+      );
       final list = res['campaigns'] as List? ?? [];
-      final campaigns = list.cast<Map<String, dynamic>>();
-      // Build a student->campaigns lookup (only where the campaign explicitly stores student_ids).
-      final byStudent = <String, Set<String>>{};
-      for (final c in campaigns) {
-        final ids = c['student_ids'];
-        if (ids is! List) continue; // filter-based campaigns don't list student ids
-        final cname = (c['name'] ?? c['id'] ?? 'Campaign').toString().trim();
-        if (cname.isEmpty) continue;
-        for (final raw in ids) {
-          final sid = (raw ?? '').toString().trim();
-          if (sid.isEmpty) continue;
-          (byStudent[sid] ??= <String>{}).add(cname);
+      final page = list.cast<Map<String, dynamic>>();
+      final nextCursor = (res['next_cursor'] ?? res['nextCursor'])?.toString();
+
+      if (!mounted) return;
+      setState(() {
+        if (reset) {
+          _campaigns = page;
+        } else {
+          final existing = _campaigns.map((e) => (e['id'] ?? '').toString()).where((e) => e.isNotEmpty).toSet();
+          final deduped = page.where((e) => !existing.contains((e['id'] ?? '').toString())).toList();
+          _campaigns.addAll(deduped);
         }
-      }
-      if (mounted) {
-        setState(() {
-          _studentCampaignNames = byStudent.map((k, v) => MapEntry(k, v.toList()..sort()));
-        });
-      }
-      return campaigns;
+        _campaignsCursor = nextCursor;
+        _campaignsHasMore = nextCursor != null;
+        _studentCampaignNames = _buildStudentCampaignNames(_campaigns);
+        _campaignsLoadingMore = false;
+      });
     } catch (_) {
-      return [];
+      if (!mounted) return;
+      setState(() {
+        _campaignsLoadingMore = false;
+        if (reset) {
+          _campaigns = [];
+          _campaignsCursor = null;
+          _campaignsHasMore = false;
+          _studentCampaignNames = {};
+        }
+      });
     }
   }
 
@@ -2028,96 +2071,118 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
               )
             else
               ..._campaigns.map((c) => Card(
-                  color: NeyvoTheme.bgCard,
-                  margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: NeyvoTheme.bgHover,
-                      child: Icon(
-                        Icons.campaign_outlined,
-                        color: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    title: Text(c['name']?.toString() ?? 'Unnamed', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
-                    subtitle: Text(
-                      '${c['total_planned'] ?? c['student_count'] ?? 0} contacts • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
-                      style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
-                    ),
-                    onTap: () {
-                      final id = c['id']?.toString();
-                      if (id == null) return;
-                      setState(() {
-                        _detailStatusFilter = 'all';
-                        _selectedCampaignId = id;
-                        _selectedActionsTabVapiCallId = null;
-                        _campaignDetailBundleFuture = _fetchCampaignDetailBundle(id);
-                      });
-                      _startDetailAutoRefresh();
-                    },
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.visibility_outlined),
-                          tooltip: 'View & manage',
-                          onPressed: () {
-                            final id = c['id']?.toString();
-                            if (id == null) return;
-                            setState(() {
-                              _detailStatusFilter = 'all';
-                              _selectedCampaignId = id;
-                              _selectedActionsTabVapiCallId = null;
-                              _campaignDetailBundleFuture = _fetchCampaignDetailBundle(id);
-                            });
-                            _startDetailAutoRefresh();
-                          },
+                    color: NeyvoTheme.bgCard,
+                    margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: NeyvoTheme.bgHover,
+                        child: Icon(
+                          Icons.campaign_outlined,
+                          color: true ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary,
                         ),
-                        if (c['status'] != 'running')
+                      ),
+                      title: Text(c['name']?.toString() ?? 'Unnamed', style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary)),
+                      subtitle: Text(
+                        '${c['total_planned'] ?? c['student_count'] ?? 0} contacts • ${c['status'] ?? 'draft'}${(c['total_initiated'] ?? 0) > 0 ? ' • ${c['total_initiated']} placed' : ''}',
+                        style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                      ),
+                      onTap: () {
+                        final id = c['id']?.toString();
+                        if (id == null) return;
+                        setState(() {
+                          _detailStatusFilter = 'all';
+                          _selectedCampaignId = id;
+                          _selectedActionsTabVapiCallId = null;
+                          _campaignDetailBundleFuture = _fetchCampaignDetailBundle(id);
+                        });
+                        _startDetailAutoRefresh();
+                      },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: 'Delete campaign',
-                            onPressed: () => _confirmDeleteCampaign(c['id']?.toString() ?? '', c['name']?.toString() ?? 'Campaign'),
-                          ),
-                        if (c['status'] == 'draft' || c['status'] == 'scheduled') ...[
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: 'Edit campaign',
+                            icon: const Icon(Icons.visibility_outlined),
+                            tooltip: 'View & manage',
                             onPressed: () {
-                              _nameController.text = c['name']?.toString() ?? '';
-                              final aid = (c['agent_id'] ?? '').toString().trim();
-                              final pid = (c['profile_id'] ?? '').toString().trim();
-                              _selectedAgentId = aid.isNotEmpty ? aid : null;
-                              _selectedOperatorValue = pid.isNotEmpty ? 'profile:$pid' : (aid.isNotEmpty ? 'agent:$aid' : null);
-                              _selectedStudentIds = {};
-                              final ids = c['student_ids'];
-                              if (ids is List) _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
-                              _scheduleNow = c['scheduled_at'] == null;
-                              _scheduledAt = null;
-                              if (c['scheduled_at'] != null) _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                              final id = c['id']?.toString();
+                              if (id == null) return;
                               setState(() {
-                                _editingCampaignId = c['id']?.toString();
-                                _editCampaignData = Map<String, dynamic>.from(c);
-                                _showCreateWizard = true;
-                                _wizardStep = 0;
+                                _detailStatusFilter = 'all';
+                                _selectedCampaignId = id;
+                                _selectedActionsTabVapiCallId = null;
+                                _campaignDetailBundleFuture = _fetchCampaignDetailBundle(id);
                               });
+                              _startDetailAutoRefresh();
                             },
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.play_arrow),
-                            tooltip: 'Start campaign',
-                            onPressed: () => _startOrRerunCampaign(c),
-                          ),
+                          if (c['status'] != 'running')
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Delete campaign',
+                              onPressed: () => _confirmDeleteCampaign(c['id']?.toString() ?? '', c['name']?.toString() ?? 'Campaign'),
+                            ),
+                          if (c['status'] == 'draft' || c['status'] == 'scheduled') ...[
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              tooltip: 'Edit campaign',
+                              onPressed: () {
+                                _nameController.text = c['name']?.toString() ?? '';
+                                final aid = (c['agent_id'] ?? '').toString().trim();
+                                final pid = (c['profile_id'] ?? '').toString().trim();
+                                _selectedAgentId = aid.isNotEmpty ? aid : null;
+                                _selectedOperatorValue = pid.isNotEmpty ? 'profile:$pid' : (aid.isNotEmpty ? 'agent:$aid' : null);
+                                _selectedStudentIds = {};
+                                final ids = c['student_ids'];
+                                if (ids is List) _selectedStudentIds = ids.map((e) => e?.toString()).whereType<String>().toSet();
+                                _scheduleNow = c['scheduled_at'] == null;
+                                _scheduledAt = null;
+                                if (c['scheduled_at'] != null) _scheduledAt = DateTime.tryParse(c['scheduled_at'].toString());
+                                setState(() {
+                                  _editingCampaignId = c['id']?.toString();
+                                  _editCampaignData = Map<String, dynamic>.from(c);
+                                  _showCreateWizard = true;
+                                  _wizardStep = 0;
+                                });
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.play_arrow),
+                              tooltip: 'Start campaign',
+                              onPressed: () => _startOrRerunCampaign(c),
+                            ),
+                          ],
+                          if (c['status'] == 'completed' || c['status'] == 'running')
+                            IconButton(
+                              icon: const Icon(Icons.replay),
+                              tooltip: 'Rerun campaign',
+                              onPressed: () => _startOrRerunCampaign(c),
+                            ),
                         ],
-                        if (c['status'] == 'completed' || c['status'] == 'running')
-                          IconButton(
-                            icon: const Icon(Icons.replay),
-                            tooltip: 'Rerun campaign',
-                            onPressed: () => _startOrRerunCampaign(c),
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-                )),
+                  )),
+            if (_campaigns.isNotEmpty) ...[
+              const SizedBox(height: NeyvoSpacing.sm),
+              Text(
+                'Loaded ${_campaigns.length} campaigns',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted),
+              ),
+              const SizedBox(height: NeyvoSpacing.sm),
+              Center(
+                child: _campaignsHasMore
+                    ? FilledButton(
+                        onPressed: _campaignsLoadingMore ? null : () => _loadCampaigns(reset: false),
+                        child: _campaignsLoadingMore
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Load more'),
+                      )
+                    : Text('No more campaigns', style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textMuted)),
+              ),
+            ],
           ],
         ),
       ),

@@ -1165,10 +1165,18 @@ class NeyvoPulseApi {
   /// List campaigns for the school. Pass [limit] to control how many are returned (default 100).
   static Future<Map<String, dynamic>> listCampaigns({
     int limit = 100,
+    String? cursor,
     Duration? timeout,
   }) async {
     try {
-      return await _get('/api/pulse/campaigns', params: {'limit': limit}, timeout: timeout);
+      return await _get(
+        '/api/pulse/campaigns',
+        params: {
+          'limit': limit,
+          if (cursor != null) 'cursor': cursor,
+        },
+        timeout: timeout,
+      );
     } catch (_) {
       return {'campaigns': []};
     }
