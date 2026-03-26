@@ -1026,6 +1026,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
     final nameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
+    final advisorNameC = TextEditingController();
+    final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
@@ -1077,6 +1079,22 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
               ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)', hintText: 'Email address')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: advisorNameC,
+                decoration: const InputDecoration(
+                  labelText: 'Advisor name (optional)',
+                  hintText: 'Used for {{advisor_name}}',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: bookingUrlC,
+                decoration: const InputDecoration(
+                  labelText: 'Booking URL (optional)',
+                  hintText: 'Used for {{booking_url}}',
+                ),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student ID (optional)', hintText: 'Internal ID or reference')),
               const SizedBox(height: NeyvoSpacing.md),
@@ -1137,6 +1155,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
                   notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
                   department: departmentC.text.trim().isEmpty ? null : departmentC.text.trim(),
                   yearOfStudy: yearOfStudyC.text.trim().isEmpty ? null : yearOfStudyC.text.trim(),
+                  advisorName: advisorNameC.text.trim().isEmpty ? null : advisorNameC.text.trim(),
+                  bookingUrl: bookingUrlC.text.trim().isEmpty ? null : bookingUrlC.text.trim(),
                 );
                 if (context.mounted) {
                   navigator.pop();

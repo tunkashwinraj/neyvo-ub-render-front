@@ -30,6 +30,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
   final _lastName = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
+  final _advisorName = TextEditingController();
+  final _bookingUrl = TextEditingController();
   final _balance = TextEditingController();
   final _dueDate = TextEditingController();
   final _lateFee = TextEditingController();
@@ -52,6 +54,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
     _name.dispose();
     _phone.dispose();
     _email.dispose();
+    _advisorName.dispose();
+    _bookingUrl.dispose();
     _balance.dispose();
     _dueDate.dispose();
     _lateFee.dispose();
@@ -75,6 +79,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
     _lastName.text = s['last_name']?.toString() ?? '';
     _phone.text = s['phone']?.toString() ?? '';
     _email.text = s['email']?.toString() ?? '';
+    _advisorName.text = s['advisor_name']?.toString() ?? '';
+    _bookingUrl.text = s['booking_url']?.toString() ?? '';
     _balance.text = s['balance']?.toString() ?? '';
     _dueDate.text = s['due_date']?.toString() ?? '';
     _lateFee.text = s['late_fee']?.toString() ?? '';
@@ -124,6 +130,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
         lastName: _lastName.text.trim().isNotEmpty ? _lastName.text.trim() : null,
         phone: normalizePhoneInput(_phone.text.trim()),
         email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+        advisorName: _advisorName.text.trim().isEmpty ? null : _advisorName.text.trim(),
+        bookingUrl: _bookingUrl.text.trim().isEmpty ? null : _bookingUrl.text.trim(),
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
@@ -484,6 +492,22 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
               ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: _advisorName,
+                decoration: const InputDecoration(
+                  labelText: 'Advisor name (optional)',
+                  hintText: 'Used for {{advisor_name}}',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: _bookingUrl,
+                decoration: const InputDecoration(
+                  labelText: 'Booking URL (optional)',
+                  hintText: 'Used for {{booking_url}}',
+                ),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _studentId, decoration: const InputDecoration(labelText: 'Student ID (school internal)', hintText: 'Optional')),
               const SizedBox(height: NeyvoSpacing.md),

@@ -10,7 +10,7 @@
           "goodwin-neyvo"
         ],
         "staging": [
-          "goodwin-neyvo-staging"
+          "https://neyvoub-back.onrender.com"
         ]
       }
     }

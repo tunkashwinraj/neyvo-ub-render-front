@@ -456,6 +456,8 @@ class NeyvoPulseApi {
     String? lastName,
     String? department,
     String? yearOfStudy,
+    String? advisorName,
+    String? bookingUrl,
   }) async =>
       _post('/api/pulse/students', {
         'name': name,
@@ -470,6 +472,8 @@ class NeyvoPulseApi {
         if (lastName != null) 'last_name': lastName,
         if (department != null) 'department': department,
         if (yearOfStudy != null) 'year_of_study': yearOfStudy,
+        if (advisorName != null) 'advisor_name': advisorName,
+        if (bookingUrl != null) 'booking_url': bookingUrl,
       });
 
   static Future<Map<String, dynamic>> updateStudent(
@@ -487,6 +491,8 @@ class NeyvoPulseApi {
     String? lastName,
     String? department,
     String? yearOfStudy,
+    String? advisorName,
+    String? bookingUrl,
   }) async =>
       _patch('/api/pulse/students/$studentId', {
         if (name != null) 'name': name,
@@ -502,6 +508,8 @@ class NeyvoPulseApi {
         if (lastName != null) 'last_name': lastName,
         if (department != null) 'department': department,
         if (yearOfStudy != null) 'year_of_study': yearOfStudy,
+        if (advisorName != null) 'advisor_name': advisorName,
+        if (bookingUrl != null) 'booking_url': bookingUrl,
       });
 
   static Future<void> deleteStudent(String studentId) async {

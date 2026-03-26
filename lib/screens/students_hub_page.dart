@@ -155,6 +155,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     final lastNameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
+    final advisorNameC = TextEditingController();
+    final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
@@ -220,6 +222,22 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                             decoration: const InputDecoration(
                               labelText: 'Email (optional)',
                               hintText: 'Email address',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: advisorNameC,
+                            decoration: const InputDecoration(
+                              labelText: 'Advisor name (optional)',
+                              hintText: 'Name used for {{advisor_name}}',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: bookingUrlC,
+                            decoration: const InputDecoration(
+                              labelText: 'Booking URL (optional)',
+                              hintText: 'Used for {{booking_url}}',
                             ),
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
@@ -323,6 +341,9 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       ? null
                       : studentIdC.text.trim(),
                   notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
+                  advisorName:
+                      advisorNameC.text.trim().isEmpty ? null : advisorNameC.text.trim(),
+                  bookingUrl: bookingUrlC.text.trim().isEmpty ? null : bookingUrlC.text.trim(),
                 );
                 if (!context.mounted) return;
                 navigator.pop();
@@ -343,6 +364,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     lastNameC.dispose();
     phoneC.dispose();
     emailC.dispose();
+    advisorNameC.dispose();
+    bookingUrlC.dispose();
     balanceC.dispose();
     dueDateC.dispose();
     lateFeeC.dispose();
