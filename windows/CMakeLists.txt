@@ -1,5 +1,11 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
+# CMake 4.0+ removed compatibility with cmake_minimum_required(VERSION < 3.5) used inside
+# the Firebase C++ SDK (flutterfire extracts it under build/windows/.../firebase_cpp_sdk_windows).
+# Without this, Windows builds fail with "Compatibility with CMake < 3.5 has been removed".
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+  set(CMAKE_POLICY_VERSION_MINIMUM "3.5" CACHE STRING "CMake 4 + Firebase Windows SDK" FORCE)
+endif()
 project(neyvo_pulse_front LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change

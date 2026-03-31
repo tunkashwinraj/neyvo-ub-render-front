@@ -2,29 +2,30 @@
 // Conversation scripts/templates for the AI assistant (choose, modify, create).
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers/template_scripts_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
 
-class TemplateScriptsPage extends StatefulWidget {
+class TemplateScriptsPage extends ConsumerStatefulWidget {
   const TemplateScriptsPage({super.key});
 
   @override
-  State<TemplateScriptsPage> createState() => _TemplateScriptsPageState();
+  ConsumerState<TemplateScriptsPage> createState() => _TemplateScriptsPageState();
 }
 
-class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
-  List<Map<String, dynamic>> _templates = [];
-  bool _loading = true;
-  String? _error;
-  bool _showEditor = false;
-  String? _editingId;
+class _TemplateScriptsPageState extends ConsumerState<TemplateScriptsPage> {
   final _nameController = TextEditingController();
   final _bodyController = TextEditingController();
+  String? _editorSyncSig;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(templateScriptsCtrlProvider.notifier).load();
+    });
   }
 
   @override
@@ -34,55 +35,29 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final res = await NeyvoPulseApi.listCallTemplates();
-      final list = res['templates'] as List? ?? [];
-      _templates = list.cast<Map<String, dynamic>>();
-      if (mounted) setState(() => _loading = false);
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  void _openEditor({Map<String, dynamic>? template}) {
-    _editingId = template?['id']?.toString();
-    _nameController.text = template?['name']?.toString() ?? '';
-    _bodyController.text = template?['body']?.toString() ?? template?['script']?.toString() ?? '';
-    setState(() => _showEditor = true);
-  }
-
-  void _closeEditor() {
-    _editingId = null;
-    _nameController.clear();
-    _bodyController.clear();
-    setState(() => _showEditor = false);
-  }
-
-  Future<void> _saveTemplate() async {
-    final name = _nameController.text.trim();
-    final body = _bodyController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter template name')));
+  void _syncEditorIfNeeded(TemplateScriptsUiState ui) {
+    if (!ui.showEditor) {
+      _editorSyncSig = null;
       return;
     }
-    try {
-      if (_editingId != null) {
-        await NeyvoPulseApi.updateCallTemplate(_editingId!, name: name, body: body);
-      } else {
-        await NeyvoPulseApi.createCallTemplate(name: name, body: body);
+    final sig = ui.editingId ?? 'new';
+    if (_editorSyncSig == sig) return;
+    _editorSyncSig = sig;
+    if (ui.editingId == null) {
+      _nameController.clear();
+      _bodyController.clear();
+      return;
+    }
+    Map<String, dynamic>? found;
+    for (final t in ui.templates) {
+      if (t['id']?.toString() == ui.editingId) {
+        found = t;
+        break;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved'), backgroundColor: NeyvoTheme.success));
-        _closeEditor();
-        _load();
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+    }
+    if (found != null) {
+      _nameController.text = found['name']?.toString() ?? '';
+      _bodyController.text = found['body']?.toString() ?? found['script']?.toString() ?? '';
     }
   }
 
@@ -98,6 +73,35 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
     );
   }
 
+  Future<void> _saveTemplate() async {
+    final ui = ref.read(templateScriptsCtrlProvider);
+    final name = _nameController.text.trim();
+    final body = _bodyController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter template name')));
+      return;
+    }
+    try {
+      if (ui.editingId != null) {
+        await NeyvoPulseApi.updateCallTemplate(ui.editingId!, name: name, body: body);
+      } else {
+        await NeyvoPulseApi.createCallTemplate(name: name, body: body);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved'), backgroundColor: NeyvoTheme.success),
+      );
+      ref.read(templateScriptsCtrlProvider.notifier).closeEditor();
+      await ref.read(templateScriptsCtrlProvider.notifier).load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteTemplate(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -111,24 +115,30 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
     );
     if (confirm != true) return;
     try {
-      await NeyvoPulseApi.deleteCallTemplate(id);
+      await ref.read(templateScriptsCtrlProvider.notifier).deleteTemplate(id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleted')));
-        _load();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: NeyvoTheme.error),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _templates.isEmpty) {
+    final ui = ref.watch(templateScriptsCtrlProvider);
+    _syncEditorIfNeeded(ui);
+
+    if (ui.loading && ui.templates.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_showEditor) {
-      return _buildEditor();
+    if (ui.showEditor) {
+      return _buildEditor(ui);
     }
 
     return SingleChildScrollView(
@@ -136,8 +146,8 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_error != null) ...[
-            Text(_error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
+          if (ui.error != null) ...[
+            Text(ui.error!, style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.error)),
             const SizedBox(height: NeyvoSpacing.md),
           ],
           Row(
@@ -154,14 +164,14 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                 ),
               ),
               FilledButton.icon(
-                onPressed: () => _openEditor(),
+                onPressed: () => ref.read(templateScriptsCtrlProvider.notifier).openEditor(),
                 icon: const Icon(Icons.add, size: 20),
                 label: const Text('New template'),
               ),
             ],
           ),
           const SizedBox(height: NeyvoSpacing.xl),
-          if (_templates.isEmpty)
+          if (ui.templates.isEmpty)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(NeyvoSpacing.xl),
@@ -173,7 +183,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                       Text('No templates yet', style: NeyvoType.bodyLarge.copyWith(color: NeyvoTheme.textSecondary)),
                       const SizedBox(height: NeyvoSpacing.sm),
                       TextButton.icon(
-                        onPressed: () => _openEditor(),
+                        onPressed: () => ref.read(templateScriptsCtrlProvider.notifier).openEditor(),
                         icon: const Icon(Icons.add),
                         label: const Text('Create first template'),
                       ),
@@ -183,7 +193,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
               ),
             )
           else
-            ..._templates.map((t) => Card(
+            ...ui.templates.map((t) => Card(
                   margin: const EdgeInsets.only(bottom: NeyvoSpacing.md),
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.description_outlined)),
@@ -213,8 +223,14 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(icon: const Icon(Icons.edit), onPressed: () => _openEditor(template: t)),
-                        IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _deleteTemplate(t['id']?.toString() ?? '')),
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => ref.read(templateScriptsCtrlProvider.notifier).openEditor(template: t),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _deleteTemplate(t['id']?.toString() ?? ''),
+                        ),
                       ],
                     ),
                   ),
@@ -224,7 +240,7 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
     );
   }
 
-  Widget _buildEditor() {
+  Widget _buildEditor(TemplateScriptsUiState ui) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(NeyvoSpacing.xl),
       child: Column(
@@ -232,8 +248,11 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
         children: [
           Row(
             children: [
-              IconButton(icon: const Icon(Icons.close), onPressed: _closeEditor),
-              Text(_editingId == null ? 'New template' : 'Edit template', style: NeyvoType.headlineMedium),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => ref.read(templateScriptsCtrlProvider.notifier).closeEditor(),
+              ),
+              Text(ui.editingId == null ? 'New template' : 'Edit template', style: NeyvoType.headlineMedium),
             ],
           ),
           const SizedBox(height: NeyvoSpacing.lg),
@@ -275,9 +294,16 @@ class _TemplateScriptsPageState extends State<TemplateScriptsPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(onPressed: _closeEditor, child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => ref.read(templateScriptsCtrlProvider.notifier).closeEditor(),
+                        child: const Text('Cancel'),
+                      ),
                       const SizedBox(width: NeyvoSpacing.md),
-                      FilledButton.icon(onPressed: _saveTemplate, icon: const Icon(Icons.save, size: 18), label: const Text('Save')),
+                      FilledButton.icon(
+                        onPressed: _saveTemplate,
+                        icon: const Icon(Icons.save, size: 18),
+                        label: const Text('Save'),
+                      ),
                     ],
                   ),
                 ],

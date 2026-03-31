@@ -4,10 +4,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../api/api_response_cache.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import 'member_detail_page.dart';
 
 /// Fixed width for Add/Edit team member dialogs (same for admin and staff).
@@ -36,8 +36,6 @@ class _TeamPageState extends State<TeamPage> {
   String? _myName;
   String? _myUserId;
   List<String>? _myPermissions;
-  String? _currentAccountId;
-  List<String> _orgAccountIds = [];
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
   String? _error;
@@ -69,33 +67,60 @@ class _TeamPageState extends State<TeamPage> {
     super.dispose();
   }
 
+  String get _swrKey => '${NeyvoPulseApi.defaultAccountId}_team';
+
+  void _applyTeamCache(Map<String, dynamic> c) {
+    final permsRaw = c['permissions'];
+    final permsList = permsRaw is List
+        ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
+        : null;
+    _myRole = c['myRole'] as String?;
+    _myEmail = c['myEmail'] as String?;
+    _myName = c['myName'] as String?;
+    _myUserId = c['myUserId'] as String?;
+    _myPermissions = permsList;
+    _members = List<Map<String, dynamic>>.from(
+      c['members'] as List? ?? [],
+    );
+  }
+
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final cached = ApiResponseCache.get(_swrKey);
+    if (cached is Map<String, dynamic>) {
+      setState(() {
+        _applyTeamCache(cached);
+        _loading = false;
+        _error = null;
+      });
+    } else {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         NeyvoPulseApi.getMyRole(),
         NeyvoPulseApi.listMembers(),
-        NeyvoPulseApi.getAccountInfo(),
-        NeyvoPulseApi.getAccountOrgs(),
       ]);
       final roleRes = results[0] as Map<String, dynamic>;
       final membersRes = results[1] as Map<String, dynamic>;
-      final accountRes = results[2] as Map<String, dynamic>;
-      final orgsRes = results[3] as Map<String, dynamic>;
       if (!mounted) return;
-      final orgsList = orgsRes['orgs'] as List? ?? [];
-      final orgIds = orgsList
-          .map((e) => (e is Map ? e['account_id'] : e?.toString())?.toString())
-          .where((s) => s != null && s.isNotEmpty)
-          .cast<String>()
-          .toList();
       final permsRaw = roleRes['permissions'];
       final permsList = permsRaw is List
           ? (permsRaw).map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).cast<String>().toList()
           : null;
+      final snap = <String, dynamic>{
+        'myRole': roleRes['role']?.toString(),
+        'myEmail': roleRes['email']?.toString(),
+        'myName': (roleRes['name'] ?? '').toString().trim().isNotEmpty
+            ? roleRes['name']?.toString().trim()
+            : null,
+        'myUserId': roleRes['user_id']?.toString(),
+        'permissions': permsRaw,
+        'members': membersRes['members'] as List? ?? [],
+      };
+      ApiResponseCache.set(_swrKey, snap, ttl: const Duration(seconds: 60));
       setState(() {
         _myRole = roleRes['role']?.toString();
         _myEmail = roleRes['email']?.toString();
@@ -107,28 +132,17 @@ class _TeamPageState extends State<TeamPage> {
         _members = List<Map<String, dynamic>>.from(
           membersRes['members'] as List? ?? [],
         );
-        _currentAccountId = accountRes['account_id']?.toString();
-        _orgAccountIds = orgIds;
         _loading = false;
       });
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _switchOrg(String accountId) async {
-    if (accountId == _currentAccountId) return;
-    try {
-      await NeyvoPulseApi.linkUserToAccount(accountId);
-      if (!mounted) return;
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
+      if (cached == null) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -150,7 +164,7 @@ class _TeamPageState extends State<TeamPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Team'),
@@ -304,7 +318,7 @@ class _TeamPageState extends State<TeamPage> {
                                       child: Row(
                                         children: [
                                           CircleAvatar(
-                                            backgroundColor: TenantBrand.primary(context)
+                                            backgroundColor: Theme.of(context).colorScheme.primary
                                                 .withOpacity(0.1),
                                             child: Text(
                                               display.isNotEmpty
@@ -312,7 +326,7 @@ class _TeamPageState extends State<TeamPage> {
                                                       .toUpperCase()
                                                   : '?',
                                               style: TextStyle(
-                                                color: TenantBrand.primary(context),
+                                                color: Theme.of(context).colorScheme.primary,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -362,7 +376,7 @@ class _TeamPageState extends State<TeamPage> {
       floatingActionButton: _canAddMember
           ? FloatingActionButton(
               onPressed: _openAddMember,
-              backgroundColor: TenantBrand.primary(context),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               child: const Icon(Icons.add),
             )
           : null,
@@ -622,7 +636,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
+                      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -648,7 +662,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
           child: const Text('Add'),
         ),
       ],
@@ -682,6 +696,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _officeController;
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
+  late TextEditingController _bookingUrlController;
 
   @override
   void initState() {
@@ -716,6 +731,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _campusController = TextEditingController(
       text: (widget.member['campus'] ?? '').toString().trim(),
     );
+    _bookingUrlController = TextEditingController(
+      text: (widget.member['booking_url'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -728,6 +746,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _officeController.dispose();
     _extensionController.dispose();
     _campusController.dispose();
+    _bookingUrlController.dispose();
     super.dispose();
   }
 
@@ -768,6 +787,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
+        bookingUrl: _bookingUrlController.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -887,6 +907,16 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _bookingUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Booking / scheduling URL (optional)',
+                hintText: 'https://calendly.com/...',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
             DropdownButtonFormField<String>(
               value: _role,
               decoration: const InputDecoration(labelText: 'Role'),
@@ -920,7 +950,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
                         label,
                         style: NeyvoTextStyles.bodyPrimary,
                       ),
-                      selectedColor: TenantBrand.primary(context).withOpacity(0.2),
+                      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
@@ -946,7 +976,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         ),
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
           child: const Text('Save'),
         ),
       ],

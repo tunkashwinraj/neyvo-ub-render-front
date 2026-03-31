@@ -2,96 +2,42 @@
 // Voice OS – Numbers Hub: Production numbers only.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/spearia_api.dart';
-import '../features/managed_profiles/managed_profile_api_service.dart';
-import '../neyvo_pulse_api.dart';
-import '../tenant/tenant_brand.dart';
+import '../api/neyvo_api.dart';
+import '../core/providers/numbers_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 
-class PhoneNumbersPage extends StatefulWidget {
+class PhoneNumbersPage extends ConsumerStatefulWidget {
   const PhoneNumbersPage({super.key});
 
   @override
-  State<PhoneNumbersPage> createState() => _PhoneNumbersPageState();
+  ConsumerState<PhoneNumbersPage> createState() => _PhoneNumbersPageState();
 }
 
-class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
-  bool _loading = true;
-  String? _error;
-
-  Map<String, dynamic> _account = const {};
-  List<Map<String, dynamic>> _numbers = const [];
-  List<Map<String, dynamic>> _profiles = const [];
-
-  final Map<String, bool> _attaching = {};
-  bool _syncingFromVapi = false;
-  bool _importing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
+class _PhoneNumbersPageState extends ConsumerState<PhoneNumbersPage> {
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getAccountInfo(),
-        NeyvoPulseApi.listNumbers(),
-        ManagedProfileApiService.listProfiles(),
-      ]);
-
-      final account = results[0] as Map<String, dynamic>;
-      final numbersRes = results[1] as Map<String, dynamic>;
-      final profilesRes = results[2] as Map<String, dynamic>;
-
-      final raw = (numbersRes['numbers'] as List?) ?? (numbersRes['items'] as List?) ?? const [];
-      final numbers = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-      final profList = (profilesRes['profiles'] as List?)?.cast<dynamic>() ?? const [];
-      final profiles = profList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-      if (!mounted) return;
-      setState(() {
-        _account = account;
-        _numbers = numbers;
-        _profiles = profiles;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
+    ref.invalidate(numbersNotifierProvider);
   }
 
   Future<void> _syncFromVapi() async {
-    setState(() => _syncingFromVapi = true);
+    ref.read(numbersSyncBusyProvider.notifier).setBusy(true);
     try {
-      final res = await NeyvoPulseApi.syncNumbersFromVapi();
+      final res = await ref.read(numbersNotifierProvider.notifier).syncNumbersFromVapi();
       if (!mounted) return;
       final added = res['added_count'] as int? ?? 0;
       final message = res['message'] as String? ?? (added > 0 ? 'Added $added number(s) from VAPI.' : 'No new numbers to add.');
-      setState(() => _syncingFromVapi = false);
-      await _load();
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _syncingFromVapi = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) ref.read(numbersSyncBusyProvider.notifier).setBusy(false);
     }
   }
 
-  Future<void> _openImportNumber() async {
+  Future<void> _openImportNumber(NumbersData data) async {
     final numberCtrl = TextEditingController();
     final friendlyCtrl = TextEditingController(text: 'Production Line');
     String provider = 'twilio';
@@ -104,8 +50,9 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     final vonageSecretCtrl = TextEditingController();
 
     String? err;
+    bool importing = false;
 
-    Future<void> submit(StateSetter setInner) async {
+    Future<void> submit(BuildContext sheetCtx, StateSetter setInner) async {
       final number = numberCtrl.text.trim();
       if (number.isEmpty || !number.startsWith('+')) {
         setInner(() => err = 'Enter a valid E.164 number (e.g. +12035551234).');
@@ -126,10 +73,11 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
 
       setInner(() {
         err = null;
+        importing = true;
       });
-      setState(() => _importing = true);
+      var sheetClosed = false;
       try {
-        final res = await NeyvoPulseApi.importNumber(
+        await ref.read(numbersNotifierProvider.notifier).importNumberToOrg(
           provider: provider,
           numberE164: number,
           friendlyName: friendlyCtrl.text.trim().isEmpty ? null : friendlyCtrl.text.trim(),
@@ -141,15 +89,40 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           vonageApiSecret: vonageSecretCtrl.text.trim(),
         );
         if (!mounted) return;
-        Navigator.of(context).pop();
-        await _load();
+        sheetClosed = true;
+        if (sheetCtx.mounted) {
+          Navigator.of(sheetCtx).pop();
+        }
+        ref.invalidate(numbersNotifierProvider);
         if (!mounted) return;
-        final msg = (res['message'] ?? 'Number imported and linked.').toString();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showDialog<void>(
+            context: context,
+            useRootNavigator: true,
+            builder: (dCtx) => AlertDialog(
+              title: const Text('Number added'),
+              content: const Text(
+                'Your number was added successfully. You can start using it on the Lines page and with your operators.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dCtx).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        });
       } catch (e) {
-        setInner(() => err = e.toString());
+        setInner(() {
+          err = e.toString();
+          importing = false;
+        });
       } finally {
-        if (mounted) setState(() => _importing = false);
+        if (mounted && !sheetClosed) {
+          setInner(() => importing = false);
+        }
       }
     }
 
@@ -168,147 +141,158 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             top: 14,
             bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text('Import number to VAPI', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _importing ? null : () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Import number to VAPI', style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: importing ? null : () => Navigator.of(ctx).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Import a carrier number (Twilio, Telnyx, or Vonage) into VAPI and link it to this account. The number will appear on the Phone Numbers tab and can be used by your operators.',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                ),
+                const SizedBox(height: 10),
+                if (err != null) ...[
+                  Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
+                  const SizedBox(height: 10),
+                ],
+                Row(
+                  children: [
+                    Text('Account ID', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _safeStr(data.account['account_id'] ?? data.account['id'] ?? ''),
+                        style: NeyvoTextStyles.bodyPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: provider,
+                  items: const [
+                    DropdownMenuItem(value: 'twilio', child: Text('Twilio')),
+                    DropdownMenuItem(value: 'telnyx', child: Text('Telnyx')),
+                    DropdownMenuItem(value: 'vonage', child: Text('Vonage')),
+                  ],
+                  onChanged: importing ? null : (v) => setInner(() => provider = v ?? 'twilio'),
+                  decoration: const InputDecoration(labelText: 'Provider'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: numberCtrl,
+                  enabled: !importing,
+                  decoration: const InputDecoration(
+                    labelText: 'Number (E.164)',
+                    hintText: 'e.g. +12035551234',
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: friendlyCtrl,
+                  enabled: !importing,
+                  decoration: const InputDecoration(
+                    labelText: 'Friendly name (optional)',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: setAsPrimary,
+                      onChanged: importing ? null : (v) => setInner(() => setAsPrimary = v ?? true),
+                    ),
+                    const Expanded(child: Text('Set as primary')),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (provider == 'twilio') ...[
+                  TextField(
+                    controller: twilioSidCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Twilio Account SID'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: twilioTokenCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
+                    obscureText: true,
+                  ),
+                ] else if (provider == 'telnyx') ...[
+                  TextField(
+                    controller: telnyxKeyCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Telnyx API Key'),
+                    obscureText: true,
+                  ),
+                ] else if (provider == 'vonage') ...[
+                  TextField(
+                    controller: vonageKeyCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Vonage API Key'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: vonageSecretCtrl,
+                    enabled: !importing,
+                    decoration: const InputDecoration(labelText: 'Vonage API Secret'),
+                    obscureText: true,
                   ),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Import a carrier number (Twilio, Telnyx, or Vonage) into VAPI and link it to this account. The number will appear on the Phone Numbers tab and can be used by your operators.',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-              ),
-              const SizedBox(height: 10),
-              if (err != null) ...[
-                Text(err!, style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: importing ? null : () => submit(ctx, setInner),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(ctx).colorScheme.primary,
+                    foregroundColor: NeyvoColors.white,
+                  ),
+                  icon: importing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
+                      : const Icon(Icons.upload, size: 18),
+                  label: Text(importing ? 'Importing…' : 'Import & assign to org'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Credentials are used one-time to import this number into VAPI and are not stored on Neyvo servers.',
+                  style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
+                ),
               ],
-              Row(
-                children: [
-                  Text('Account ID', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
-                  const SizedBox(width: 8),
-                  Text(
-                    _safeStr(_account['account_id'] ?? _account['id'] ?? ''),
-                    style: NeyvoTextStyles.bodyPrimary,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: provider,
-                items: const [
-                  DropdownMenuItem(value: 'twilio', child: Text('Twilio')),
-                  DropdownMenuItem(value: 'telnyx', child: Text('Telnyx')),
-                  DropdownMenuItem(value: 'vonage', child: Text('Vonage')),
-                ],
-                onChanged: _importing ? null : (v) => setInner(() => provider = v ?? 'twilio'),
-                decoration: const InputDecoration(labelText: 'Provider'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: numberCtrl,
-                enabled: !_importing,
-                decoration: const InputDecoration(
-                  labelText: 'Number (E.164)',
-                  hintText: 'e.g. +12035551234',
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: friendlyCtrl,
-                enabled: !_importing,
-                decoration: const InputDecoration(
-                  labelText: 'Friendly name (optional)',
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Checkbox(
-                    value: setAsPrimary,
-                    onChanged: _importing ? null : (v) => setInner(() => setAsPrimary = v ?? true),
-                  ),
-                  const Expanded(child: Text('Set as primary')),
-                ],
-              ),
-              const SizedBox(height: 6),
-              if (provider == 'twilio') ...[
-                TextField(
-                  controller: twilioSidCtrl,
-                  enabled: !_importing,
-                  decoration: const InputDecoration(labelText: 'Twilio Account SID'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: twilioTokenCtrl,
-                  enabled: !_importing,
-                  decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
-                  obscureText: true,
-                ),
-              ] else if (provider == 'telnyx') ...[
-                TextField(
-                  controller: telnyxKeyCtrl,
-                  enabled: !_importing,
-                  decoration: const InputDecoration(labelText: 'Telnyx API Key'),
-                  obscureText: true,
-                ),
-              ] else if (provider == 'vonage') ...[
-                TextField(
-                  controller: vonageKeyCtrl,
-                  enabled: !_importing,
-                  decoration: const InputDecoration(labelText: 'Vonage API Key'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: vonageSecretCtrl,
-                  enabled: !_importing,
-                  decoration: const InputDecoration(labelText: 'Vonage API Secret'),
-                  obscureText: true,
-                ),
-              ],
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _importing ? null : () => submit(setInner),
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
-                icon: _importing
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
-                    : const Icon(Icons.upload, size: 18),
-                label: Text(_importing ? 'Importing…' : 'Import & assign to org'),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Credentials are used one-time to import this number into VAPI and are not stored on Neyvo servers.',
-                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textSecondary),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
 
-    numberCtrl.dispose();
-    friendlyCtrl.dispose();
-    twilioSidCtrl.dispose();
-    twilioTokenCtrl.dispose();
-    telnyxKeyCtrl.dispose();
-    vonageKeyCtrl.dispose();
-    vonageSecretCtrl.dispose();
+    void disposeImportControllers() {
+      numberCtrl.dispose();
+      friendlyCtrl.dispose();
+      twilioSidCtrl.dispose();
+      twilioTokenCtrl.dispose();
+      telnyxKeyCtrl.dispose();
+      vonageKeyCtrl.dispose();
+      vonageSecretCtrl.dispose();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => disposeImportControllers());
   }
 
   /// Primary number (if any) – imported or assigned as primary. Shown in its own section.
   /// Deduplicated by E.164 so the same number never appears twice.
-  List<Map<String, dynamic>> get _primaryNumbers {
-    final rolePrimary = _numbers
+  List<Map<String, dynamic>> _primaryNumbers(List<Map<String, dynamic>> numbers) {
+    final rolePrimary = numbers
         .where((n) => (n['role']?.toString().toLowerCase() ?? '') == 'primary')
         .toList();
     final seen = <String>{};
@@ -322,8 +306,8 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
   }
 
   /// Non-primary numbers for the "Production numbers" grid.
-  List<Map<String, dynamic>> get _productionNumbers {
-    return _numbers
+  List<Map<String, dynamic>> _productionNumbers(List<Map<String, dynamic>> numbers) {
+    return numbers
         .where((n) => (n['role']?.toString().toLowerCase() ?? '') != 'primary')
         .toList()
       ..sort((a, b) => _safeStr(a['phone_number_e164']).compareTo(_safeStr(b['phone_number_e164'])));
@@ -331,63 +315,61 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
-    if (_loading) {
-      return Center(child: CircularProgressIndicator(color: primary));
-    }
-    if (_error != null) {
-      return Center(
+    final asyncValue = ref.watch(numbersNotifierProvider);
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return asyncValue.when(
+      data: (data) => RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Numbers', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Production numbers for your voice agents.',
+                      style: NeyvoTextStyles.body,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Numbers only appear here after they are linked to your account. Use "Import from carrier" to bring in an existing Twilio, Telnyx, or Vonage number, or "Refresh" to pull in all numbers from your VAPI dashboard.',
+                      style: NeyvoTextStyles.body.copyWith(
+                        color: NeyvoColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_primaryNumbers(data.numbers).isNotEmpty) _primarySection(data),
+                    if (_primaryNumbers(data.numbers).isNotEmpty) const SizedBox(height: 20),
+                    _productionGrid(data),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      loading: () => Center(child: CircularProgressIndicator(color: primaryColor)),
+      error: (e, _) => Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text('$e', style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
             TextButton(onPressed: _load, child: const Text('Retry')),
           ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Numbers', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Production numbers for your voice agents.',
-                    style: NeyvoTextStyles.body,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Numbers only appear here after they are linked to your account. Use "Import from carrier" to bring in an existing Twilio, Telnyx, or Vonage number, or "Refresh" to pull in all numbers from your VAPI dashboard.',
-                    style: NeyvoTextStyles.body.copyWith(
-                      color: NeyvoColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_primaryNumbers.isNotEmpty) _primarySection(),
-                  if (_primaryNumbers.isNotEmpty) const SizedBox(height: 20),
-                  _productionGrid(),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _primarySection() {
-    final primary = _primaryNumbers;
+  Widget _primarySection(NumbersData data) {
+    final primary = _primaryNumbers(data.numbers);
     if (primary.isEmpty) return const SizedBox.shrink();
     return NeyvoGlassPanel(
       child: Column(
@@ -395,7 +377,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.call, color: TenantBrand.primary(context)),
+              Icon(Icons.call, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 10),
               Text('Primary number', style: NeyvoTextStyles.heading),
             ],
@@ -409,34 +391,35 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: primary.map((n) => _prodCard(n)).toList(),
+            children: primary.map((n) => _prodCard(data, n)).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _productionGrid() {
-    final nums = _productionNumbers;
+  Widget _productionGrid(NumbersData data) {
+    final nums = _productionNumbers(data.numbers);
+    final syncing = ref.watch(numbersSyncBusyProvider);
     return NeyvoGlassPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.grid_view_outlined, color: TenantBrand.primary(context)),
+              Icon(Icons.grid_view_outlined, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 10),
               Text('Production numbers', style: NeyvoTextStyles.heading),
               const Spacer(),
               TextButton.icon(
-                onPressed: _syncingFromVapi ? null : _syncFromVapi,
-                icon: _syncingFromVapi
+                onPressed: syncing ? null : _syncFromVapi,
+                icon: syncing
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.sync, size: 18),
-                label: Text(_syncingFromVapi ? 'Refreshing…' : 'Refresh'),
+                label: Text(syncing ? 'Refreshing…' : 'Refresh'),
               ),
               TextButton.icon(
-                onPressed: _importing ? null : _openImportNumber,
+                onPressed: () => _openImportNumber(data),
                 icon: const Icon(Icons.upload, size: 18),
                 label: const Text('Import from carrier'),
               ),
@@ -448,7 +431,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             ],
           ),
           const SizedBox(height: 12),
-          if (nums.isEmpty && _primaryNumbers.isEmpty)
+          if (nums.isEmpty && _primaryNumbers(data.numbers).isEmpty)
             Text(
               'No numbers yet. Buy a number or use Refresh to link numbers you already have in the VAPI dashboard.',
               style: NeyvoTextStyles.body,
@@ -467,7 +450,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 return Wrap(
                   spacing: gap,
                   runSpacing: gap,
-                  children: nums.map((n) => SizedBox(width: cardW, child: _prodCard(n))).toList(),
+                  children: nums.map((n) => SizedBox(width: cardW, child: _prodCard(data, n))).toList(),
                 );
               },
             ),
@@ -476,7 +459,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     );
   }
 
-  Widget _prodCard(Map<String, dynamic> n) {
+  Widget _prodCard(NumbersData data, Map<String, dynamic> n) {
     final numberId = _safeStr(n['number_id']).isNotEmpty
         ? _safeStr(n['number_id'])
         : _safeStr(n['id']).isNotEmpty
@@ -490,7 +473,8 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
     final attachedProfileId = _safeStr(n['attached_profile_id']);
     final attachedProfileName = _safeStr(n['attached_profile_name']);
 
-    final isAttaching = _attaching[numberId] == true;
+    final attachBusy = ref.watch(numbersAttachBusyProvider);
+    final isAttaching = attachBusy[numberId] == true;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -537,10 +521,10 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           Text('Operator attached', style: NeyvoTextStyles.label.copyWith(color: NeyvoColors.textMuted)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: _profiles.any((p) => _safeStr(p['profile_id']) == attachedProfileId) ? attachedProfileId : '',
+            value: data.profiles.any((p) => _safeStr(p['profile_id']) == attachedProfileId) ? attachedProfileId : '',
             items: [
               const DropdownMenuItem(value: '', child: Text('— Not attached —')),
-              ..._profiles.map((p) {
+              ...data.profiles.map((p) {
                 final id = _safeStr(p['profile_id']);
                 final name = _safeStr(p['profile_name']).isEmpty ? 'Unnamed agent' : _safeStr(p['profile_name']);
                 return DropdownMenuItem(value: id, child: Text(name, overflow: TextOverflow.ellipsis));
@@ -550,7 +534,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
                 ? null
                 : (v) {
                     final id = (v ?? '').trim();
-                    _attachNumberToProfile(numberId: numberId, profileId: id);
+                    _attachNumberToProfile(data, numberId: numberId, profileId: id);
                   },
             decoration: InputDecoration(
               isDense: true,
@@ -559,22 +543,22 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
           ),
           if (isAttaching) ...[
             const SizedBox(height: 10),
-            LinearProgressIndicator(minHeight: 3, color: TenantBrand.primary(context), backgroundColor: NeyvoColors.bgBase),
+            LinearProgressIndicator(minHeight: 3, color: Theme.of(context).colorScheme.primary, backgroundColor: NeyvoColors.bgBase),
           ],
         ],
       ),
     );
   }
 
-  Future<void> _attachNumberToProfile({
+  Future<void> _attachNumberToProfile(
+    NumbersData data, {
     required String numberId,
     required String profileId,
   }) async {
     if (numberId.isEmpty) return;
-    setState(() => _attaching[numberId] = true);
+    ref.read(numbersAttachBusyProvider.notifier).setForNumber(numberId, true);
     try {
       if (profileId.isEmpty) {
-        // No explicit detach endpoint exists; reloading will reflect server truth.
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Detach is not available yet.')),
@@ -582,12 +566,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         }
       } else {
         try {
-          await ManagedProfileApiService.attachPhoneNumber(
-            profileId: profileId,
-            phoneNumberId: numberId,
-            vapiPhoneNumberId: numberId,
-            forceMove: false,
-          );
+          await ref.read(numbersNotifierProvider.notifier).attachProfileToNumber(
+                profileId: profileId,
+                phoneNumberId: numberId,
+                vapiPhoneNumberId: numberId,
+                forceMove: false,
+              );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attached')));
           }
@@ -598,7 +582,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
             final currentName = inUseBy is Map
                 ? ((inUseBy['profile_name'] ?? inUseBy['profile_id']) ?? 'Another operator').toString()
                 : 'Another operator';
-            final selectedProfileName = _profiles
+            final selectedProfileName = data.profiles
                 .cast<Map<String, dynamic>>()
                 .where((p) => (p['profile_id'] ?? p['id']) == profileId)
                 .map((p) => (p['profile_name'] ?? p['name'] ?? profileId).toString())
@@ -617,12 +601,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
               ),
             );
             if (moveAnyway == true && mounted) {
-              await ManagedProfileApiService.attachPhoneNumber(
-                profileId: profileId,
-                phoneNumberId: numberId,
-                vapiPhoneNumberId: numberId,
-                forceMove: true,
-              );
+              await ref.read(numbersNotifierProvider.notifier).attachProfileToNumber(
+                    profileId: profileId,
+                    phoneNumberId: numberId,
+                    vapiPhoneNumberId: numberId,
+                    forceMove: true,
+                  );
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number moved.')));
               }
@@ -637,9 +621,7 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
-      if (!mounted) return;
-      setState(() => _attaching[numberId] = false);
-      _load();
+      if (mounted) ref.read(numbersAttachBusyProvider.notifier).setForNumber(numberId, false);
     }
   }
 
@@ -675,14 +657,12 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         selectedE164 = null;
       });
       try {
-        final res = await NeyvoPulseApi.searchNumbers(
+        final res = await ref.read(numbersNotifierProvider.notifier).searchNumbersForPurchase(
           country: 'US',
           type: type,
           limit: 20,
           areaCode: areaCodeCtrl.text.trim().isEmpty ? null : areaCodeCtrl.text.trim(),
           voiceEnabled: true,
-          smsEnabled: null,
-          mmsEnabled: null,
           includeSuggested: false,
         );
         // Backend returns "available" (Neyvo Pulse) or "items" (legacy); support both
@@ -711,14 +691,13 @@ class _PhoneNumbersPageState extends State<PhoneNumbersPage> {
         err = null;
       });
       try {
-        await NeyvoPulseApi.purchaseNumber(
+        await ref.read(numbersNotifierProvider.notifier).purchaseNumberForOrg(
           phoneNumber: num,
           friendlyName: nameCtrl.text.trim().isEmpty ? 'Production Line' : nameCtrl.text.trim(),
         );
         if (!mounted) return;
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number purchased')));
-        _load();
       } catch (e) {
         setInner(() {
           purchasing = false;

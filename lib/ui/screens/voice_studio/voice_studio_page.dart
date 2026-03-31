@@ -1,138 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
-import '../../../utils/voice_preview_player.dart';
+import '../../../core/providers/voice_studio_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
-class VoiceStudioPage extends StatefulWidget {
+class VoiceStudioPage extends ConsumerStatefulWidget {
   const VoiceStudioPage({super.key});
 
   @override
-  State<VoiceStudioPage> createState() => _VoiceStudioPageState();
+  ConsumerState<VoiceStudioPage> createState() => _VoiceStudioPageState();
 }
 
-class _VoiceStudioPageState extends State<VoiceStudioPage> {
-  bool _loading = true;
-  String? _error;
-
-  // Grouped voices from /api/voices?tier=all => { neutral: [...], natural: [...], ultra: [...] }.
-  List<Map<String, dynamic>> _neutralVoices = const [];
-  List<Map<String, dynamic>> _naturalVoices = const [];
-  List<Map<String, dynamic>> _ultraVoices = const [];
-
-  String _filterTier = 'all'; // all | neutral | natural | ultra
-  String _searchTerm = '';
-
-  String? _playingVoiceId;
-
+class _VoiceStudioPageState extends ConsumerState<VoiceStudioPage> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(voiceStudioCtrlProvider.notifier).load();
     });
-    try {
-      final res = await NeyvoPulseApi.getVoices(tier: 'all');
-      if (!mounted) return;
-
-      List<Map<String, dynamic>> neutral = const [];
-      List<Map<String, dynamic>> natural = const [];
-      List<Map<String, dynamic>> ultra = const [];
-
-      if (res is Map) {
-        neutral = _extractList(res['neutral']);
-        natural = _extractList(res['natural']);
-        ultra = _extractList(res['ultra']);
-      } else if (res is List) {
-        final all = _extractList(res);
-        neutral = all.where((v) => (v['tier'] ?? '').toString().toLowerCase() == 'neutral').toList();
-        natural = all.where((v) => (v['tier'] ?? '').toString().toLowerCase() == 'natural').toList();
-        ultra = all.where((v) => (v['tier'] ?? '').toString().toLowerCase() == 'ultra').toList();
-      }
-
-      setState(() {
-        _neutralVoices = neutral;
-        _naturalVoices = natural;
-        _ultraVoices = ultra;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  List<Map<String, dynamic>> _extractList(dynamic value) {
-    if (value is List) {
-      return value.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
-    }
-    return const [];
-  }
-
-  List<Map<String, dynamic>> get _filteredVoices {
-    List<Map<String, dynamic>> base;
-    switch (_filterTier) {
-      case 'neutral':
-        base = _neutralVoices;
-        break;
-      case 'natural':
-        base = _naturalVoices;
-        break;
-      case 'ultra':
-        base = _ultraVoices;
-        break;
-      default:
-        base = [..._neutralVoices, ..._naturalVoices, ..._ultraVoices];
-    }
-    final term = _searchTerm.trim().toLowerCase();
-    if (term.isEmpty) return base;
-    return base.where((v) {
-      final name = (v['name'] ?? '').toString().toLowerCase();
-      final id = (v['voice_id'] ?? '').toString().toLowerCase();
-      final desc = (v['description'] ?? '').toString().toLowerCase();
-      return name.contains(term) || id.contains(term) || desc.contains(term);
-    }).toList();
   }
 
   Future<void> _playSample(Map<String, dynamic> voice) async {
-    final voiceId = (voice['voice_id'] ?? '').toString();
-    final provider = (voice['provider'] ?? '').toString();
-    if (voiceId.isEmpty || provider.isEmpty) return;
-    setState(() => _playingVoiceId = voiceId);
     try {
-      final res = await NeyvoPulseApi.postVoicePreview(
-        voiceId: voiceId,
-        provider: provider,
-        text: (voice['sample_text'] ?? '').toString().trim().isEmpty
-            ? null
-            : (voice['sample_text'] ?? '').toString(),
-      );
+      await ref.read(voiceStudioCtrlProvider.notifier).playSample(voice);
       if (!mounted) return;
-      await playVoicePreview(res);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Playing sample…')),
-        );
-      }
-    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Playing sample…')),
+      );
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Preview unavailable for this voice. Try another.')),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _playingVoiceId = null);
-      }
     }
   }
 
@@ -164,7 +65,9 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
 
   @override
   Widget build(BuildContext context) {
-    final voices = _filteredVoices;
+    final s = ref.watch(voiceStudioCtrlProvider);
+    final voices = s.filteredVoices;
+    final n = ref.read(voiceStudioCtrlProvider.notifier);
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -211,7 +114,7 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
                           labelText: 'Search voices',
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (v) => setState(() => _searchTerm = v),
+                        onChanged: n.setSearchTerm,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -222,24 +125,24 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
                         ButtonSegment(value: 'natural', label: Text('Natural')),
                         ButtonSegment(value: 'ultra', label: Text('Ultra')),
                       ],
-                      selected: {_filterTier},
-                      onSelectionChanged: (s) {
-                        if (s.isNotEmpty) {
-                          setState(() => _filterTier = s.first);
+                      selected: {s.filterTier},
+                      onSelectionChanged: (sel) {
+                        if (sel.isNotEmpty) {
+                          n.setFilterTier(sel.first);
                         }
                       },
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
-                if (_loading)
+                if (s.loading)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
                       child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoTheme.teal),
                     ),
                   )
-                else if (_error != null)
+                else if (s.error != null)
                   Center(
                     child: Column(
                       children: [
@@ -249,12 +152,12 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _error!,
+                          s.error!,
                           style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.error),
                         ),
                         const SizedBox(height: 12),
                         FilledButton.tonal(
-                          onPressed: _load,
+                          onPressed: () => n.load(),
                           child: const Text('Retry'),
                         ),
                       ],
@@ -274,7 +177,7 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
                     child: GridView.builder(
-                      key: ValueKey('${_filterTier}-${_searchTerm}'),
+                      key: ValueKey('${s.filterTier}-${s.searchTerm}'),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -294,7 +197,7 @@ class _VoiceStudioPageState extends State<VoiceStudioPage> {
                         final tags = (v['tags'] is List ? v['tags'] as List : const [])
                             .whereType<String>()
                             .toList();
-                        final isPlaying = _playingVoiceId == (v['voice_id'] ?? '').toString();
+                        final isPlaying = s.playingVoiceId == (v['voice_id'] ?? '').toString();
 
                         return _VoiceCard(
                           name: name,
@@ -344,6 +247,7 @@ class _VoiceCard extends StatefulWidget {
 }
 
 class _VoiceCardState extends State<_VoiceCard> with SingleTickerProviderStateMixin {
+  // riverpod-migration-allowed: ephemeral hover / scale feedback only.
   bool _hovering = false;
 
   @override

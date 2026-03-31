@@ -2,7 +2,9 @@
 // Full-page member detail view (like StudentDetailPage).
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers/member_detail_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/phone_util.dart';
 import '../theme/neyvo_theme.dart';
@@ -16,7 +18,7 @@ const List<MapEntry<String, String>> _kEditPermissions = [
   MapEntry('billing', 'Billing'),
 ];
 
-class MemberDetailPage extends StatefulWidget {
+class MemberDetailPage extends ConsumerStatefulWidget {
   final Map<String, dynamic> member;
   final bool canEdit;
   final VoidCallback? onUpdated;
@@ -29,19 +31,35 @@ class MemberDetailPage extends StatefulWidget {
   });
 
   @override
-  State<MemberDetailPage> createState() => _MemberDetailPageState();
+  ConsumerState<MemberDetailPage> createState() => _MemberDetailPageState();
 }
 
-class _MemberDetailPageState extends State<MemberDetailPage>
+class _MemberDetailPageState extends ConsumerState<MemberDetailPage>
     with SingleTickerProviderStateMixin {
-  late Map<String, dynamic> _member;
   late TabController _tabController;
+  late String _providerKey;
 
   @override
   void initState() {
     super.initState();
-    _member = Map<String, dynamic>.from(widget.member);
     _tabController = TabController(length: 1, vsync: this);
+    _providerKey = memberDetailKey(widget.member);
+    Future<void>.microtask(_ensureInitializedSafe);
+  }
+
+  @override
+  void didUpdateWidget(covariant MemberDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextKey = memberDetailKey(widget.member);
+    if (nextKey != _providerKey) {
+      _providerKey = nextKey;
+      Future<void>.microtask(_ensureInitializedSafe);
+    }
+  }
+
+  void _ensureInitializedSafe() {
+    if (!mounted) return;
+    ref.read(memberDetailCtrlProvider(_providerKey).notifier).ensureInitialized(widget.member);
   }
 
   @override
@@ -51,10 +69,12 @@ class _MemberDetailPageState extends State<MemberDetailPage>
   }
 
   void _openEdit() {
+    final key = memberDetailKey(widget.member);
+    final ui = ref.read(memberDetailCtrlProvider(key));
     showDialog<void>(
       context: context,
       builder: (ctx) => _EditMemberDialog(
-        member: _member,
+        member: ui.member,
         onSaved: () {
           Navigator.of(ctx).pop();
           widget.onUpdated?.call();
@@ -66,10 +86,13 @@ class _MemberDetailPageState extends State<MemberDetailPage>
   }
 
   Future<void> _confirmRemove() async {
-    final userId = (_member['user_id'] ?? _member['id'] ?? '').toString();
+    final key = memberDetailKey(widget.member);
+    final ui = ref.read(memberDetailCtrlProvider(key));
+    final member = ui.member;
+    final userId = (member['user_id'] ?? member['id'] ?? '').toString();
     if (userId.isEmpty) return;
-    final name = (_member['name'] ?? '').toString().trim();
-    final email = (_member['email'] ?? '').toString().trim();
+    final name = (member['name'] ?? '').toString().trim();
+    final email = (member['email'] ?? '').toString().trim();
     final displayLabel = name.isNotEmpty ? name : (email.isNotEmpty ? email : userId);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -95,7 +118,7 @@ class _MemberDetailPageState extends State<MemberDetailPage>
     );
     if (confirmed != true || !mounted) return;
     try {
-      await NeyvoPulseApi.deleteMember(userId);
+      await ref.read(memberDetailCtrlProvider(key).notifier).removeMember();
       if (!mounted) return;
       widget.onUpdated?.call();
       Navigator.of(context).pop();
@@ -112,21 +135,25 @@ class _MemberDetailPageState extends State<MemberDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final name = (_member['name'] ?? '').toString().trim();
-    final email = (_member['email'] ?? '').toString().trim();
-    final staffId = (_member['staff_id'] ?? '').toString().trim();
-    final phone = (_member['phone'] ?? '').toString().trim();
-    final department = (_member['department'] ?? '').toString().trim();
-    final title = (_member['title'] ?? '').toString().trim();
-    final office = (_member['office'] ?? '').toString().trim();
-    final extension = (_member['extension'] ?? '').toString().trim();
-    final campus = (_member['campus'] ?? '').toString().trim();
-    final role = (_member['role'] ?? '—').toString();
-    final perms = _member['permissions'];
+    final key = _providerKey;
+    final ui = ref.watch(memberDetailCtrlProvider(key));
+    final member = ui.member;
+    final name = (member['name'] ?? '').toString().trim();
+    final email = (member['email'] ?? '').toString().trim();
+    final staffId = (member['staff_id'] ?? '').toString().trim();
+    final phone = (member['phone'] ?? '').toString().trim();
+    final department = (member['department'] ?? '').toString().trim();
+    final title = (member['title'] ?? '').toString().trim();
+    final office = (member['office'] ?? '').toString().trim();
+    final extension = (member['extension'] ?? '').toString().trim();
+    final campus = (member['campus'] ?? '').toString().trim();
+    final role = (member['role'] ?? '—').toString();
+    final perms = member['permissions'];
     final permList = perms is List ? perms.map((e) => e.toString()).toList() : <String>[];
     final displayName = name.isNotEmpty ? name : (email.isNotEmpty ? email : 'Member');
 
-    final notes = (_member['notes'] ?? '').toString().trim();
+    final notes = (member['notes'] ?? '').toString().trim();
+    final bookingUrl = (member['booking_url'] ?? '').toString().trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -165,6 +192,10 @@ class _MemberDetailPageState extends State<MemberDetailPage>
                   _detailRow('Email', email.isNotEmpty ? email : '—'),
                   _detailRow('Phone', phone.isNotEmpty ? phone : '—'),
                   _detailRow('Extension', extension.isNotEmpty ? extension : '—'),
+                  _detailRow(
+                    'Booking / scheduling URL',
+                    bookingUrl.isNotEmpty ? bookingUrl : '—',
+                  ),
                 ],
               ),
               const SizedBox(height: NeyvoSpacing.lg),
@@ -271,6 +302,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   late TextEditingController _extensionController;
   late TextEditingController _campusController;
   late TextEditingController _notesController;
+  late TextEditingController _bookingUrlController;
 
   @override
   void initState() {
@@ -308,6 +340,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _notesController = TextEditingController(
       text: (widget.member['notes'] ?? '').toString().trim(),
     );
+    _bookingUrlController = TextEditingController(
+      text: (widget.member['booking_url'] ?? '').toString().trim(),
+    );
   }
 
   @override
@@ -321,6 +356,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
     _extensionController.dispose();
     _campusController.dispose();
     _notesController.dispose();
+    _bookingUrlController.dispose();
     super.dispose();
   }
 
@@ -360,6 +396,7 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
         extension: extension.isEmpty ? null : extension,
         campus: campus.isEmpty ? null : campus,
         notes: notes.isEmpty ? null : notes,
+        bookingUrl: _bookingUrlController.text.trim(),
         email: (widget.member['email'] ?? '').toString().trim().isEmpty
             ? null
             : (widget.member['email'] ?? '').toString().trim(),
@@ -408,6 +445,16 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               decoration: const InputDecoration(
                 labelText: 'Staff ID (optional)',
                 hintText: 'Staff identifier',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: NeyvoSpacing.md),
+            TextField(
+              controller: _bookingUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Booking / scheduling URL (optional)',
+                hintText: 'https://calendly.com/...',
               ),
               onChanged: (_) => setState(() {}),
             ),

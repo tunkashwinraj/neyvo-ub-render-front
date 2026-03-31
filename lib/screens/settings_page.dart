@@ -4,22 +4,24 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../api/spearia_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
+import '../core/providers/timezone_provider.dart';
 import '../services/user_timezone_service.dart';
 import '../utils/payment_result_dialog.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
 
-class PulseSettingsPage extends StatefulWidget {
+class PulseSettingsPage extends ConsumerStatefulWidget {
   const PulseSettingsPage({super.key});
 
   @override
-  State<PulseSettingsPage> createState() => _PulseSettingsPageState();
+  ConsumerState<PulseSettingsPage> createState() => _PulseSettingsPageState();
 }
 
-class _PulseSettingsPageState extends State<PulseSettingsPage> {
+class _PulseSettingsPageState extends ConsumerState<PulseSettingsPage> {
   final _schoolName = TextEditingController();
   final _defaultLateFee = TextEditingController();
   final _currency = TextEditingController();
@@ -47,9 +49,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
   Map<String, dynamic>? _schoolIntegration;
   bool _schoolTokenVisible = false;
   final _memberUserIdController = TextEditingController();
-  final _linkAccountIdController = TextEditingController();
   String _newMemberRole = 'staff';
-  bool _linkingAccount = false;
 
   @override
   void initState() {
@@ -81,7 +81,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
     _callScript.dispose();
     _primaryPhoneController.dispose();
     _memberUserIdController.dispose();
-    _linkAccountIdController.dispose();
     super.dispose();
   }
 
@@ -180,6 +179,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         });
       }
     } catch (e) {
+      if (isPulseRequestCancelled(e)) return;
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
@@ -200,6 +200,7 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         callScript: _callScript.text.trim().isEmpty ? null : _callScript.text.trim(),
       );
       UserTimezoneService.setTimezone(_timezoneValue);
+      ref.read(userTimezoneProvider.notifier).syncFromService();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
         setState(() => _saving = false);
@@ -209,29 +210,6 @@ class _PulseSettingsPageState extends State<PulseSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
         setState(() => _saving = false);
       }
-    }
-  }
-
-  Future<void> _linkToAccount() async {
-    final accountId = _linkAccountIdController.text.trim();
-    if (accountId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an account ID')));
-      return;
-    }
-    setState(() => _linkingAccount = true);
-    try {
-      await NeyvoPulseApi.linkUserToAccount(accountId);
-      if (!mounted) return;
-      NeyvoPulseApi.setDefaultAccountId(accountId);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Linked to account $accountId')));
-      _linkAccountIdController.clear();
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) setState(() => _linkingAccount = false);
     }
   }
 

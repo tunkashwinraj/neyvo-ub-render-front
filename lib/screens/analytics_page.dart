@@ -6,11 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
+import '../api/api_response_cache.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import '../widgets/neyvo_empty_state.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/export_csv.dart';
@@ -110,15 +110,39 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     _load();
   }
 
+  String get _swrKey => '${NeyvoPulseApi.defaultAccountId}_analytics_$_dateRange';
+
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    final cachedEntry = ApiResponseCache.get(_swrKey);
+    if (cachedEntry is Map<String, dynamic>) {
+      setState(() {
+        final c = cachedEntry;
+        _overview = c['overview'] as Map<String, dynamic>?;
+        _comms = c['comms'] as Map<String, dynamic>?;
+        _studio = c['studio'] as Map<String, dynamic>?;
+        _insights = c['insights'] as Map<String, dynamic>? ?? {};
+        _callbacksAnalytics = c['callbacksAnalytics'] as Map<String, dynamic>? ?? {};
+        _wallet = c['wallet'] as Map<String, dynamic>? ?? {};
+        _transactionsRes = c['transactionsRes'] as Map<String, dynamic>? ?? {};
+        _students = List<Map<String, dynamic>>.from((c['students'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _campaigns = List<Map<String, dynamic>>.from((c['campaigns'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _agents = List<Map<String, dynamic>>.from((c['agents'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _numbers = List<Map<String, dynamic>>.from((c['numbers'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _callsForKpi = List<Map<String, dynamic>>.from((c['callsForKpi'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _priorCallsForKpi = List<Map<String, dynamic>>.from((c['priorCallsForKpi'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
+        _loading = false;
+        _error = null;
+      });
+    } else {
+      setState(() { _loading = true; _error = null; });
+    }
     final range = _dateRangeToIso();
     final prior = _priorRangeIso();
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAnalyticsOverview(from: range.from, to: range.to),
-        NeyvoPulseApi.getAnalyticsComms(from: range.from, to: range.to),
-        NeyvoPulseApi.getAnalyticsStudio(from: range.from, to: range.to),
+        NeyvoPulseApi.getAnalyticsOverview(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
+        NeyvoPulseApi.getAnalyticsComms(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
+        NeyvoPulseApi.getAnalyticsStudio(from: range.from, to: range.to).catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getInsights().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getCallbacksAnalytics().catchError((_) => <String, dynamic>{}),
         NeyvoPulseApi.getBillingWallet().catchError((_) => <String, dynamic>{}),
@@ -139,6 +163,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final priorCallsRes = results[12] as Map<String, dynamic>;
       final calls = (callsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
       final priorCalls = (priorCallsRes['calls'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
+      final snap = <String, dynamic>{
+        'overview': results[0],
+        'comms': results[1],
+        'studio': results[2],
+        'insights': results[3] as Map<String, dynamic>? ?? {},
+        'callbacksAnalytics': results[4] as Map<String, dynamic>? ?? {},
+        'wallet': results[5] as Map<String, dynamic>? ?? {},
+        'transactionsRes': results[6] as Map<String, dynamic>? ?? {},
+        'students': stList,
+        'campaigns': campList,
+        'agents': agList,
+        'numbers': numList,
+        'callsForKpi': calls,
+        'priorCallsForKpi': priorCalls,
+      };
+      ApiResponseCache.set(_swrKey, snap, ttl: const Duration(seconds: 60));
       setState(() {
         _overview = results[0] as Map<String, dynamic>;
         _comms = results[1] as Map<String, dynamic>;
@@ -156,7 +196,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        if (cachedEntry == null) {
+          setState(() { _error = e.toString(); _loading = false; });
+        }
+      }
     }
   }
 
@@ -273,7 +317,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     if (_loading && _overview == null) {
       return buildNeyvoLoadingState();
     }
@@ -340,7 +384,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildPageHeader() {
-    final lastUpdated = DateFormat('MMMM d, y').format(DateTime.now());
+    final lastUpdated = UserTimezoneService.formatNow();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -545,7 +589,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       weekDays.add(row);
     }
 
-    final year = DateTime.now().year;
+    final year = UserTimezoneService.userLocalNow().year;
     final trendData = weekDays.map((d) {
       final r = (d['resolved'] as num?)?.toInt() ?? 0;
       final u = (d['unresolved'] as num?)?.toInt() ?? 0;

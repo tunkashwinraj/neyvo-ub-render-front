@@ -7,46 +7,46 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../pulse_route_names.dart';
-import 'pulse_dashboard_page.dart';
-import 'settings_page.dart';
-import 'campaigns_page.dart';
-import 'phone_numbers_page.dart';
-import 'call_history_page.dart';
-import 'analytics_page.dart';
-import 'executive_dashboard_page.dart';
-import 'callbacks_page.dart';
+import '../core/models/user_role.dart';
+import '../core/providers/account_provider.dart';
+import '../core/providers/role_provider.dart';
+import '../core/providers/timezone_provider.dart';
+import '../services/user_timezone_service.dart';
+import 'pulse_dashboard_page.dart' deferred as pulse_dashboard_page;
+import 'settings_page.dart' deferred as settings_page;
+import 'campaigns_page.dart' deferred as campaigns_page;
+import 'phone_numbers_page.dart' deferred as phone_numbers_page;
+import 'analytics_page.dart' deferred as analytics_page;
+import 'executive_dashboard_page.dart' deferred as executive_dashboard_page;
 import '../features/managed_profiles/managed_profiles_page.dart';
 import '../features/managed_profiles/raw_assistant_detail_page.dart';
 import '../features/managed_profiles/profile_detail_page.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../neyvo_pulse_api.dart';
 import '../debug_session_log.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_scope.dart';
-import '../tenant/tenant_brand.dart';
 import '../utils/update_url_stub.dart' if (dart.library.html) '../utils/update_url_web.dart' as url_helper;
-import '../ui/screens/launch/launch_page.dart';
-import '../ui/screens/calls/calls_page.dart';
-import '../ui/screens/calls/test_call_page.dart';
-import '../ui/screens/billing/billing_page.dart';
-import '../ui/screens/billing/wallet_page.dart';
-import '../ui/screens/billing/voice_tier_page.dart';
-import '../ui/screens/billing/plan_selector_page.dart';
-import '../ui/screens/integrations/integrations_page.dart';
-import '../ui/screens/voice_studio/voice_studio_page.dart';
+import '../ui/screens/launch/launch_page.dart' deferred as launch_page;
+import '../ui/screens/calls/calls_page.dart' deferred as calls_page;
+import '../ui/screens/calls/calls_section.dart';
+import '../ui/screens/calls/test_call_page.dart' deferred as test_call_page;
+import '../features/billing/billing_screen.dart' deferred as billing_screen;
+import '../ui/screens/billing/wallet_page.dart' deferred as wallet_page;
+import '../ui/screens/billing/voice_tier_page.dart' deferred as voice_tier_page;
+import '../ui/screens/billing/plan_selector_page.dart' deferred as plan_selector_page;
+import '../ui/screens/integrations/integrations_page.dart' deferred as integrations_page;
+import '../ui/screens/voice_studio/voice_studio_page.dart' deferred as voice_studio_page;
 import '../ui/components/calls/incoming_call_overlay.dart';
-import '../ui/screens/agency/agency_overview_page.dart';
-import 'students_hub_page.dart';
-import 'team_page.dart';
-import 'training_page.dart';
-import 'audit_log_page.dart';
-import 'health_check_page.dart';
+import '../ui/screens/agency/agency_overview_page.dart' deferred as agency_overview_page;
+import 'students_hub_page.dart' deferred as students_hub_page;
+import 'team_page.dart' deferred as team_page;
+import 'training_page.dart' deferred as training_page;
+import 'health_check_page.dart' deferred as health_check_page;
 
 /// Allows navigating to a pulse tab without pushing a new PulseShell (avoids full re-init and slow load).
 /// When [navigatePulse] is used, the app pops to the root shell and switches its tab instead of pushing a second shell.
@@ -65,7 +65,7 @@ class PulseShellController {
   }
 }
 
-class PulseShell extends StatefulWidget {
+class PulseShell extends ConsumerStatefulWidget {
   const PulseShell({
     super.key,
     this.initialRouteName,
@@ -79,19 +79,16 @@ class PulseShell extends StatefulWidget {
   final CallsSection? initialCallsSection;
 
   @override
-  State<PulseShell> createState() => _PulseShellState();
+  ConsumerState<PulseShell> createState() => _PulseShellState();
 }
 
-class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateMixin {
+class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   /// When true, content is driven by _selectedIndex only (user tapped a sidebar tab). When false and initialRoute was wallet, we show Wallet page while Billing is selected.
   bool _userHasChangedTab = false;
   int? _walletCredits;
   final GlobalKey<NavigatorState> _managedProfilesNavKey = GlobalKey<NavigatorState>();
   final GlobalKey<ManagedProfilesPageState> _managedProfilesListKey = GlobalKey<ManagedProfilesPageState>();
-  int? _numbersCount; // kept for future analytics panels
-  int? _callsTodayCapacity;
-  int? _callsTodayUsed;
   double? _usageSpend;
   int _addonsCount = 0;
   String? _subscriptionStatus;
@@ -112,6 +109,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   late final Animation<double> _livePulse;
   String? _myRole;
   List<String>? _myPermissions;
+  bool _rolePermsLoadStarted = false;
+  final Map<String, Future<void>> _deferredLoads = {};
 
   /// Permission key per nav item; used to filter sidebar for staff. Admin sees all.
   static const List<_NavItem> _allNavItems = [
@@ -122,7 +121,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _NavItem('Call Logs', Icons.call_outlined, PulseRouteNames.calls, 'call_logs'),
     _NavItem('Campaigns', Icons.campaign_outlined, PulseRouteNames.campaigns, 'campaigns'),
     _NavItem('Team', Icons.groups_outlined, PulseRouteNames.team, 'team'),
-    _NavItem('Audit Log', Icons.history_outlined, PulseRouteNames.auditLog, 'audit_log'),
     _NavItem('Insights', Icons.auto_graph_outlined, PulseRouteNames.analytics, 'insights'),
     _NavItem('Executive Dashboard', Icons.dashboard_outlined, PulseRouteNames.executiveDashboard, 'insights'),
     _NavItem('Training', Icons.quiz_outlined, PulseRouteNames.training, 'settings'), // temporary: FAQ + policy
@@ -133,22 +131,66 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   ];
 
   /// Unified Voice OS navigation. For admin: all items. For staff: only items whose permission is in _myPermissions.
-  /// Audit Log is admin-only (hidden from non-admin).
-  /// If staff has no permissions (empty list), show all tabs except Audit Log so the user is not locked out.
+  /// Team member navigation is permission-driven from /members/me.
   List<_NavItem> get _navItems {
-    final role = _myRole?.toLowerCase();
-    final perms = _myPermissions;
-    final isAdmin = role == 'admin';
-    List<_NavItem> items;
-    if (isAdmin || perms == null) {
-      items = List<_NavItem>.from(_allNavItems);
-      if (!isAdmin) items.removeWhere((n) => n.permissionKey == 'audit_log');
-    } else {
-      final filtered = _allNavItems.where((n) => n.permissionKey != 'audit_log' && perms.contains(n.permissionKey)).toList();
-      items = filtered.isEmpty ? _allNavItems.where((n) => n.permissionKey != 'audit_log').toList() : filtered;
+    final enumRole = ref.watch(userRoleProvider);
+    final resolvedRole = (_myRole ?? '').trim().toLowerCase();
+    if (enumRole == UserRole.owner) {
+      return List<_NavItem>.from(_allNavItems);
     }
+    if (enumRole == UserRole.admin || resolvedRole == 'admin') {
+      return List<_NavItem>.from(_allNavItems);
+    }
+    // First paint optimization: until role/permission payload arrives, render full
+    // sidebar immediately so tabs are visible right after landing.
+    if (!_rolePermsLoadStarted || (_myRole == null && _myPermissions == null)) {
+      return List<_NavItem>.from(_allNavItems);
+    }
+    final perms = (_myPermissions ?? const <String>[])
+        .map((p) => p.trim().toLowerCase())
+        .where((p) => p.isNotEmpty)
+        .toSet();
+    final items = _allNavItems.where((n) {
+      if (n.permissionKey == 'dashboard') return true;
+      return perms.contains(n.permissionKey);
+    }).toList();
     if (_selectedIndex >= items.length) _selectedIndex = 0;
-    return items;
+    return items.isEmpty ? <_NavItem>[_allNavItems.first] : items;
+  }
+
+  /// Current main-sidebar route (for stable tab content keys).
+  String? get _currentPulseRoute {
+    final items = _navItems;
+    if (_selectedIndex < 0 || _selectedIndex >= items.length) return null;
+    return items[_selectedIndex].route;
+  }
+
+  void _onPulseSidebarTabChanged(int index, {required String route}) {
+    if (index != _selectedIndex) {
+      NeyvoPulseApi.bumpTabRequestPriority();
+    }
+    setState(() {
+      _selectedIndex = index;
+      _userHasChangedTab = true;
+    });
+    if (kIsWeb) url_helper.updateBrowserUrl(route);
+  }
+
+  bool _canAccess(String permissionKey) {
+    final enumRole = ref.watch(userRoleProvider);
+    if (enumRole == UserRole.owner || enumRole == UserRole.admin) return true;
+    final resolvedRole = (_myRole ?? '').trim().toLowerCase();
+    if (resolvedRole == 'admin') return true;
+    // Avoid transient "Access denied" flicker on first landing while role/perms
+    // are still loading. Once loaded, normal permission checks apply.
+    if (!_rolePermsLoadStarted || (_myRole == null && _myPermissions == null)) {
+      return true;
+    }
+    final perms = (_myPermissions ?? const <String>[])
+        .map((p) => p.trim().toLowerCase())
+        .where((p) => p.isNotEmpty)
+        .toSet();
+    return perms.contains(permissionKey);
   }
 
   static const String _managedProfileDetailRoute = 'detail';
@@ -197,14 +239,16 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     _livePulse = Tween<double>(begin: 0.35, end: 1.0).animate(
       CurvedAnimation(parent: _livePulseCtrl, curve: Curves.easeInOut),
     );
+    _ensureRolePermissionsLoadStarted();
     _resolveAccountThenLoad();
     final name = widget.initialRouteName;
     if (name != null && name.isNotEmpty) {
-      final items = _navItems;
-      int idx = items.indexWhere((n) => n.route == name);
+      // Do not use ref.watch-derived nav items in initState.
+      // Role-filtered tabs are resolved in build; this initial index only seeds deep-link intent.
+      int idx = _allNavItems.indexWhere((n) => n.route == name);
       // Wallet is not in sidebar; it lives under Billing. Direct /pulse/wallet (e.g. View transactions) shows Wallet page with Billing tab selected in sidebar.
       if (idx < 0 && name == PulseRouteNames.wallet) {
-        idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
+        idx = _allNavItems.indexWhere((n) => n.route == PulseRouteNames.billing);
       }
       if (idx >= 0) _selectedIndex = idx;
     }
@@ -227,14 +271,15 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     final resolveStart = DateTime.now().millisecondsSinceEpoch;
     debugSessionLog('pulse_shell.dart:_resolveAccountThenLoad', 'resolveAccountThenLoad start', {'initialRoute': widget.initialRouteName}, 'B');
     // #endregion
+    // Prioritize shell/sidebar readiness first, then hydrate credits.
     await _loadAccountInfo();
     if (!mounted) return;
-    await _loadMyRoleAndPermissions();
-    if (!mounted) return;
-    _loadWalletCredits();
-    _loadNumbersSummary();
-    _loadUsageSummary();
-    await _loadFirstCallStatus();
+    // Sidebar tab visibility comes from role/permissions; keep this running early.
+    _ensureRolePermissionsLoadStarted();
+    // Credits can hydrate right after sidebar tabs start resolving.
+    unawaited(_loadWalletCredits());
+    unawaited(_loadUsageSummary());
+    unawaited(_loadFirstCallStatus());
     // Only start Firestore real-time listener when the user is signed in with Firebase Auth.
     // Otherwise Firestore rules typically deny access and we get permission-denied. Wallet
     // data still loads via _loadWalletCredits() (API) above.
@@ -317,7 +362,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _loadWalletCredits() async {
     try {
-      final w = await NeyvoPulseApi.getBillingWallet();
+      final w = await NeyvoPulseApi.getBillingWallet(shellScoped: true);
       if (mounted) {
         final credits = (w['credits'] as num?)?.toInt();
         final shield = w['addon_shield_numbers'] as List? ?? [];
@@ -337,7 +382,17 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _loadMyRoleAndPermissions() async {
     try {
-      final res = await NeyvoPulseApi.getMyRole();
+      final acc = await ref
+          .read(accountInfoProvider.future)
+          .timeout(const Duration(seconds: 12));
+      if (acc['ok'] == true && acc['account_id'] != null) {
+        final accountId = acc['account_id']?.toString() ?? '';
+        if (accountId.isNotEmpty) {
+          NeyvoPulseApi.setDefaultAccountId(accountId);
+          NeyvoApi.setDefaultAccountId(accountId);
+        }
+      }
+      final res = await NeyvoPulseApi.getMyRole(shellScoped: true);
       if (!mounted) return;
       if (res['ok'] == true) {
         final role = res['role']?.toString();
@@ -350,11 +405,18 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     } catch (_) {}
   }
 
+  void _ensureRolePermissionsLoadStarted() {
+    if (_rolePermsLoadStarted) return;
+    _rolePermsLoadStarted = true;
+    unawaited(_loadMyRoleAndPermissions());
+  }
+
   Future<void> _signOut() async {
     await FirebaseAuth.instance.signOut();
-    SpeariaApi.setSessionToken(null);
-    SpeariaApi.setUserId(null);
+    NeyvoApi.setSessionToken(null);
+    NeyvoApi.setUserId(null);
     NeyvoPulseApi.setDefaultAccountId(null);
+    NeyvoApi.setDefaultAccountId(null);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('neyvo_pulse_onboarding_completed');
@@ -363,10 +425,13 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
 
   Future<void> _loadAccountInfo() async {
     try {
-      final res = await NeyvoPulseApi.getAccountInfo();
+      final res = await ref
+          .read(accountInfoProvider.future)
+          .timeout(const Duration(seconds: 12));
       if (res['ok'] == true && res['account_id'] != null) {
         final accountId = res['account_id']?.toString() ?? '';
         NeyvoPulseApi.setDefaultAccountId(accountId);
+        NeyvoApi.setDefaultAccountId(accountId);
       }
       final col = res['org_collection'] as String?;
       if (col != null && col.trim().isNotEmpty) _orgCollection = col.trim();
@@ -380,7 +445,18 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
           _voiceStudioEnabled = (res['studio_enabled'] == true);
           _agencyMode = (res['agency_mode'] == true) || (res['is_agency'] == true);
         });
+        unawaited(_syncTimezoneFromSettings());
       }
+    } catch (_) {}
+  }
+
+  Future<void> _syncTimezoneFromSettings() async {
+    try {
+      final settingsRes =
+          await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 6));
+      final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
+      UserTimezoneService.setTimezone(tzStr);
+      ref.read(userTimezoneProvider.notifier).syncFromService();
     } catch (_) {}
   }
 
@@ -389,26 +465,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
       final now = DateTime.now();
       final from = '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
       final to = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final u = await NeyvoPulseApi.getBillingUsage(from: from, to: to);
+      final u = await NeyvoPulseApi.getBillingUsage(from: from, to: to, shellScoped: true);
       if (mounted) setState(() => _usageSpend = (u['total_dollars_spent'] as num?)?.toDouble());
-    } catch (_) {}
-  }
-
-  Future<void> _loadNumbersSummary() async {
-    try {
-      final res = await NeyvoPulseApi.listNumbers();
-      if (mounted) {
-        setState(() {
-          _numbersCount = (res['total_numbers'] as num?)?.toInt();
-          _callsTodayCapacity = (res['total_daily_capacity'] as num?)?.toInt();
-          final numbers = res['numbers'] as List? ?? [];
-          int used = 0;
-          for (final n in numbers) {
-            used += (n['calls_today'] as num?)?.toInt() ?? 0;
-          }
-          _callsTodayUsed = used;
-        });
-      }
     } catch (_) {}
   }
 
@@ -416,7 +474,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
   /// the system is considered "live" and whether Launch should remain visible.
   Future<void> _loadFirstCallStatus() async {
     try {
-      final res = await NeyvoPulseApi.listCalls();
+      final res = await NeyvoPulseApi.listCalls(
+        shellScoped: true,
+        syncFromVapi: false,
+      );
       final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final hasCompleted = calls.any((c) {
         final status = (c['status'] as String?)?.toLowerCase();
@@ -441,14 +502,12 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     // #endregion
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
-    final tenant = TenantScope.of(context)?.config;
     final Color sidebarBgColor = NeyvoColors.sidebarBg;
-    final Color sidebarAccentColor = NeyvoColors.ubLightBlue;
-    final Color sidebarSelectedColor = NeyvoColors.sidebarSelected;
-    final Color sidebarHoverColor = NeyvoColors.sidebarHover;
+    final Color sidebarAccentColor = Theme.of(context).colorScheme.secondary;
+    final Color sidebarSelectedColor = sidebarBgColor.withOpacity(0.85);
+    final Color sidebarHoverColor = sidebarBgColor.withOpacity(0.5);
 
-    final brandPrimary = TenantBrand.primary(context);
-    final brandSecondary = TenantBrand.secondary(context);
+    final brandPrimary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: NeyvoColors.bgVoid,
@@ -463,7 +522,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
             ),
             child: Column(
               children: [
-                // Logo area — tenant horizontal logo (white preferred), UB fallback
+                // Logo area
                 Container(
                   height: 64,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -472,51 +531,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Builder(
-                      builder: (context) {
-                        
-                        final scope = TenantScope.of(context);
-                        final tenant = scope?.config;
-                        final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-                        final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
-                        if (logoUrl != null && logoUrl.isNotEmpty) {
-                          final lower = logoUrl.toLowerCase();
-                          if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-                            return Image.network(
-                              logoUrl,
-                              fit: BoxFit.contain,
-                              height: 46,
-                              errorBuilder: (context, _, __) {
-                                return SvgPicture.asset(
-                                  'assets/ub_logo/ub_logo_horizontal_white.svg',
-                                  fit: BoxFit.contain,
-                                  height: 46,
-                                  colorFilter: const ColorFilter.mode(
-                                    NeyvoColors.white,
-                                    BlendMode.srcIn,
-                                  ),
-                                );
-                              },
-                            );
-                          } else {
-                            return SvgPicture.network(
-                              logoUrl,
-                              fit: BoxFit.contain,
-                              height: 46,
-                              placeholderBuilder: (_) => const SizedBox(height: 46),
-                            );
-                          }
-                        }
-                        return SvgPicture.asset(
-                          'assets/ub_logo/ub_logo_horizontal_white.svg',
-                          fit: BoxFit.contain,
-                          height: 46,
-                          colorFilter: const ColorFilter.mode(
-                            NeyvoColors.white,
-                            BlendMode.srcIn,
-                          ),
-                        );
-                      },
+                    child: Image.asset(
+                      'assets/goodwin_logo/goodwin-horiz-white.png',
+                      height: 36,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
@@ -536,13 +554,8 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         hoverBgColor: sidebarHoverColor,
                         accentColor: sidebarAccentColor,
                         onTap: () {
-                          setState(() {
-                            _selectedIndex = i;
-                            _userHasChangedTab = true;
-                          });
-                          if (kIsWeb) url_helper.updateBrowserUrl(item.route);
+                          _onPulseSidebarTabChanged(i, route: item.route);
                           if (item.label == 'Billing') _loadWalletCredits();
-                          if (item.label == 'Lines') _loadNumbersSummary();
                         },
                       );
                     },
@@ -556,7 +569,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Account ID: ${_accountIdDisplay ?? '—'}',
+                        'Account ID: ${_accountIdDisplay != null && _accountIdDisplay!.trim().isNotEmpty ? _accountIdDisplay! : 'Loading…'}',
                         style: NeyvoTextStyles.micro.copyWith(
                           color: NeyvoColors.white.withOpacity(0.75),
                         ),
@@ -690,7 +703,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         },
                       ),
                       if (_walletCredits != null)
-                          Material(
+                        Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
@@ -698,8 +711,7 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               var idx = items.indexWhere((n) => n.route == PulseRouteNames.billing);
                               if (idx < 0) idx = items.indexWhere((n) => n.route == PulseRouteNames.settings);
                               if (idx >= 0) {
-                                setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
-                                if (kIsWeb) url_helper.updateBrowserUrl(items[idx].route);
+                                _onPulseSidebarTabChanged(idx, route: items[idx].route);
                               }
                             },
                             borderRadius: BorderRadius.circular(100),
@@ -726,6 +738,16 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                                 ),
                               ),
                             ),
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 80,
+                          height: 28,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            color: NeyvoColors.textSecondary.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(100),
                           ),
                         ),
                       PopupMenuButton<String>(
@@ -798,7 +820,12 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                 Expanded(
                   child: Stack(
                               children: [
-                                ClipRect(child: _buildCurrentPage()),
+                                ClipRect(
+                                  child: KeyedSubtree(
+                                    key: ValueKey<String>(_currentPulseRoute ?? 'pulse'),
+                                    child: _buildCurrentPage(),
+                                  ),
+                                ),
                                 if (_incomingCall != null)
                                   IncomingCallOverlay(
                                     agentName: (_incomingCall?['agent_name'] ?? _incomingCall?['agent'] ?? '').toString(),
@@ -833,84 +860,8 @@ extension on _PulseShellState {
     final items = _navItems;
     final idx = items.indexWhere((n) => n.route == route);
     if (idx >= 0) {
-      setState(() { _selectedIndex = idx; _userHasChangedTab = true; });
-      if (kIsWeb) url_helper.updateBrowserUrl(route);
+      _onPulseSidebarTabChanged(idx, route: items[idx].route);
     }
-  }
-
-  Future<void> _showOrgSwitchDialog() async {
-    final controller = TextEditingController();
-    bool working = false;
-    String? err;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setInner) => AlertDialog(
-            backgroundColor: NeyvoColors.bgBase,
-            title: const Text('Switch org'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Enter an Account ID to switch organizations.', style: NeyvoTextStyles.body),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      labelText: 'Account ID',
-                      hintText: 'e.g. 12345678',
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  if (err != null) ...[
-                    const SizedBox(height: 10),
-                    Text(err!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: working ? null : () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: working
-                    ? null
-                    : () async {
-                        final id = controller.text.trim();
-                        if (id.isEmpty) {
-                          setInner(() => err = 'Enter an account id.');
-                          return;
-                        }
-                        setInner(() {
-                          working = true;
-                          err = null;
-                        });
-                        try {
-                          await NeyvoPulseApi.linkUserToAccount(id);
-                          NeyvoPulseApi.setDefaultAccountId(id);
-                          if (!mounted) return;
-                          await _resolveAccountThenLoad();
-                          if (ctx.mounted) Navigator.of(ctx).pop();
-                        } catch (e) {
-                          setInner(() {
-                            working = false;
-                            err = e.toString();
-                          });
-                        }
-                      },
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.secondary(ctx)),
-                child: working
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
-                    : const Text('Switch'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    controller.dispose();
   }
 
   /// Map the currently selected nav route to the active page widget.
@@ -918,67 +869,194 @@ extension on _PulseShellState {
     // When opened via "View plans" / "View voice tiers" from Billing, show that page (not in sidebar).
     // When opened at /pulse/wallet we show Wallet page and Billing is selected; once user taps another tab, content follows _selectedIndex so other tabs work.
     final initialRoute = widget.initialRouteName;
-    if (initialRoute == PulseRouteNames.voiceTier) return const VoiceTierPage();
-    if (initialRoute == PulseRouteNames.subscriptionPlan) return const PlanSelectorPage();
+    if (initialRoute == PulseRouteNames.voiceTier) {
+      return _buildDeferredPage(
+        key: 'voice_tier',
+        loadLibrary: voice_tier_page.loadLibrary,
+        builder: () => voice_tier_page.VoiceTierPage(),
+      );
+    }
+    if (initialRoute == PulseRouteNames.subscriptionPlan) {
+      return _buildDeferredPage(
+        key: 'plan_selector',
+        loadLibrary: plan_selector_page.loadLibrary,
+        builder: () => plan_selector_page.PlanSelectorPage(),
+      );
+    }
 
     final items = _navItems;
     final route = _selectedIndex >= 0 && _selectedIndex < items.length ? items[_selectedIndex].route : null;
     final showingWalletBecauseInitial = initialRoute == PulseRouteNames.wallet && !_userHasChangedTab && route == PulseRouteNames.billing;
-    if (showingWalletBecauseInitial) return const WalletPage();
+    if (showingWalletBecauseInitial) {
+      return _buildDeferredPage(
+        key: 'wallet',
+        loadLibrary: wallet_page.loadLibrary,
+        builder: () => wallet_page.WalletPage(),
+      );
+    }
 
     if (_selectedIndex < 0 || _selectedIndex >= items.length || route == null) {
-      return const PulseDashboardPage();
+      return _buildDeferredPage(
+        key: 'dashboard',
+        loadLibrary: pulse_dashboard_page.loadLibrary,
+        builder: () => pulse_dashboard_page.PulseDashboardPage(),
+      );
     }
     switch (route) {
       case PulseRouteNames.dashboard:
-        return const ExecutiveDashboardPage();
+        return _buildDeferredPage(
+          key: 'exec_dashboard',
+          loadLibrary: executive_dashboard_page.loadLibrary,
+          builder: () => executive_dashboard_page.ExecutiveDashboardPage(),
+        );
       case PulseRouteNames.launch:
         // Launch wizard page (implemented as separate screen/route).
-        return const LaunchPage();
+        return _buildDeferredPage(
+          key: 'launch',
+          loadLibrary: launch_page.loadLibrary,
+          builder: () => launch_page.LaunchPage(),
+        );
       case PulseRouteNames.agents:
         return _buildManagedProfilesContent();
       case PulseRouteNames.phoneNumbers:
-        return const PhoneNumbersPage();
+        return _canAccess('operators')
+            ? _buildDeferredPage(
+                key: 'phone_numbers',
+                loadLibrary: phone_numbers_page.loadLibrary,
+                builder: () => phone_numbers_page.PhoneNumbersPage(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.calls:
         // Calls shell – default to call history for now; sub-nav handled inside.
-        return CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls);
+        return _buildDeferredPage(
+          key: 'calls',
+          loadLibrary: calls_page.loadLibrary,
+          builder: () => calls_page.CallsPage(initialSection: widget.initialCallsSection ?? CallsSection.calls),
+        );
       case PulseRouteNames.students:
-        return const StudentsHubPage();
+        return _buildDeferredPage(
+          key: 'students',
+          loadLibrary: students_hub_page.loadLibrary,
+          builder: () => students_hub_page.StudentsHubPage(),
+        );
       case PulseRouteNames.campaigns:
-        return const CampaignsPage();
+        return _canAccess('campaigns')
+            ? _buildDeferredPage(
+                key: 'campaigns',
+                loadLibrary: campaigns_page.loadLibrary,
+                builder: () => campaigns_page.CampaignsPage(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.team:
-        return const TeamPage();
-      case PulseRouteNames.auditLog:
-        return const AuditLogPage();
+        return _buildDeferredPage(
+          key: 'team',
+          loadLibrary: team_page.loadLibrary,
+          builder: () => team_page.TeamPage(),
+        );
       case PulseRouteNames.testCall:
-        return const TestCallPage();
+        return _buildDeferredPage(
+          key: 'test_call',
+          loadLibrary: test_call_page.loadLibrary,
+          builder: () => test_call_page.TestCallPage(),
+        );
       case PulseRouteNames.analytics:
-        return const AnalyticsPage();
+        return _buildDeferredPage(
+          key: 'analytics',
+          loadLibrary: analytics_page.loadLibrary,
+          builder: () => analytics_page.AnalyticsPage(),
+        );
       case PulseRouteNames.executiveDashboard:
-        return const ExecutiveDashboardPage();
+        return _buildDeferredPage(
+          key: 'exec_dashboard',
+          loadLibrary: executive_dashboard_page.loadLibrary,
+          builder: () => executive_dashboard_page.ExecutiveDashboardPage(),
+        );
       case PulseRouteNames.health:
-        return const HealthCheckPage();
+        return _buildDeferredPage(
+          key: 'health',
+          loadLibrary: health_check_page.loadLibrary,
+          builder: () => health_check_page.HealthCheckPage(),
+        );
       case PulseRouteNames.integrations:
-        return const IntegrationsPage();
+        return _buildDeferredPage(
+          key: 'integrations',
+          loadLibrary: integrations_page.loadLibrary,
+          builder: () => integrations_page.IntegrationsPage(),
+        );
       case PulseRouteNames.billing:
-        return const BillingPage();
+        return _canAccess('billing')
+            ? _buildDeferredPage(
+                key: 'billing',
+                loadLibrary: billing_screen.loadLibrary,
+                builder: () => billing_screen.BillingScreen(),
+              )
+            : const AccessDeniedScreen();
       case PulseRouteNames.wallet:
-        return const WalletPage();
+        return _buildDeferredPage(
+          key: 'wallet',
+          loadLibrary: wallet_page.loadLibrary,
+          builder: () => wallet_page.WalletPage(),
+        );
       case PulseRouteNames.voiceTier:
-        return const VoiceTierPage();
+        return _buildDeferredPage(
+          key: 'voice_tier',
+          loadLibrary: voice_tier_page.loadLibrary,
+          builder: () => voice_tier_page.VoiceTierPage(),
+        );
       case PulseRouteNames.subscriptionPlan:
-        return const PlanSelectorPage();
+        return _buildDeferredPage(
+          key: 'plan_selector',
+          loadLibrary: plan_selector_page.loadLibrary,
+          builder: () => plan_selector_page.PlanSelectorPage(),
+        );
       case PulseRouteNames.settings:
-        return const PulseSettingsPage();
+        return _buildDeferredPage(
+          key: 'settings',
+          loadLibrary: settings_page.loadLibrary,
+          builder: () => settings_page.PulseSettingsPage(),
+        );
       case PulseRouteNames.training:
-        return const TrainingPage();
+        return _buildDeferredPage(
+          key: 'training',
+          loadLibrary: training_page.loadLibrary,
+          builder: () => training_page.TrainingPage(),
+        );
       case PulseRouteNames.agency:
-        return const AgencyOverviewPage();
+        return _buildDeferredPage(
+          key: 'agency',
+          loadLibrary: agency_overview_page.loadLibrary,
+          builder: () => agency_overview_page.AgencyOverviewPage(),
+        );
       case PulseRouteNames.voiceStudio:
-        return const VoiceStudioPage();
+        return _buildDeferredPage(
+          key: 'voice_studio',
+          loadLibrary: voice_studio_page.loadLibrary,
+          builder: () => voice_studio_page.VoiceStudioPage(),
+        );
       default:
-        return const PulseDashboardPage();
+        return _buildDeferredPage(
+          key: 'dashboard',
+          loadLibrary: pulse_dashboard_page.loadLibrary,
+          builder: () => pulse_dashboard_page.PulseDashboardPage(),
+        );
     }
+  }
+
+  Widget _buildDeferredPage({
+    required String key,
+    required Future<void> Function() loadLibrary,
+    required Widget Function() builder,
+  }) {
+    final future = _deferredLoads.putIfAbsent(key, loadLibrary);
+    return FutureBuilder<void>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return builder();
+      },
+    );
   }
 }
 
@@ -1136,6 +1214,19 @@ class _ProfileDetailRouter extends StatelessWidget {
         }
         return ManagedProfileDetailPage(profileId: profileId, embedded: false);
       },
+    );
+  }
+}
+
+class AccessDeniedScreen extends StatelessWidget {
+  const AccessDeniedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Access denied'),
+      ),
     );
   }
 }

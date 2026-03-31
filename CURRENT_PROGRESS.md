@@ -19,7 +19,7 @@
 ### 2.1 Core foundation
 - [x] Backend API connected; health check
 - [x] Firebase (client + service account) integrated
-- [x] Flutter app structure, Spearia theme, NeyvoPulseApi client
+- [x] Flutter app structure, Neyvo theme, NeyvoPulseApi client
 - [x] Auth: login/sign-up (Firebase Auth or backend JWT); role-based access (admin, staff, view-only); first-admin bootstrap
 - [x] Audit log (backend + GET `/api/pulse/audit-log`; Audit log page in nav)
 

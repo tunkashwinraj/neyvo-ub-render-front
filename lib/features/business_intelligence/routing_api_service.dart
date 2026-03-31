@@ -1,7 +1,7 @@
 // lib/features/business_intelligence/routing_api_service.dart
 // API client for Phone Number Routing. Uses /api/routing/*.
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class RoutingApiService {
@@ -10,14 +10,14 @@ class RoutingApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       p['account_id'] = p['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.getJsonMap(path, params: p);
+    return NeyvoApi.getJsonMap(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    final v = await SpeariaApi.patchJson(path, body: body);
+    final v = await NeyvoApi.patchJson(path, body: body);
     return Map<String, dynamic>.from(v as Map);
   }
 

@@ -6,7 +6,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
 import '../utils/voice_preview_player.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
@@ -85,7 +85,7 @@ class _AgentCreationWizardState extends State<AgentCreationWizard> {
       if (list.isEmpty && kDebugMode) {
         // ignore: avoid_print
         print('Neyvo templates empty for industry=$_industry direction=$_direction. '
-            'Run POST ${SpeariaApi.baseUrl}/api/admin/seed-templates to seed templates.');
+            'Run POST ${NeyvoApi.baseUrl}/api/admin/seed-templates to seed templates.');
       }
       setState(() { _templates = list; _loadingTemplates = false; });
     } catch (e) {

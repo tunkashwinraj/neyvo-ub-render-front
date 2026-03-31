@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 
-class NeyvoLoadingScreen extends StatelessWidget {
+class NeyvoLoadingScreen extends ConsumerWidget {
   const NeyvoLoadingScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return const Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Center(
@@ -52,7 +52,9 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
 
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
+    // Use fixed Neyvo brand loading color so startup is consistent
+    // across theme/bootstrap timing and never falls back to purple.
+    const loaderColor = NeyvoColors.ubPurple;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -74,7 +76,7 @@ class _NeyvoPurpleCirclesLoaderState extends State<NeyvoPurpleCirclesLoader> wit
                     height: widget.circleSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: primary,
+                      color: loaderColor,
                     ),
                   ),
                 ),

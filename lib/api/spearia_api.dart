@@ -4,10 +4,13 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart' as ul;
 
-/// Thrown by SpeariaApi on non-2xx or invalid responses.
+import '../core/pulse_request_cancelled.dart';
+
+/// Thrown by the HTTP client on non-2xx or invalid responses.
 class ApiException implements Exception {
   final int? statusCode;
   final String message;
@@ -24,25 +27,81 @@ class ApiException implements Exception {
 /// Optional global hook so UI can show SnackBars, Sentry, etc.
 typedef ApiErrorHook = void Function(ApiException e);
 
+enum ApiTimeoutClass { fast, medium, heavy }
+
 /// Centralized HTTP/URL utility for the Flutter app.
 ///
 /// Configure once (usually in main()):
-///   SpeariaApi.setBaseUrl("http://127.0.0.1:8000");
-///   SpeariaApi.setSessionToken("...");                 // <- user session (Bearer)
-///   SpeariaApi.setAdminToken("...");                   // optional admin header
-///   SpeariaApi.setDefaultAccountId("demo-biz-001");   // optional convenience
-///   SpeariaApi.setGlobalErrorHook((e) { ... });        // optional
+///   NeyvoApi.setBaseUrl("http://127.0.0.1:8000");
+///   NeyvoApi.setSessionToken("...");                 // <- user session (Bearer)
+///   NeyvoApi.setAdminToken("...");                   // optional admin header
+///   NeyvoApi.setDefaultAccountId("demo-biz-001");   // optional convenience
+///   NeyvoApi.setGlobalErrorHook((e) { ... });        // optional
 class SpeariaApi {
   static String _baseUrl = "";
   static String? _sessionToken; // <— NEW: user session (Bearer)
   static String? _adminToken; // optional X-Admin-Token for admin routes
   static String? _userId; // optional X-User-Id for Pulse RBAC
   static String? _defaultAccountId; // auto-injected if a call forgets it
-  static String? _tenantId; // optional X-Tenant for multi-tenant branding
   static Duration _defaultTimeout = const Duration(seconds: 20);
   static bool _sendNgrokSkipHeader = false;
   static bool _autoAdminForAdminPaths = true; // add X-Admin-Token for /admin/*
   static ApiErrorHook? _errorHook;
+
+  static Dio? _dio;
+  static String _dioBaseUrl = "";
+
+  /// Cancels in-flight tab-scoped GETs (see [getJsonMapTabScoped]). Call when the
+  /// user selects a different main Pulse sidebar tab so the previous screen stops
+  /// competing for bandwidth with the new one.
+  static CancelToken? _pulseTabCancelToken;
+
+  static void bumpPulseTabCancelToken() {
+    try {
+      _pulseTabCancelToken?.cancel('pulse tab switched');
+    } catch (_) {}
+    _pulseTabCancelToken = CancelToken();
+  }
+
+  /// Dio client mirroring the behavior of the Neyvo HTTP helpers.
+  /// This is used by some Riverpod providers (e.g. billing) that call
+  /// `api.dio.get(...)` per feature spec.
+  Dio get dio {
+    _ensureBaseUrlOrThrow();
+    if (_dio == null || _dioBaseUrl != _baseUrl) {
+      _dioBaseUrl = _baseUrl;
+      _dio = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: _defaultTimeout,
+          receiveTimeout: _defaultTimeout,
+        ),
+      );
+      _dio!.interceptors.clear();
+      _dio!.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            // Inject default account_id (same behavior as _withAccountId in HTTP helpers).
+            if (_defaultAccountId != null && _defaultAccountId!.isNotEmpty) {
+              options.queryParameters.putIfAbsent('account_id', () => _defaultAccountId!);
+            }
+
+            // Inject headers (Authorization, X-Admin-Token, X-User-Id, Accept, CORS helper header).
+            final h = _headers(
+              headers: null,
+              adminAuth: false,
+              path: options.path,
+              includeJsonContentType: false,
+            );
+            options.headers.addAll(h);
+
+            handler.next(options);
+          },
+        ),
+      );
+    }
+    return _dio!;
+  }
 
   /// Read-only getter (handy for building absolute links)
   static String get baseUrl => _baseUrl;
@@ -85,15 +144,23 @@ class SpeariaApi {
         (id == null || id.trim().isEmpty) ? null : id.trim();
   }
 
-  /// Optional: current tenant id (sent as X-Tenant) for multi-tenant setups.
-  static void setTenantId(String? tenantId) {
-    _tenantId =
-        (tenantId == null || tenantId.trim().isEmpty) ? null : tenantId.trim();
-  }
-
   /// Optional: adjust default request timeout
   static void setDefaultTimeout(Duration d) {
     _defaultTimeout = d;
+  }
+
+  /// Timeout buckets for endpoint classes.
+  /// Keep these explicit so critical identity calls fail fast while
+  /// heavy analytics/report endpoints can tolerate backend latency.
+  static Duration timeoutForClass(ApiTimeoutClass timeoutClass) {
+    switch (timeoutClass) {
+      case ApiTimeoutClass.fast:
+        return const Duration(seconds: 10);
+      case ApiTimeoutClass.medium:
+        return const Duration(seconds: 15);
+      case ApiTimeoutClass.heavy:
+        return const Duration(seconds: 45);
+    }
   }
 
   /// Optional: ngrok HTML splash avoidance header
@@ -114,7 +181,7 @@ class SpeariaApi {
   static void _ensureBaseUrlOrThrow() {
     if (_baseUrl.isEmpty) {
       throw ApiException(
-        'SpeariaApi baseUrl is empty. Did you call SpeariaApi.setBaseUrl(...) in main.dart?',
+        'Neyvo API baseUrl is empty. Did you call NeyvoApi.setBaseUrl(...) in main.dart?',
       );
     }
   }
@@ -163,10 +230,6 @@ class SpeariaApi {
     // Pulse RBAC: send current user id when set
     if (_userId != null && _userId!.isNotEmpty) {
       h['X-User-Id'] = _userId!;
-    }
-    // Tenant header so backend can resolve branding even when Host is shared.
-    if (_tenantId != null && _tenantId!.isNotEmpty) {
-      h['X-Tenant'] = _tenantId!;
     }
     return h;
   }
@@ -250,7 +313,7 @@ class SpeariaApi {
         throw ApiException(
           'Server returned ${_looksLikeHtml(resp.body) ? 'HTML' : 'XML'} instead of JSON.\n'
           '• You probably called getJson() on a text/html or text/xml endpoint.\n'
-          '• Use SpeariaApi.getText(...) for endpoints that return TwiML/XML (e.g., /incoming-call) or plain text.\n'
+          '• Use NeyvoApi.getText(...) for endpoints that return TwiML/XML (e.g., /incoming-call) or plain text.\n'
           'URI: $uri',
           statusCode: resp.statusCode,
           uri: uri,
@@ -563,6 +626,60 @@ class SpeariaApi {
     throw ApiException('Expected JSON object but got ${v.runtimeType}', uri: _uri(path, params: params));
   }
 
+  /// Same as [getJsonMap] but uses Dio with a shared cancel token. [bumpPulseTabCancelToken]
+  /// should be called when switching main Pulse tabs so stale reads stop immediately.
+  static Future<Map<String, dynamic>> getJsonMapTabScoped(
+    String path, {
+    Map<String, dynamic>? params,
+    Map<String, String>? extraHeaders,
+    Duration? timeout,
+    bool adminAuth = false,
+  }) async {
+    _ensureBaseUrlOrThrow();
+    final p = Map<String, dynamic>.from(_withAccountId(params) ?? {});
+    _pulseTabCancelToken ??= CancelToken();
+    final token = _pulseTabCancelToken!;
+    final dioClient = SpeariaApi().dio;
+    try {
+      final resp = await dioClient.get<dynamic>(
+        path,
+        queryParameters: p.isEmpty ? null : p,
+        cancelToken: token,
+        options: Options(
+          receiveTimeout: timeout ?? _defaultTimeout,
+          responseType: ResponseType.json,
+          headers: extraHeaders,
+        ),
+      );
+      final data = resp.data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      throw ApiException(
+        'Expected JSON object but got ${data.runtimeType}',
+        uri: _uri(path, params: params),
+      );
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        throw const PulseRequestCancelled();
+      }
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      String msg = e.message ?? 'HTTP error';
+      if (body is Map && body['error'] != null) {
+        msg = body['error'].toString();
+      } else if (body is String && body.isNotEmpty) {
+        msg = body;
+      }
+      throw ApiException(
+        msg,
+        statusCode: status,
+        uri: e.requestOptions.uri,
+        payload: body,
+      );
+    }
+  }
+
   static Future<List<dynamic>> getJsonList(
       String path, {
         Map<String, dynamic>? params,
@@ -584,7 +701,7 @@ class SpeariaApi {
   // --------------------------- Convenience ---------------------------------
 
   /// Guard pattern to reduce try/catch in widgets:
-  /// await SpeariaApi.guardApi(context, () => SpeariaApi.getJsonMap('/api/...'));
+  /// await NeyvoApi.guardApi(context, () => NeyvoApi.getJsonMap('/api/...'));
   static Future<T?> guardApi<T>(
       BuildContext context,
       Future<T> Function() op, {
@@ -592,6 +709,8 @@ class SpeariaApi {
       }) async {
     try {
       return await op();
+    } on PulseRequestCancelled {
+      return null;
     } on ApiException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(friendlyError ?? e.message)),
@@ -617,5 +736,30 @@ class SpeariaApi {
         SnackBar(content: Text('Ping failed: $e')),
       );
     }
+  }
+
+  /// Retries only on transient network failures (not [ApiException] 4xx/5xx).
+  /// Handles [DioException] (tab-scoped Dio) and [TimeoutException] (http package paths).
+  static Future<T> runWithRetry<T>(
+    Future<T> Function() op, {
+    int maxAttempts = 3,
+    Duration delay = const Duration(milliseconds: 400),
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await op();
+      } on DioException catch (e) {
+        final retryable = e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        if (!retryable || attempt >= maxAttempts) rethrow;
+        await Future<void>.delayed(delay * attempt);
+      } on TimeoutException {
+        if (attempt >= maxAttempts) rethrow;
+        await Future<void>.delayed(delay * attempt);
+      }
+    }
+    throw StateError('runWithRetry: exhausted after $maxAttempts attempts');
   }
 }

@@ -1,26 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
+import '../../../core/providers/executive_launch_sections_provider.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
-import '../../../features/managed_profiles/managed_profile_api_service.dart';
-import '../../../features/setup/setup_api_service.dart';
 
-class LaunchPage extends StatefulWidget {
+class LaunchPage extends ConsumerStatefulWidget {
   const LaunchPage({super.key});
 
   @override
-  State<LaunchPage> createState() => _LaunchPageState();
+  ConsumerState<LaunchPage> createState() => _LaunchPageState();
 }
 
-class _LaunchPageState extends State<LaunchPage> {
+class _LaunchPageState extends ConsumerState<LaunchPage> {
   bool _loading = true;
   String? _error;
+  String? _deferredError;
+  int _loadVersion = 0;
 
   int _credits = 0;
   bool _businessReady = false;
@@ -36,77 +38,23 @@ class _LaunchPageState extends State<LaunchPage> {
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     setState(() {
       _loading = true;
       _error = null;
+      _deferredError = null;
     });
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getBillingWallet(),
-        SetupStatusApiService.getStatus(),
-        ManagedProfileApiService.listProfiles(),
-        NeyvoPulseApi.listNumbers(),
-        NeyvoPulseApi.listCalls(),
-        NeyvoPulseApi.getAccountInfo(),
-      ]);
-
-      final wallet = results[0] as Map<String, dynamic>;
-      final setup = results[1] as Map<String, dynamic>;
-      final profiles = results[2] as Map<String, dynamic>;
-      final numbers = results[3] as Map<String, dynamic>;
-      final calls = results[4] as Map<String, dynamic>;
-      final account = results[5] as Map<String, dynamic>;
-
-      final credits = (wallet['credits'] as num?)?.toInt() ??
-          (wallet['wallet_credits'] as num?)?.toInt() ??
-          0;
-
-      final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
-      final agents = Map<String, dynamic>.from(setup['agents'] as Map? ?? {});
-      final nums = Map<String, dynamic>.from(setup['numbers'] as Map? ?? {});
-      final businessReady =
-          (business['status'] as String? ?? '').toLowerCase() == 'ready';
-      final agentsCount = (agents['count'] as num?)?.toInt() ??
-          ((profiles['profiles'] as List?)?.length ?? 0);
-      final numbersCount =
-          (nums['count'] as num?)?.toInt() ??
-              ((numbers['numbers'] as List?)?.length ?? 0);
-
-      final callsList =
-          (calls['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final hasCompleted = callsList.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
-      String? trainingNumber;
-      final primary =
-          (account['primary_phone_e164'] ?? account['primary_phone'])?.toString();
-      if (primary != null && primary.trim().isNotEmpty) {
-        trainingNumber = primary.trim();
-      } else {
-        final list = (numbers['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-        final primaryNum = list.firstWhere(
-          (n) => (n['role']?.toString().toLowerCase() ?? '') == 'primary',
-          orElse: () => const {},
-        );
-        trainingNumber = (primaryNum['phone_number_e164'] ?? primaryNum['phone_number'])?.toString();
-      }
-
-      if (!mounted) return;
+      final critical = await ref.read(launchCriticalProvider.future);
+      if (!mounted || version != _loadVersion) return;
       setState(() {
-        _credits = credits;
-        _businessReady = businessReady;
-        _agentsCount = agentsCount;
-        _numbersCount = numbersCount;
-        _hasFirstCompletedCall = hasCompleted;
-        _trainingNumberE164 = trainingNumber;
+        _credits = critical.credits;
+        _businessReady = critical.businessReady;
         _loading = false;
       });
+      unawaited(_loadDeferred(version));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -114,11 +62,28 @@ class _LaunchPageState extends State<LaunchPage> {
     }
   }
 
+  Future<void> _loadDeferred(int version) async {
+    try {
+      final deferred = await ref.read(launchDeferredProvider.future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _agentsCount = deferred.agentsCount;
+        _numbersCount = deferred.numbersCount;
+        _hasFirstCompletedCall = deferred.hasFirstCompletedCall;
+        _trainingNumberE164 = deferred.trainingNumberE164;
+        _deferredError = null;
+      });
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() => _deferredError = e.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return Center(
-        child: CircularProgressIndicator(color: TenantBrand.primary(context)),
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
       );
     }
     if (_error != null) {
@@ -135,7 +100,7 @@ class _LaunchPageState extends State<LaunchPage> {
     }
 
     if (_hasFirstCompletedCall) {
-      final primary = TenantBrand.primary(context);
+      final primary = Theme.of(context).colorScheme.primary;
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -254,6 +219,27 @@ class _LaunchPageState extends State<LaunchPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_deferredError != null) ...[
+                  NeyvoGlassPanel(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: NeyvoColors.warning, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Some launch status checks are delayed. You can continue setup and retry.',
+                            style: NeyvoTextStyles.body,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _loadDeferred(_loadVersion),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 const SizedBox(height: 8),
                 Text('Launch', style: NeyvoTextStyles.title.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
@@ -323,7 +309,7 @@ class _LaunchPageState extends State<LaunchPage> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       decoration: BoxDecoration(
-                                        color: NeyvoColors.bgRaised.withOpacity(0.6),
+                                        color: NeyvoColors.bgRaised.withValues(alpha: 0.6),
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(color: NeyvoColors.borderSubtle),
                                       ),

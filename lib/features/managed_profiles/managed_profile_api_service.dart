@@ -1,23 +1,50 @@
 // lib/features/managed_profiles/managed_profile_api_service.dart
 // API client for Managed Profiles only. Uses /api/managed-profiles/*.
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
+import '../../config/backend_urls.dart';
+import '../../models/email_models.dart';
+import '../../models/sms_models.dart';
 import '../../neyvo_pulse_api.dart';
 
 class ManagedProfileApiService {
-  static Future<Map<String, dynamic>> _get(String path, {Map<String, dynamic>? params}) async {
+  static String get _integrationBaseUrl => resolveNeyvoApiBaseUrl();
+
+  /// GETs use the same Dio + cancel token as [NeyvoPulseApi] tab-scoped reads so
+  /// switching sidebar tabs aborts in-flight managed-profile requests and frees
+  /// browser connections for the visible tab. Use [shellScoped] for background
+  /// loads that must complete even when the user changes tabs (e.g. launch summary).
+  static Future<Map<String, dynamic>> _get(
+    String path, {
+    Map<String, dynamic>? params,
+    bool shellScoped = false,
+  }) async {
     final p = Map<String, dynamic>.from(params ?? {});
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       p['account_id'] = p['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.getJsonMap(path, params: p);
+    if (shellScoped) {
+      return SpeariaApi.getJsonMap(path, params: p);
+    }
+    return SpeariaApi.getJsonMapTabScoped(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.postJsonMap(path, body: body);
+    return NeyvoApi.postJsonMap(path, body: body);
+  }
+
+  static Future<Map<String, dynamic>> _postWithTimeout(
+    String path,
+    Map<String, dynamic> body, {
+    required Duration timeout,
+  }) async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
+    }
+    return NeyvoApi.postJsonMap(path, body: body, timeout: timeout);
   }
 
   static Future<void> _delete(String path, {Map<String, dynamic>? body}) async {
@@ -25,14 +52,14 @@ class ManagedProfileApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       params['account_id'] = params['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    await SpeariaApi.deleteJson(path, params: params);
+    await NeyvoApi.deleteJson(path, params: params);
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    final v = await SpeariaApi.patchJson(path, body: body);
+    final v = await NeyvoApi.patchJson(path, body: body);
     return Map<String, dynamic>.from(v as Map);
   }
 
@@ -48,7 +75,11 @@ class ManagedProfileApiService {
       _post('/api/managed-profiles/preview_v2', body);
 
   static Future<Map<String, dynamic>> createProfile(Map<String, dynamic> body) async =>
-      _post('/api/managed-profiles', body);
+      _postWithTimeout(
+        '/api/managed-profiles',
+        body,
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Create a raw Vapi assistant that is driven directly by a full VAPI JSON config (no wizard/tier overrides).
   /// Body should at minimum include profile_name and custom_system_prompt.
@@ -86,11 +117,206 @@ class ManagedProfileApiService {
         'direction': direction,
       });
 
-  static Future<Map<String, dynamic>> listProfiles() async =>
-      _get('/api/managed-profiles');
+  static Future<Map<String, dynamic>> listProfiles({bool shellScoped = false}) async =>
+      _get('/api/managed-profiles', shellScoped: shellScoped);
 
-  static Future<Map<String, dynamic>> getProfile(String profileId) async =>
-      _get('/api/managed-profiles/$profileId');
+  static Future<Map<String, dynamic>> getProfile(String profileId, {bool shellScoped = false}) async =>
+      _get('/api/managed-profiles/$profileId', shellScoped: shellScoped);
+
+  /// True when GET returned ok but nothing was ever saved (or wrong host returned empty).
+  static bool _messagingDefaultsPayloadEmpty(Map<String, dynamic> m) {
+    Map<String, dynamic>? asMap(dynamic v) {
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      return null;
+    }
+
+    bool blank(String? s) => s == null || s.trim().isEmpty;
+    final email = asMap(m['email']);
+    final sms = asMap(m['sms']);
+    if (email != null) {
+      for (final k in ['to', 'subject', 'body', 'html_body', 'from_name']) {
+        if (!blank(email[k]?.toString())) return false;
+      }
+    }
+    if (sms != null) {
+      for (final k in ['to', 'body']) {
+        if (!blank(sms[k]?.toString())) return false;
+      }
+    }
+    return true;
+  }
+
+  static Future<Map<String, dynamic>> _getMessagingDefaultsFromIntegration(
+    String profileId,
+    Map<String, dynamic> params,
+  ) async {
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    final v = await SpeariaApi.getJson('$_integrationBaseUrl$path', params: params);
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    throw ApiException('Unexpected messaging-defaults response');
+  }
+
+  /// Same dual-host behavior as save: primary Pulse API, then integration backend.
+  /// Also retries integration when primary returns 200 but Firestore doc is empty (split-brain).
+  static Future<Map<String, dynamic>> getMessagingDefaults(String profileId) async {
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    try {
+      final first = await NeyvoApi.getJsonMap(path, params: params);
+      if (!_messagingDefaultsPayloadEmpty(first)) return first;
+      if (NeyvoPulseApi.defaultAccountId.isEmpty) return first;
+      try {
+        final second = await _getMessagingDefaultsFromIntegration(profileId, params);
+        if (!_messagingDefaultsPayloadEmpty(second)) return second;
+      } catch (_) {
+        /* keep empty first */
+      }
+      return first;
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return _getMessagingDefaultsFromIntegration(profileId, params);
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveMessagingDefaults(
+    String profileId, {
+    required Map<String, dynamic> email,
+    required Map<String, dynamic> sms,
+  }) async {
+    final body = <String, dynamic>{'email': email, 'sms': sms};
+    return _saveMessagingDefaultsBody(profileId, body);
+  }
+
+  static Future<Map<String, dynamic>> saveEmailDefaults(
+    String profileId, {
+    required Map<String, dynamic> email,
+  }) async {
+    return _saveMessagingDefaultsBody(profileId, <String, dynamic>{'email': email});
+  }
+
+  static Future<Map<String, dynamic>> saveSmsDefaults(
+    String profileId, {
+    required Map<String, dynamic> sms,
+  }) async {
+    return _saveMessagingDefaultsBody(profileId, <String, dynamic>{'sms': sms});
+  }
+
+  /// Send one test email using saved Additional settings (same rendering as Vapi sendEmail).
+  static Future<Map<String, dynamic>> testMessagingEmail(
+    String profileId, {
+    required String to,
+    Map<String, dynamic>? variables,
+    String? memberUserId,
+    String? staffId,
+    String? studentId,
+  }) async {
+    final body = <String, dynamic>{
+      'to': to.trim(),
+      if (variables != null && variables.isNotEmpty) 'variables': variables,
+      if (memberUserId != null && memberUserId.trim().isNotEmpty) 'member_user_id': memberUserId.trim(),
+      if (staffId != null && staffId.trim().isNotEmpty) 'staff_id': staffId.trim(),
+      if (studentId != null && studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+    };
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/messaging-defaults/test-email';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await SpeariaApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  /// Send one test SMS using saved Additional settings (same rendering as Vapi sendSMS).
+  static Future<Map<String, dynamic>> testMessagingSms(
+    String profileId, {
+    required String to,
+    Map<String, dynamic>? variables,
+    String? memberUserId,
+    String? staffId,
+    String? studentId,
+  }) async {
+    final body = <String, dynamic>{
+      'to': to.trim(),
+      if (variables != null && variables.isNotEmpty) 'variables': variables,
+      if (memberUserId != null && memberUserId.trim().isNotEmpty) 'member_user_id': memberUserId.trim(),
+      if (staffId != null && staffId.trim().isNotEmpty) 'staff_id': staffId.trim(),
+      if (studentId != null && studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+    };
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/messaging-defaults/test-sms';
+    try {
+      return await NeyvoApi.postJsonMap(path, body: body);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      return await SpeariaApi.postJsonMap('$_integrationBaseUrl$path', body: body);
+    }
+  }
+
+  static Future<Map<String, dynamic>> _saveMessagingDefaultsBody(
+    String profileId,
+    Map<String, dynamic> body,
+  ) async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      body['account_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/messaging-defaults';
+    try {
+      final v = await SpeariaApi.putJson(path, body: body);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      throw ApiException('Unexpected messaging-defaults response');
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await SpeariaApi.putJson('$_integrationBaseUrl$path', body: body);
+      if (v is Map<String, dynamic>) return v;
+      if (v is Map) return Map<String, dynamic>.from(v);
+      throw ApiException('Unexpected messaging-defaults response');
+    }
+  }
+
+  static Future<SendgridConfig> getOperatorSendgridConfig(String profileId) async {
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+      params['business_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/sendgrid';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SendgridConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SendgridConfig.fromJson(v);
+    }
+  }
+
+  static Future<SmsConfig> getOperatorTwilioConfig(String profileId) async {
+    final params = <String, dynamic>{};
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
+      params['account_id'] = NeyvoPulseApi.defaultAccountId;
+      params['business_id'] = NeyvoPulseApi.defaultAccountId;
+    }
+    final path = '/api/operators/$profileId/integrations/twilio';
+    try {
+      final v = await NeyvoApi.getJsonMap(path, params: params);
+      return SmsConfig.fromJson(v);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      final v = await NeyvoApi.getJsonMap('$_integrationBaseUrl$path', params: params);
+      return SmsConfig.fromJson(v);
+    }
+  }
 
   /// Duplicate an operator: backend clones the VAPI assistant and creates a new profile (name + " (copy)").
   static Future<Map<String, dynamic>> duplicateProfile(String profileId) async =>
@@ -190,11 +416,19 @@ class ManagedProfileApiService {
 
   /// Universal wizard v3: AI craft system prompt, voicemail, and operator summary from wizardMeta.
   static Future<Map<String, dynamic>> aiCraftPromptV3(Map<String, dynamic> wizardMeta) async =>
-      _post('/api/managed-profiles/ai-craft-prompt-v3', {'wizardMeta': wizardMeta});
+      _postWithTimeout(
+        '/api/managed-profiles/ai-craft-prompt-v3',
+        {'wizardMeta': wizardMeta},
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Universal wizard: generate refining questions from goal (OpenAI). Returns { "questions": [ { "id", "text", "type", "options" }, ... ] }.
   static Future<Map<String, dynamic>> aiGoalQuestions(String goal) async =>
-      _post('/api/managed-profiles/ai-goal-questions', {'goal': goal});
+      _postWithTimeout(
+        '/api/managed-profiles/ai-goal-questions',
+        {'goal': goal},
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.heavy),
+      );
 
   /// Fetch a prebuilt prompt template (e.g. "sfs" for Student Financial Services).
   static Future<Map<String, dynamic>> getPromptTemplate(String templateId) async =>

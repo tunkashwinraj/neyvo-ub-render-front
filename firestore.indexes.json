@@ -55,6 +55,31 @@
         { "fieldPath": "direction", "order": "ASCENDING" },
         { "fieldPath": "industry", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "iterations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "operator_id", "order": "ASCENDING" },
+        { "fieldPath": "iteration_number", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "iterations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "operator_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "calls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "operator_id", "order": "ASCENDING" },
+        { "fieldPath": "flagged", "order": "ASCENDING" },
+        { "fieldPath": "scored_at", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -1,7 +1,7 @@
 // lib/features/business_intelligence/bi_wizard_api_service.dart
 // API client for Business Intelligence wizard. Uses /api/wizard/*.
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 
 class BiWizardApiService {
@@ -10,14 +10,14 @@ class BiWizardApiService {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       p['account_id'] = p['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.getJsonMap(path, params: p);
+    return NeyvoApi.getJsonMap(path, params: p);
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
     if (NeyvoPulseApi.defaultAccountId.isNotEmpty) {
       body['account_id'] = body['account_id'] ?? NeyvoPulseApi.defaultAccountId;
     }
-    return SpeariaApi.postJsonMap(path, body: body);
+    return NeyvoApi.postJsonMap(path, body: body);
   }
 
   /// GET /api/wizard/status - BI setup status (missing | partial | ready)

@@ -75,4 +75,11 @@ class UserTimezoneService {
   /// Full 12h: "Wed, Feb 25, 2026 at 2:00 PM" (for callbacks)
   static String formatCallback12h(dynamic raw) =>
       format(raw, pattern: "EEE, MMM d, yyyy 'at' h:mm a");
+
+  /// Current instant formatted in the user's Settings timezone (not device local).
+  static String formatNow({String pattern = 'MMMM d, y'}) =>
+      format(DateTime.now().toUtc(), pattern: pattern);
+
+  /// Calendar date parts in user timezone for "today" bucketing.
+  static DateTime userLocalNow() => _toUserTz(DateTime.now().toUtc());
 }

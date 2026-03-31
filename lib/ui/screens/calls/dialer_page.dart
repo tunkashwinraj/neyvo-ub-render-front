@@ -1,48 +1,32 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../features/managed_profiles/managed_profile_api_service.dart';
-import '../../../neyvo_pulse_api.dart';
-import '../../../tenant/tenant_brand.dart';
+import '../../../core/providers/dialer_page_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../../utils/phone_util.dart';
 import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 
-class DialerPage extends StatefulWidget {
+class DialerPage extends ConsumerStatefulWidget {
   const DialerPage({super.key});
 
   @override
-  State<DialerPage> createState() => _DialerPageState();
+  ConsumerState<DialerPage> createState() => _DialerPageState();
 }
 
-class _DialerPageState extends State<DialerPage> {
-  bool _loading = true;
-  String? _error;
-
-  Map<String, dynamic>? _capacity;
-  List<Map<String, dynamic>> _agents = [];
-  String? _selectedAgentId;
-  List<Map<String, dynamic>> _numbers = [];
-  String? _selectedNumberId;
-  Map<String, dynamic>? _numberCapacity;
-  List<Map<String, dynamic>> _students = [];
-  String? _selectedStudentId;
-
+class _DialerPageState extends ConsumerState<DialerPage> {
   final _contactPhone = TextEditingController();
   final _contactName = TextEditingController();
   final _structuredContext = TextEditingController();
-
-  bool _starting = false;
-  _DialerOverlayState? _overlay;
 
   static String _toE164(String? p) => normalizePhoneInput(p);
 
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(dialerPageCtrlProvider.notifier).load();
+    });
   }
 
   @override
@@ -53,215 +37,36 @@ class _DialerPageState extends State<DialerPage> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final results = await Future.wait([
-        NeyvoPulseApi.getOutboundCapacity(),
-        ManagedProfileApiService.listProfiles(),
-        NeyvoPulseApi.listNumbers(),
-        NeyvoPulseApi.listStudents().catchError((_) => <String, dynamic>{'students': []}),
-      ]);
-      final cap = results[0] as Map<String, dynamic>;
-      final prof = results[1] as Map<String, dynamic>;
-      final nums = results[2] as Map<String, dynamic>;
-      final studentsRes = results[3] as Map<String, dynamic>;
-      final list = (prof['profiles'] as List?)?.cast<dynamic>() ?? const [];
-      final agents = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      final first = agents.isNotEmpty ? (agents.first['profile_id']?.toString()) : null;
-      final rawNums = (nums['numbers'] as List?)?.cast<dynamic>() ?? const [];
-      final numbers = rawNums.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      final firstNum = numbers.isNotEmpty
-          ? (numbers.first['phone_number_id'] ??
-                  numbers.first['number_id'] ??
-                  numbers.first['id'])
-              ?.toString()
-          : null;
-      final rawStudents = (studentsRes['students'] as List?)?.cast<dynamic>() ?? const [];
-      final students = rawStudents.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      if (!mounted) return;
-      setState(() {
-        _capacity = cap;
-        _agents = agents;
-        _selectedAgentId = _selectedAgentId ?? first;
-        _numbers = numbers;
-        _selectedNumberId = _selectedNumberId ?? firstNum;
-        _students = students;
-        _loading = false;
-      });
-      await _loadNumberCapacity();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _loadNumberCapacity() async {
-    final id = (_selectedNumberId ?? '').trim();
-    if (id.isEmpty) {
-      if (mounted) setState(() => _numberCapacity = null);
-      return;
-    }
-    try {
-      final cap = await NeyvoPulseApi.getNumberCapacity(id);
-      if (!mounted) return;
-      setState(() => _numberCapacity = cap);
-    } catch (_) {
-      // Non-fatal; backend will enforce.
-    }
-  }
-
-  Future<void> _startCall() async {
-    final agentId = (_selectedAgentId ?? '').trim();
-    final numberId = (_selectedNumberId ?? '').trim();
-    final phoneRaw = _contactPhone.text.trim();
-    final phone = normalizeToE164Us(phoneRaw);
-    if (agentId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select an agent.')));
-      return;
-    }
-    if (numberId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a number.')));
-      return;
-    }
-    if (phone.isEmpty || !RegExp(r'^\+[0-9]{8,15}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Enter a valid US phone (e.g. 123-456-7890, (123) 456-7890, +12035551234).',
-        ),
-      ));
-      return;
-    }
-
-    // Guardrails (UI-side): wallet credits, capacity remaining.
-    try {
-      final wallet = await NeyvoPulseApi.getBillingWallet();
-      final credits = (wallet['credits'] as num?)?.toInt() ??
-          (wallet['wallet_credits'] as num?)?.toInt() ??
-          0;
-      if (credits <= 0) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Insufficient credits. Add credits to start a call.')),
-        );
-        return;
-      }
-    } catch (_) {
-      // If wallet check fails, allow backend to enforce.
-    }
-    final remaining = (_capacity?['remaining_today'] as num?)?.toInt();
-    if (remaining != null && remaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No remaining outbound capacity today.')),
-      );
-      return;
-    }
-    try {
-      final cap = await NeyvoPulseApi.getNumberCapacity(numberId);
-      final nRemaining = (cap['remaining_today'] as num?)?.toInt();
-      final warning = cap['warning'] == true;
-      if (nRemaining != null && nRemaining <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Selected number reached its daily cap. Choose another number.')),
-        );
-        return;
-      }
-      if (warning) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Warm-up / carrier risk warning for this number. Consider using another number.')),
-        );
-      }
-    } catch (_) {}
-
-    setState(() {
-      _starting = true;
-      _overlay = _DialerOverlayState.connecting;
-    });
-
-    try {
-      unawaited(_animateOverlay());
-      final overrides = <String, dynamic>{};
-      final name = _contactName.text.trim();
-      if (name.isNotEmpty) overrides['clientName'] = name;
-      final ctx = _structuredContext.text.trim();
-      if (ctx.isNotEmpty) overrides['context'] = ctx;
-      overrides['phone_number_id'] = numberId;
-
-      await ManagedProfileApiService.makeOutboundCall(
-        profileId: agentId,
-        customerPhone: phone,
-        studentId: (_selectedStudentId ?? '').trim().isEmpty ? null : _selectedStudentId,
-        overrides: overrides,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _starting = false;
-        _overlay = _DialerOverlayState.speaking;
-      });
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      setState(() {
-        _overlay = _DialerOverlayState.success;
-      });
-      await Future.delayed(const Duration(milliseconds: 700));
-      if (!mounted) return;
-      setState(() {
-        _overlay = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _starting = false;
-        _overlay = _DialerOverlayState.error;
-      });
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
-      setState(() => _overlay = null);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to start call: $e')));
-    }
-  }
-
-  Future<void> _animateOverlay() async {
-    await Future.delayed(const Duration(milliseconds: 650));
-    if (!mounted || _overlay != _DialerOverlayState.connecting) return;
-    setState(() => _overlay = _DialerOverlayState.listening);
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted || _overlay != _DialerOverlayState.listening) return;
-    setState(() => _overlay = _DialerOverlayState.processing);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final primary = TenantBrand.primary(context);
-    if (_loading) {
+    final d = ref.watch(dialerPageCtrlProvider);
+    final primary = Theme.of(context).colorScheme.primary;
+    if (d.loading) {
       return Center(child: CircularProgressIndicator(color: primary));
     }
-    if (_error != null) {
+    if (d.error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text(d.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(
+              onPressed: () => ref.read(dialerPageCtrlProvider.notifier).load(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
 
-    final remaining = (_capacity?['remaining_today'] as num?)?.toInt();
-    final numbersCount = (_capacity?['numbers_count'] as num?)?.toInt();
-    final safePerNumber = (_capacity?['safe_daily_per_number'] as num?)?.toInt();
-    final perNumberRemaining = (_numberCapacity?['remaining_today'] as num?)?.toInt();
-    final perNumberLimit = (_numberCapacity?['daily_limit'] as num?)?.toInt();
-    final perNumberWarning = _numberCapacity?['warning'] == true;
+    final remaining = (d.capacity?['remaining_today'] as num?)?.toInt();
+    final numbersCount = (d.capacity?['numbers_count'] as num?)?.toInt();
+    final safePerNumber = (d.capacity?['safe_daily_per_number'] as num?)?.toInt();
+    final perNumberRemaining = (d.numberCapacity?['remaining_today'] as num?)?.toInt();
+    final perNumberLimit = (d.numberCapacity?['daily_limit'] as num?)?.toInt();
+    final perNumberWarning = d.numberCapacity?['warning'] == true;
+    final ctrl = ref.read(dialerPageCtrlProvider.notifier);
 
     return Stack(
       children: [
@@ -277,7 +82,7 @@ class _DialerPageState extends State<DialerPage> {
                   ),
                 ),
                 TextButton.icon(
-                  onPressed: _load,
+                  onPressed: () => ctrl.load(),
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('Refresh'),
                 ),
@@ -300,7 +105,7 @@ class _DialerPageState extends State<DialerPage> {
                 ],
               ),
             ),
-            if ((_selectedNumberId ?? '').trim().isNotEmpty) ...[
+            if ((d.selectedNumberId ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               NeyvoGlassPanel(
                 child: Row(
@@ -333,9 +138,9 @@ class _DialerPageState extends State<DialerPage> {
                         Text('Call setup', style: NeyvoTextStyles.heading),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _selectedAgentId,
+                          value: d.selectedAgentId,
                           decoration: const InputDecoration(labelText: 'Select agent'),
-                          items: _agents
+                          items: d.agents
                               .map((a) {
                                 final id = (a['profile_id'] ?? '').toString();
                                 final name = (a['profile_name'] ?? 'Operator').toString();
@@ -344,46 +149,37 @@ class _DialerPageState extends State<DialerPage> {
                               })
                               .whereType<DropdownMenuItem<String>>()
                               .toList(),
-                          onChanged: (v) => setState(() => _selectedAgentId = v),
+                          onChanged: (v) => ctrl.setSelectedAgentId(v),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _selectedNumberId,
+                          value: d.selectedNumberId,
                           decoration: const InputDecoration(labelText: 'Select number'),
-                          items: _numbers
+                          items: d.numbers
                               .map((n) {
-                                final id = (n['phone_number_id'] ??
-                                        n['number_id'] ??
-                                        n['id'] ??
-                                        '')
-                                    .toString();
-                                final e164 = (n['phone_number_e164'] ??
-                                        n['phone_number'] ??
-                                        n['e164'] ??
-                                        id)
-                                    .toString();
+                                final id = (n['phone_number_id'] ?? n['number_id'] ?? n['id'] ?? '').toString();
+                                final e164 = (n['phone_number_e164'] ?? n['phone_number'] ?? n['e164'] ?? id).toString();
                                 if (id.isEmpty) return null;
                                 return DropdownMenuItem(value: id, child: Text(e164, overflow: TextOverflow.ellipsis));
                               })
                               .whereType<DropdownMenuItem<String>>()
                               .toList(),
-                          onChanged: _starting
+                          onChanged: d.starting
                               ? null
                               : (v) async {
-                                  setState(() => _selectedNumberId = v);
-                                  await _loadNumberCapacity();
+                                  await ctrl.setSelectedNumberId(v);
                                 },
                         ),
-                        if (_students.isNotEmpty) ...[
+                        if (d.students.isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          DropdownButtonFormField<String>(
-                            value: _selectedStudentId,
+                          DropdownButtonFormField<String?>(
+                            value: d.selectedStudentId,
                             decoration: const InputDecoration(
                               labelText: 'Or select a student (auto-fills name & phone)',
                             ),
                             items: [
-                              const DropdownMenuItem(value: null, child: Text('— Manual entry —')),
-                              ..._students.map((s) {
+                              const DropdownMenuItem<String?>(value: null, child: Text('— Manual entry —')),
+                              ...d.students.map((s) {
                                 final id = s['id']?.toString() ?? '';
                                 final name = s['name']?.toString() ?? '—';
                                 final phone = s['phone']?.toString() ?? '';
@@ -392,19 +188,20 @@ class _DialerPageState extends State<DialerPage> {
                                 return DropdownMenuItem(value: id, child: Text(label, overflow: TextOverflow.ellipsis));
                               }).whereType<DropdownMenuItem<String>>(),
                             ],
-                            onChanged: _starting
+                            onChanged: d.starting
                                 ? null
                                 : (v) {
-                                    setState(() {
-                                      _selectedStudentId = v;
-                                      if (v != null) {
-                                        final s = _students.firstWhere((e) => (e['id']?.toString()) == v, orElse: () => const {});
-                                        if (s.isNotEmpty) {
-                                          _contactName.text = s['name']?.toString() ?? '';
-                                          _contactPhone.text = _toE164(s['phone']?.toString()) ?? '';
-                                        }
+                                    ctrl.setSelectedStudentId(v);
+                                    if (v != null) {
+                                      final s = d.students.firstWhere(
+                                        (e) => (e['id']?.toString()) == v,
+                                        orElse: () => <String, dynamic>{},
+                                      );
+                                      if (s.isNotEmpty) {
+                                        _contactName.text = s['name']?.toString() ?? '';
+                                        _contactPhone.text = _toE164(s['phone']?.toString());
                                       }
-                                    });
+                                    }
                                   },
                           ),
                         ],
@@ -438,12 +235,19 @@ class _DialerPageState extends State<DialerPage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: _starting ? null : _startCall,
+                            onPressed: d.starting
+                                ? null
+                                : () => ctrl.startCall(
+                                      context,
+                                      contactPhoneRaw: _contactPhone.text,
+                                      contactName: _contactName.text,
+                                      structuredContext: _structuredContext.text,
+                                    ),
                             style: FilledButton.styleFrom(
                               backgroundColor: primary,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                            child: _starting
+                            child: d.starting
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
@@ -479,28 +283,26 @@ class _DialerPageState extends State<DialerPage> {
             ),
           ],
         ),
-        if (_overlay != null) _DialerOverlay(state: _overlay!),
+        if (d.overlay != null) _DialerOverlay(state: d.overlay!),
       ],
     );
   }
 }
 
-enum _DialerOverlayState { connecting, listening, processing, speaking, success, error }
-
 class _DialerOverlay extends StatelessWidget {
   const _DialerOverlay({required this.state});
 
-  final _DialerOverlayState state;
+  final DialerOverlayState state;
 
   @override
   Widget build(BuildContext context) {
     final (orbState, label) = switch (state) {
-      _DialerOverlayState.connecting => (NeyvoAIOrbState.processing, 'Connecting call…'),
-      _DialerOverlayState.listening => (NeyvoAIOrbState.listening, 'Listening…'),
-      _DialerOverlayState.processing => (NeyvoAIOrbState.processing, 'Processing…'),
-      _DialerOverlayState.speaking => (NeyvoAIOrbState.speaking, 'Speaking…'),
-      _DialerOverlayState.success => (NeyvoAIOrbState.idle, 'Call started'),
-      _DialerOverlayState.error => (NeyvoAIOrbState.error, 'Call failed'),
+      DialerOverlayState.connecting => (NeyvoAIOrbState.processing, 'Connecting call…'),
+      DialerOverlayState.listening => (NeyvoAIOrbState.listening, 'Listening…'),
+      DialerOverlayState.processing => (NeyvoAIOrbState.processing, 'Processing…'),
+      DialerOverlayState.speaking => (NeyvoAIOrbState.speaking, 'Speaking…'),
+      DialerOverlayState.success => (NeyvoAIOrbState.idle, 'Call started'),
+      DialerOverlayState.error => (NeyvoAIOrbState.error, 'Call failed'),
     };
 
     return Positioned.fill(
@@ -508,7 +310,7 @@ class _DialerOverlay extends StatelessWidget {
         color: Colors.black.withOpacity(0.55),
         child: Center(
           child: NeyvoGlassPanel(
-            glowing: state == _DialerOverlayState.success,
+            glowing: state == DialerOverlayState.success,
             child: SizedBox(
               width: 420,
               child: Column(
@@ -532,4 +334,3 @@ class _DialerOverlay extends StatelessWidget {
     );
   }
 }
-

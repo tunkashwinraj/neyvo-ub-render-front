@@ -66,7 +66,7 @@ For each endpoint, call with the base URL above. Use query param `school_id=defa
 
 ### 6. Frontend assumptions (no direct code execution required)
 
-- **6.1** The Flutter app is configured with `SpeariaApi.setBaseUrl('https://neyvo-pulse.onrender.com')`. If the user runs the app against a different backend (e.g. localhost), the base URL must match that backend; otherwise every request will fail or hit the wrong host. Report: “Frontend base URL should match the backend being tested (currently documented as https://neyvo-pulse.onrender.com).”
+- **6.1** The Flutter app is configured with `NeyvoApi.setBaseUrl('https://neyvo-pulse.onrender.com')`. If the user runs the app against a different backend (e.g. localhost), the base URL must match that backend; otherwise every request will fail or hit the wrong host. Report: “Frontend base URL should match the backend being tested (currently documented as https://neyvo-pulse.onrender.com).”
 - **6.2** The app sends `X-User-Id` when the user is signed in (Firebase Auth). Backend CORS must allow this header (checked in 3.1). Report any mismatch.
 - **6.3** Auth: Login/sign-up use Firebase Auth; the backend does not issue JWTs. Report if there is any expectation of backend-issued tokens that would be incorrect.
 

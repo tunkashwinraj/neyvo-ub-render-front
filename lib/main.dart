@@ -4,69 +4,31 @@
   import 'package:firebase_core/firebase_core.dart';
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
-  import 'package:shared_preferences/shared_preferences.dart';
-  import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/data/latest.dart' as tz;
 
-import 'api/spearia_api.dart';
-import 'services/user_timezone_service.dart';
+import 'api/neyvo_api.dart';
+import 'core/providers/account_provider.dart';
+import 'core/providers/theme_provider.dart';
 import 'firebase_options.dart';
 import 'neyvo_pulse_api.dart';
 import 'pulse_route_names.dart';
 import 'pulse_routes.dart';
 import 'screens/pulse_auth_page.dart';
-import 'screens/pulse_shell.dart';
-import 'tenant/tenant_api.dart';
-import 'tenant/tenant_config.dart';
-import 'tenant/tenant_scope.dart';
-import 'theme/neyvo_theme.dart';
+import 'screens/pulse_shell.dart' deferred as pulse_shell;
 import 'widgets/inactivity_detector.dart';
 import 'widgets/neyvo_loading_screen.dart';
+import 'config/backend_urls.dart';
 
-  const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
-  const String _kDefaultBaseUrl = String.fromEnvironment(
-  'SPEARIA_BASE_URL',
-  defaultValue: 'https://neyvo-ub-render-back.onrender.com',
-  );
-  /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
-  /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
-  /// If not set, staging uses the same URL as prod (single Render service).
-  const String _kStagingBaseUrl = String.fromEnvironment(
-  'SPEARIA_BASE_URL_STAGING',
-  defaultValue: 'https://neyvo-ub-render-back.onrender.com',
-  );
-
-/// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
-const String _kLocalTenant = String.fromEnvironment('NEYVO_TENANT', defaultValue: '');
-/// This app is Goodwin University only (single tenant). No UB/tenant switching.
-String _resolveTenantId() {
-  if (!kIsWeb) return 'goodwin';
-  return 'goodwin';
-}
-
-/// When true (e.g. --dart-define=FORCE_STAGING=true), treat localhost as staging so local matches staging behavior.
-const bool _kForceStaging = bool.fromEnvironment('FORCE_STAGING', defaultValue: false);
-
-/// True when the app is running on the Firebase staging host (e.g. ub-neyvo-staging.web.app).
-bool get _isStagingHost {
-  if (_kForceStaging && kIsWeb) return true;
-  if (!kIsWeb) return false;
-  final host = Uri.base.host.toLowerCase();
-  return host.contains('staging') || host.endsWith('-staging.web.app') || host.endsWith('-staging.firebaseapp.com');
-}
-
-String _resolveBaseUrlForTenant(String tenantId) {
-  // Staging frontend (Firebase staging site) talks to testing backend (e.g. Render Testing branch).
-  if (_isStagingHost) return _kStagingBaseUrl;
-
-  // Single-tenant Goodwin deployment: use the configured base URL.
-  return _kDefaultBaseUrl;
-}
 /// Fallback account_id when getAccountInfo fails or returns empty (Goodwin-only deployment).
 /// Build: flutter build web --dart-define=NEYVO_ACCOUNT_ID=757763
 String get _kFallbackAccountId {
   const fromEnv = String.fromEnvironment('NEYVO_ACCOUNT_ID', defaultValue: '');
   if (fromEnv.isNotEmpty) return fromEnv;
-  if (SpeariaApi.baseUrl.contains('goodwin-neyvo-back.onrender.com')) return '757763';
+  // Goodwin deployment fallback only when API points at production Render host.
+  if (Uri.tryParse(NeyvoApi.baseUrl)?.host == 'goodwin-neyvo-back.onrender.com') {
+    return '757763';
+  }
   return '';
 }
 
@@ -82,82 +44,54 @@ String get _kFallbackAccountId {
     }
 
   FirebaseAuth.instance.authStateChanges().listen((User? user) {
-    SpeariaApi.setUserId(user?.uid);
-    if (user == null) NeyvoPulseApi.setDefaultAccountId(null);
+    NeyvoApi.setUserId(user?.uid);
+    if (user == null) {
+      NeyvoPulseApi.setDefaultAccountId(null);
+      NeyvoApi.setDefaultAccountId(null);
+    }
   });
-  SpeariaApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
-  if (FirebaseAuth.instance.currentUser == null) NeyvoPulseApi.setDefaultAccountId(null);
+  NeyvoApi.setUserId(FirebaseAuth.instance.currentUser?.uid);
+  if (FirebaseAuth.instance.currentUser == null) {
+    NeyvoPulseApi.setDefaultAccountId(null);
+    NeyvoApi.setDefaultAccountId(null);
+  }
 
-  // Resolve tenant + backend base URL.
-  final tenantId = _resolveTenantId();
-  final baseUrl = _resolveBaseUrlForTenant(tenantId.isNotEmpty ? tenantId : '');
+  final baseUrl = resolveNeyvoApiBaseUrl();
 
   // Configure backend base URL once. In dev you can override via:
-  // flutter run -d chrome --web-port 9095 --dart-define=SPEARIA_BASE_URL=http://127.0.0.1:8000
-  SpeariaApi.setBaseUrl(baseUrl);
-  if (tenantId.isNotEmpty) {
-    SpeariaApi.setTenantId(tenantId);
-  }
-    SpeariaApi.setDefaultTimeout(const Duration(seconds: 30));
+  // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000
+  NeyvoApi.setBaseUrl(baseUrl);
+  NeyvoApi.setDefaultTimeout(const Duration(seconds: 30));
 
     tz.initializeTimeZones();
 
-    // Timeout so first paint is not blocked by slow/403 backend; use host-based default on failure.
-    const timeout = Duration(seconds: 5);
-    TenantConfig tenantConfig;
-    try {
-      tenantConfig = await TenantApi.fetchConfig().timeout(timeout);
-    } catch (_) {
-      tenantConfig = TenantConfig.defaultGoodwin;
-    }
-
-    runApp(NeyvoPulseRoot(tenantConfig: tenantConfig));
+    runApp(
+      ProviderScope(
+        child: const NeyvoPulseRoot(),
+      ),
+    );
   }
 
   class NeyvoPulseRoot extends StatelessWidget {
-    final TenantConfig tenantConfig;
-
-    const NeyvoPulseRoot({super.key, required this.tenantConfig});
+    const NeyvoPulseRoot({super.key});
 
     @override
     Widget build(BuildContext context) {
-      return TenantScope(
-        config: tenantConfig,
-        child: const NeyvoPulseApp(),
-      );
+      return const NeyvoPulseApp();
     }
   }
 
-  class NeyvoPulseApp extends StatelessWidget {
+  class NeyvoPulseApp extends ConsumerWidget {
   const NeyvoPulseApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final scope = TenantScope.of(context);
-    final tenant = scope?.config;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(appThemeProvider);
     return MaterialApp(
       title: 'Neyvo',
       debugShowCheckedModeBanner: false,
-      theme: NeyvoThemeData.light(
-        primaryColor: tenant?.primaryColor,
-        secondaryColor: tenant?.secondaryColor ?? tenant?.accentColor,
-        accentColor: tenant?.accentColor,
-      ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const NeyvoLoadingScreen();
-          }
-          if (snapshot.hasData && snapshot.data != null) {
-            return const InactivityDetector(
-              timeout: const Duration(hours: 1),
-              child: _PostAuthGate(),
-            );
-          }
-          return const PulseAuthPage();
-        },
-      ),
+      theme: theme,
+      home: const _AuthBootstrapGate(),
     onGenerateRoute: (settings) {
       if (settings.name == PulseRouteNames.settings && settings.arguments is Map) {
         // Forward tab hint down to Settings page via PulseShell initialRouteName; SettingsPage reads arguments.
@@ -168,12 +102,58 @@ String get _kFallbackAccountId {
   }
 }
 
-  /// After login: load account then show PulseShell (Goodwin-only; no tenant switching).
-  class _PostAuthGate extends StatefulWidget {
+class _AuthBootstrapGate extends StatefulWidget {
+  const _AuthBootstrapGate();
+
+  @override
+  State<_AuthBootstrapGate> createState() => _AuthBootstrapGateState();
+}
+
+class _AuthBootstrapGateState extends State<_AuthBootstrapGate> {
+  Timer? _authWaitTimer;
+  bool _authWaitTimedOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authWaitTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted) return;
+      setState(() => _authWaitTimedOut = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _authWaitTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !_authWaitTimedOut) {
+          return const NeyvoLoadingScreen();
+        }
+        if (snapshot.hasData && snapshot.data != null) {
+          return const InactivityDetector(
+            timeout: Duration(hours: 1),
+            child: _PostAuthGate(),
+          );
+        }
+        return const PulseAuthPage();
+      },
+    );
+  }
+}
+
+  /// After login: show PulseShell immediately; account and settings load inside the shell.
+  class _PostAuthGate extends ConsumerStatefulWidget {
     const _PostAuthGate();
 
     @override
-    State<_PostAuthGate> createState() => _PostAuthGateState();
+    ConsumerState<_PostAuthGate> createState() => _PostAuthGateState();
   }
 
   /// Paths that PulseShell can open as the initial tab (must match PulseRouteNames).
@@ -185,7 +165,6 @@ String get _kFallbackAccountId {
     PulseRouteNames.students,
     PulseRouteNames.campaigns,
     PulseRouteNames.team,
-    PulseRouteNames.auditLog,
     PulseRouteNames.analytics,
     PulseRouteNames.executiveDashboard,
     PulseRouteNames.billing,
@@ -209,92 +188,81 @@ String get _kFallbackAccountId {
     return null;
   }
 
-  class _PostAuthGateState extends State<_PostAuthGate> {
-    bool _loaded = false;
-    bool _onboardingCompleted = true;
+  class _PostAuthGateState extends ConsumerState<_PostAuthGate> {
+    bool _handled403 = false;
 
     @override
     void initState() {
       super.initState();
-      _loadAccount();
+      if (_kFallbackAccountId.isNotEmpty) {
+        NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
+        NeyvoApi.setDefaultAccountId(_kFallbackAccountId);
+      }
     }
 
-    Future<void> _loadAccount() async {
-      try {
-        final res = await NeyvoPulseApi.getAccountInfo();
-        final ok = res['ok'] == true;
-        final accountId = res['account_id'] as String?;
-        final onboardingFromApi = res['onboarding_completed'];
-        if (ok && accountId != null && accountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(accountId);
-        } else if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        // Load user timezone from settings for date display
-        try {
-          final settingsRes = await NeyvoPulseApi.getSettings();
-          final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
-          UserTimezoneService.setTimezone(tzStr);
-        } catch (_) {}
-        // If API says not completed, check local persistence (so we don't loop when backend doesn't persist)
-        bool completed = onboardingFromApi == true;
-        if (!completed) {
-          final prefs = await SharedPreferences.getInstance();
-          completed = prefs.getBool(_kOnboardingCompletedKey) == true;
-        }
-        if (mounted) {
-          setState(() {
-            _loaded = true;
-            _onboardingCompleted = completed;
-          });
-        }
-      } on ApiException catch (e) {
-        // 403 = account not authorized for Goodwin University (single-tenant app).
-        if (e.statusCode == 403) {
-          if (!mounted) return;
-          NeyvoPulseApi.clearAccountInfoCache();
-          NeyvoPulseApi.setDefaultAccountId(null);
-          await showDialog<void>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Not authorized'),
-              content: const Text(
-                'This account is not authorized for Goodwin University.\n\n'
-                'Please sign in with a Goodwin University account or contact your administrator.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
+    Future<void> _showForbiddenAndSignOut() async {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Not authorized'),
+          content: const Text(
+            'This account is not authorized for Goodwin University.\n\n'
+            'Please sign in with a Goodwin University account or contact your administrator.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
             ),
-          );
-          await FirebaseAuth.instance.signOut();
-          return;
-        }
-        if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
-      } catch (_) {
-        if (_kFallbackAccountId.isNotEmpty) {
-          NeyvoPulseApi.setDefaultAccountId(_kFallbackAccountId);
-        }
-        if (mounted) setState(() { _loaded = true; _onboardingCompleted = true; });
-      }
+          ],
+        ),
+      );
+      await FirebaseAuth.instance.signOut();
     }
 
     @override
     Widget build(BuildContext context) {
-      if (!_loaded) {
-        return const NeyvoLoadingScreen();
-      }
+      ref.listen<AsyncValue<Map<String, dynamic>>>(
+        accountInfoProvider,
+        (prev, next) {
+          next.whenOrNull(
+            error: (e, st) {
+              if (_handled403) return;
+              if (e is! ApiException || e.statusCode != 403) return;
+              _handled403 = true;
+              NeyvoPulseApi.clearAccountInfoCache();
+              NeyvoPulseApi.setDefaultAccountId(null);
+              NeyvoApi.setDefaultAccountId(null);
+              unawaited(_showForbiddenAndSignOut());
+            },
+          );
+        },
+      );
       // Goodwin-only: no separate onboarding; go straight to shell.
       // On web refresh: use URL path so /pulse/operators (etc.) opens the correct tab instead of a blank/wrong view.
       final path = kIsWeb ? Uri.base.path : null;
       final hasPaymentParam = kIsWeb && (Uri.base.queryParameters['payment'] ?? '').trim().isNotEmpty;
       final initialRoute = _initialRouteFromPath(path, hasPaymentParam: hasPaymentParam);
-      return PulseShell(initialRouteName: initialRoute);
+      return _DeferredPulseShell(initialRouteName: initialRoute);
     }
   }
+
+class _DeferredPulseShell extends StatelessWidget {
+  const _DeferredPulseShell({this.initialRouteName});
+
+  final String? initialRouteName;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: pulse_shell.loadLibrary(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const NeyvoLoadingScreen();
+        }
+        return pulse_shell.PulseShell(initialRouteName: initialRouteName);
+      },
+    );
+  }
+}

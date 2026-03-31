@@ -1,26 +1,28 @@
 // lib/screens/students_list_page.dart
 // Enhanced students list with search, filter, and quick actions
 
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../api/spearia_api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../api/neyvo_api.dart';
+import '../core/providers/students_list_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
-import '../tenant/tenant_brand.dart';
 import '../theme/neyvo_theme.dart';
 import 'student_detail_page.dart';
 
-class StudentsListPage extends StatefulWidget {
+class StudentsListPage extends ConsumerStatefulWidget {
   const StudentsListPage({super.key});
 
   @override
-  State<StudentsListPage> createState() => _StudentsListPageState();
+  ConsumerState<StudentsListPage> createState() => _StudentsListPageState();
 }
 
-class _StudentsListPageState extends State<StudentsListPage> with SingleTickerProviderStateMixin {
+class _StudentsListPageState extends ConsumerState<StudentsListPage> with SingleTickerProviderStateMixin {
   List<dynamic> _allStudents = [];
   List<dynamic> _filteredStudents = [];
   bool _loading = true;
@@ -40,10 +42,11 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_filterStudents);
+    _searchController.addListener(() {
+      ref.read(studentsListCtrlProvider.notifier).setSearchQuery(_searchController.text);
+    });
     _subTabController = TabController(length: 2, vsync: this);
     _subTabController.addListener(() => setState(() {}));
-    _load();
   }
 
   @override
@@ -53,70 +56,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     super.dispose();
   }
 
-  Future<void> _loadReminders() async {
-    setState(() => _remindersLoading = true);
-    try {
-      final res = await NeyvoPulseApi.listReminders();
-      if (mounted) setState(() {
-        _reminders = res['reminders'] as List? ?? res['data'] as List? ?? [];
-        _remindersLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() { _reminders = []; _remindersLoading = false; });
-    }
-  }
+  Future<void> _loadReminders() => ref.read(studentsListCtrlProvider.notifier).loadReminders();
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final agentsRes = await NeyvoPulseApi.listAgents();
-      final agents = (agentsRes['agents'] as List? ?? []).cast<Map<String, dynamic>>();
-      final isEducation = agents.any((a) =>
-          (a['industry']?.toString().toLowerCase() ?? '') == 'education');
-      final firstAgentId = agents.isNotEmpty ? (agents.first['id'] ?? agents.first['agent_id'])?.toString() : null;
-
-      bool? hasBalance;
-      bool? isOverdue;
-      String? dueAfter;
-      String? dueBefore;
-      if (isEducation && _filterStatus != 'all') {
-        if (_filterStatus == 'with_balance') hasBalance = true;
-        else if (_filterStatus == 'overdue') isOverdue = true;
-        else if (_filterStatus == 'due_this_week') {
-          final now = DateTime.now();
-          dueAfter = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-          final end = now.add(const Duration(days: 7));
-          dueBefore = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
-        } else if (_filterStatus == 'no_balance') hasBalance = false;
-      }
-      final res = await NeyvoPulseApi.listStudents(
-        hasBalance: hasBalance,
-        isOverdue: isOverdue,
-        dueAfter: dueAfter,
-        dueBefore: dueBefore,
-      );
-      final list = res['students'] as List? ?? [];
-      if (mounted) {
-        setState(() {
-          _isEducationOrg = isEducation;
-          _agents = agents;
-          _selectedAgentId ??= (firstAgentId?.trim().isEmpty ?? true) ? null : firstAgentId?.trim();
-          _allStudents = list;
-          _filteredStudents = list;
-          _loading = false;
-        });
-        _filterStudents();
-      }
-    } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
+  Future<void> _load() => ref.read(studentsListCtrlProvider.notifier).load();
 
   static bool _isOverdue(Map<String, dynamic> s) {
     final dueStr = s['due_date']?.toString().trim() ?? '';
@@ -149,61 +91,17 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     return balance.isNotEmpty && balance != '0';
   }
 
-  void _filterStudents() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredStudents = _allStudents.where((s) {
-        final name = (s['name']?.toString() ?? '').toLowerCase();
-        final first = (s['first_name']?.toString() ?? '').toLowerCase();
-        final last = (s['last_name']?.toString() ?? '').toLowerCase();
-        final combined = ('$first $last').trim();
-        final phone = (s['phone']?.toString() ?? '').toLowerCase();
-        final email = (s['email']?.toString() ?? '').toLowerCase();
-        final studentId = (s['student_id']?.toString() ?? '').toLowerCase();
-        final dept = (s['department']?.toString() ?? '').toLowerCase();
-        final year = (s['year_of_study']?.toString() ?? '').toLowerCase();
-        final matchesSearch = query.isEmpty ||
-            name.contains(query) ||
-            first.contains(query) ||
-            last.contains(query) ||
-            combined.contains(query) ||
-            phone.contains(query) ||
-            email.contains(query) ||
-            studentId.contains(query) ||
-            dept.contains(query) ||
-            year.contains(query);
-        if (!matchesSearch) return false;
+  void _filterStudents() =>
+      ref.read(studentsListCtrlProvider.notifier).setSearchQuery(_searchController.text);
 
-        if (_filterStatus == 'all') return true;
-        if (_filterStatus == 'with_balance') return _hasBalance(s);
-        if (_filterStatus == 'overdue') return _isOverdue(s);
-        if (_filterStatus == 'due_this_week') return _isDueThisWeek(s);
-        if (_filterStatus == 'no_balance') return !_hasBalance(s);
-        return true;
-      }).toList();
-    });
-  }
+  void _toggleSelection(String id) => ref.read(studentsListCtrlProvider.notifier).toggleSelection(id);
 
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-      } else {
-        _selectedIds.add(id);
-      }
-    });
-  }
-
-  void _exitSelectionMode() {
-    setState(() {
-      _selectionMode = false;
-      _selectedIds.clear();
-    });
-  }
+  void _exitSelectionMode() => ref.read(studentsListCtrlProvider.notifier).clearSelection();
 
   List<Map<String, dynamic>> _getSelectedStudents() {
-    return _filteredStudents
-        .where((s) => _selectedIds.contains(s['id']?.toString()))
+    final ui = ref.read(studentsListCtrlProvider);
+    return ui.filteredStudents
+        .where((s) => ui.selectedIds.contains(s['id']?.toString()))
         .map((s) => s as Map<String, dynamic>)
         .toList();
   }
@@ -354,6 +252,13 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _allStudents = ui.allStudents;
+    final _filteredStudents = ui.filteredStudents;
+    final _loading = ui.loading;
+    final _error = ui.error;
+    final _selectionMode = ui.selectionMode;
+    final _selectedIds = ui.selectedIds;
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -410,7 +315,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                 ),
                 IconButton(
                   icon: const Icon(Icons.checklist),
-                  onPressed: () => setState(() => _selectionMode = true),
+                  onPressed: () => ref.read(studentsListCtrlProvider.notifier).setSelectionMode(true),
                   tooltip: 'Select contacts',
                 ),
               ],
@@ -425,7 +330,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
       floatingActionButton: _selectionMode ? null : (_subTabController.index == 0
           ? FloatingActionButton(
               onPressed: _openAddStudent,
-              backgroundColor: TenantBrand.isGoodwin(context) ? TenantBrand.primary(context) : null,
+              backgroundColor: true ? Theme.of(context).colorScheme.primary : null,
               child: const Icon(Icons.add),
             )
           : FloatingActionButton(
@@ -436,6 +341,13 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Widget _buildStudentsTab() {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _allStudents = ui.allStudents;
+    final _filteredStudents = ui.filteredStudents;
+    final _filterStatus = ui.filterStatus;
+    final _selectionMode = ui.selectionMode;
+    final _selectedIds = ui.selectedIds;
+    final _isEducationOrg = ui.isEducationOrg;
     return Column(
         children: [
           // Search and Filter Bar
@@ -477,8 +389,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'All',
                         selected: _filterStatus == 'all',
                         onTap: () {
-                          setState(() => _filterStatus = 'all');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('all');
                         },
                       ),
                       const SizedBox(width: NeyvoSpacing.sm),
@@ -486,8 +397,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'With Balance',
                         selected: _filterStatus == 'with_balance',
                         onTap: () {
-                          setState(() => _filterStatus = 'with_balance');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('with_balance');
                         },
                       ),
                       const SizedBox(width: NeyvoSpacing.sm),
@@ -495,8 +405,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                         label: 'Overdue',
                         selected: _filterStatus == 'overdue',
                         onTap: () {
-                          setState(() => _filterStatus = 'overdue');
-                          _load();
+                          ref.read(studentsListCtrlProvider.notifier).setFilterStatus('overdue');
                         },
                       ),
                       if (_isEducationOrg) ...[
@@ -505,8 +414,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                           label: 'Due This Week',
                           selected: _filterStatus == 'due_this_week',
                           onTap: () {
-                            setState(() => _filterStatus = 'due_this_week');
-                            _load();
+                            ref.read(studentsListCtrlProvider.notifier).setFilterStatus('due_this_week');
                           },
                         ),
                         const SizedBox(width: NeyvoSpacing.sm),
@@ -514,8 +422,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                           label: 'No Balance',
                           selected: _filterStatus == 'no_balance',
                           onTap: () {
-                            setState(() => _filterStatus = 'no_balance');
-                            _load();
+                            ref.read(studentsListCtrlProvider.notifier).setFilterStatus('no_balance');
                           },
                         ),
                       ],
@@ -548,8 +455,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                               icon: const Icon(Icons.add),
                               label: const Text('Add first contact'),
                               style: FilledButton.styleFrom(
-                                backgroundColor: TenantBrand.isGoodwin(context)
-                                    ? TenantBrand.primary(context)
+                                backgroundColor: true
+                                    ? Theme.of(context).colorScheme.primary
                                     : null,
                               ),
                             ),
@@ -573,8 +480,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                 TextButton(
                                   onPressed: () {
                                     _searchController.clear();
-                                    setState(() => _filterStatus = 'all');
-                                    _filterStudents();
+                                    ref.read(studentsListCtrlProvider.notifier).setFilterStatus('all');
                                   },
                                   child: const Text('Clear filters'),
                                 ),
@@ -591,15 +497,15 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                                 columns: [
                                   if (_selectionMode)
                                     const DataColumn(label: SizedBox(width: 40, child: Text(''))),
-                                  DataColumn(label: Text('Name', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Student ID', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Department', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Phone', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Email', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Year', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Last call', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Balance', style: NeyvoType.labelMedium)),
-                                  DataColumn(label: Text('Due date', style: NeyvoType.labelMedium)),
+                                  DataColumn(label: Text('Name', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Student ID', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Department', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Phone', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Email', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Year', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Last call', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Balance', style: NeyvoType.labelSmall)),
+                                  DataColumn(label: Text('Due date', style: NeyvoType.labelSmall)),
                                   const DataColumn(label: SizedBox(width: 48, child: Text(''))),
                                 ],
                                 rows: _filteredStudents.map<DataRow>((s) {
@@ -683,6 +589,9 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Widget _buildRemindersTab() {
+    final ui = ref.watch(studentsListCtrlProvider);
+    final _reminders = ui.reminders;
+    final _remindersLoading = ui.remindersLoading;
     if (_reminders.isEmpty && !_remindersLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadReminders());
     }
@@ -740,7 +649,6 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                             try {
                               await NeyvoPulseApi.deleteReminder(r['id']?.toString() ?? '');
                               _loadReminders();
-                              setState(() {});
                             } catch (_) {}
                           },
                         ),
@@ -754,6 +662,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
   }
 
   Future<void> _openScheduleReminderModal() async {
+    final ui = ref.read(studentsListCtrlProvider);
+    final students = ui.allStudents;
     final agentsRes = await NeyvoPulseApi.listAgents(direction: 'outbound');
     final agents = (agentsRes['agents'] as List? ?? []).where((a) => (a['industry']?.toString().toLowerCase() ?? '') == 'education').toList();
     String? selectedStudentId;
@@ -775,7 +685,7 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                   DropdownButtonFormField<String>(
                     value: selectedStudentId,
                     decoration: const InputDecoration(labelText: 'Student'),
-                    items: _allStudents.map((s) => DropdownMenuItem(value: s['id']?.toString(), child: Text(s['name']?.toString() ?? '—'))).toList(),
+                    items: students.map((s) => DropdownMenuItem(value: s['id']?.toString(), child: Text(s['name']?.toString() ?? '—'))).toList(),
                     onChanged: (v) => setDialogState(() => selectedStudentId = v),
                   ),
                   const SizedBox(height: 12),
@@ -826,7 +736,6 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                     if (ctx2.mounted) Navigator.pop(ctx);
                     if (mounted) {
                       _loadReminders();
-                      setState(() {});
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reminder scheduled')));
                     }
                   } catch (e) {
@@ -854,6 +763,120 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         onCancel: () => Navigator.of(ctx).pop(),
       ),
     );
+  }
+
+  Future<Map<String, dynamic>?> _showStudentsImportProgressDialog(String jobId) async {
+    Timer? timer;
+    bool cancelRequested = false;
+    bool closed = false;
+    Map<String, dynamic> lastJob = {};
+
+    try {
+      final finalJob = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (ctx, setState) {
+              void setFromResponse(Map<String, dynamic> res) {
+                final payload = res['job'] is Map
+                    ? Map<String, dynamic>.from(res['job'] as Map)
+                    : res;
+                lastJob = Map<String, dynamic>.from(payload);
+                setState(() {});
+              }
+
+              if (timer == null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (closed) return;
+                  timer = Timer.periodic(const Duration(seconds: 2), (t) async {
+                    try {
+                      final res = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+                      setFromResponse(res);
+                      final status = (lastJob['status'] ?? '').toString();
+                      if (const {'completed', 'failed', 'cancelled'}.contains(status)) {
+                        t.cancel();
+                        if (!closed && Navigator.of(ctx).canPop()) {
+                          closed = true;
+                          Navigator.of(ctx).pop(lastJob);
+                        }
+                      }
+                    } catch (_) {
+                      // Keep polling; server-side job might be momentarily unavailable.
+                    }
+                  });
+                });
+              }
+
+              final status = (lastJob['status'] ?? 'queued').toString();
+              final processedRaw = lastJob['processed_rows'];
+              final totalRaw = lastJob['total_rows'];
+              final processed = processedRaw is num ? processedRaw.toInt() : 0;
+              final total = totalRaw is num ? totalRaw.toInt() : 0;
+
+              final progressWidget = total > 0
+                  ? LinearProgressIndicator(
+                      value: (processed / total).clamp(0.0, 1.0),
+                    )
+                  : const LinearProgressIndicator();
+
+              return AlertDialog(
+                title: const Text('Import in progress'),
+                content: SizedBox(
+                  width: 440,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      progressWidget,
+                      const SizedBox(height: NeyvoSpacing.sm),
+                      Text('Status: $status', style: NeyvoType.bodyMedium),
+                      const SizedBox(height: 6),
+                      Text(
+                        total > 0 ? 'Processed: $processed / $total' : 'Processed: $processed',
+                        style: NeyvoType.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Imported: ${(lastJob['imported'] ?? 0)} · Updated: ${(lastJob['updated'] ?? 0)} · Failed: ${(lastJob['failed'] ?? 0)}',
+                        style: NeyvoType.bodySmall,
+                      ),
+                      if (lastJob['cancel_requested'] == true) ...[
+                        const SizedBox(height: 8),
+                        Text('Cancel requested…', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary)),
+                      ],
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: cancelRequested
+                        ? null
+                        : () async {
+                            try {
+                              setState(() => cancelRequested = true);
+                              await NeyvoPulseApi.cancelStudentsImportJob(jobId);
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Cancel failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      return finalJob;
+    } finally {
+      timer?.cancel();
+    }
   }
 
   Future<void> _importCsv() async {
@@ -955,17 +978,39 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         importName: importName.isEmpty ? null : importName,
       );
       if (!mounted) return;
-      _load();
-      final imported = res['imported'] as int? ?? 0;
-      final updated = res['updated'] as int? ?? 0;
-      final failed = res['failed'] as int? ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Imported $imported, updated $updated${failed > 0 ? ', $failed failed' : ''}.',
+      final jobIdRaw = res['job_id'];
+      if (jobIdRaw != null) {
+        final jobId = jobIdRaw.toString();
+        final finalJob = await _showStudentsImportProgressDialog(jobId);
+        await _load();
+
+        final status = (finalJob?['status'] ?? res['status'] ?? '').toString();
+        final imported = finalJob?['imported'] is num ? (finalJob!['imported'] as num).toInt() : 0;
+        final updated = finalJob?['updated'] is num ? (finalJob!['updated'] as num).toInt() : 0;
+        final failed = finalJob?['failed'] is num ? (finalJob!['failed'] as num).toInt() : 0;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == 'cancelled'
+                  ? 'Import cancelled.'
+                  : 'Import finished: $imported imported, $updated updated${failed > 0 ? ', $failed failed' : ''}.',
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        await _load();
+        final imported = res['imported'] as int? ?? 0;
+        final updated = res['updated'] as int? ?? 0;
+        final failed = res['failed'] as int? ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported $imported, updated $updated${failed > 0 ? ', $failed failed' : ''}.',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -981,6 +1026,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
     final nameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
+    final advisorNameC = TextEditingController();
+    final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
@@ -1033,6 +1080,22 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: emailC, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)', hintText: 'Email address')),
               const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: advisorNameC,
+                decoration: const InputDecoration(
+                  labelText: 'Advisor name (optional)',
+                  hintText: 'Used for {{advisor_name}}',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: bookingUrlC,
+                decoration: const InputDecoration(
+                  labelText: 'Booking URL (optional)',
+                  hintText: 'Used for {{booking_url}}',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: studentIdC, decoration: const InputDecoration(labelText: 'Student ID (optional)', hintText: 'Internal ID or reference')),
               const SizedBox(height: NeyvoSpacing.md),
               Row(
@@ -1058,8 +1121,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
         actions: [
           TextButton(onPressed: () => navigator.pop(), child: const Text('Cancel')),
           FilledButton(
-            style: TenantBrand.isGoodwin(context)
-                ? FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context))
+            style: true
+                ? FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary)
                 : null,
             onPressed: () async {
               final firstName = firstNameC.text.trim();
@@ -1092,6 +1155,8 @@ class _StudentsListPageState extends State<StudentsListPage> with SingleTickerPr
                   notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
                   department: departmentC.text.trim().isEmpty ? null : departmentC.text.trim(),
                   yearOfStudy: yearOfStudyC.text.trim().isEmpty ? null : yearOfStudyC.text.trim(),
+                  advisorName: advisorNameC.text.trim().isEmpty ? null : advisorNameC.text.trim(),
+                  bookingUrl: bookingUrlC.text.trim().isEmpty ? null : bookingUrlC.text.trim(),
                 );
                 if (context.mounted) {
                   navigator.pop();
@@ -1153,6 +1218,12 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   List<Map<String, String>> _validRows = [];
   List<String> _errorLines = [];
 
+  // Async import progress (Cloud Tasks job_id).
+  String? _activeJobId;
+  String _activeJobStatus = '';
+  int? _jobProcessedRows;
+  int? _jobTotalRows;
+
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -1213,8 +1284,8 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   Future<void> _downloadTemplate() async {
     // On web, prefer a real CSV download via the browser.
     if (kIsWeb) {
-      final url = '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
-      final ok = await SpeariaApi.launchExternal(url);
+      final url = '${NeyvoApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await NeyvoApi.launchExternal(url);
       if (ok) return;
       // Fall through to text fallback if launch fails.
     }
@@ -1250,6 +1321,50 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     try {
       final res = await NeyvoPulseApi.postStudentsImportCsv(_csvText);
       if (mounted) {
+        final jobIdRaw = res['job_id'];
+        if (jobIdRaw != null) {
+          final jobId = jobIdRaw.toString();
+          Map<String, dynamic> lastJob = {};
+          setState(() {
+            _activeJobId = jobId;
+            _activeJobStatus = 'queued';
+            _jobProcessedRows = null;
+            _jobTotalRows = null;
+            _loading = false;
+            _step = 3;
+          });
+          while (mounted) {
+            final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+            final payload = statusRes['job'] is Map
+                ? Map<String, dynamic>.from(statusRes['job'] as Map)
+                : statusRes;
+            lastJob = Map<String, dynamic>.from(payload);
+            final status = (lastJob['status'] ?? '').toString();
+            final processedRaw = lastJob['processed_rows'];
+            final totalRaw = lastJob['total_rows'];
+            setState(() {
+              _activeJobStatus = status;
+              _jobProcessedRows = processedRaw is num ? processedRaw.toInt() : null;
+              _jobTotalRows = totalRaw is num ? totalRaw.toInt() : null;
+            });
+            if (const {'completed', 'failed', 'cancelled'}.contains(status)) break;
+            await Future.delayed(const Duration(seconds: 2));
+          }
+
+          final errSample = (lastJob['error_sample'] as List?) ?? const [];
+          final errs = errSample.map((e) => e.toString()).toList();
+
+          setState(() {
+            _imported = lastJob['imported'] as int? ?? 0;
+            _updated = lastJob['updated'] as int? ?? 0;
+            _failed = lastJob['failed'] as int? ?? 0;
+            _errors = errs;
+            _loading = false;
+            _step = 3;
+          });
+          return;
+        }
+
         final rawErrs = res['errors'];
         final errs = <String>[];
         if (rawErrs is List) {
@@ -1271,6 +1386,10 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
           _updated = res['updated'] as int? ?? 0;
           _failed = res['failed'] as int? ?? 0;
           _errors = errs;
+          _activeJobId = null;
+          _activeJobStatus = '';
+          _jobProcessedRows = null;
+          _jobTotalRows = null;
           _loading = false;
           _step = 3;
         });
@@ -1286,7 +1405,16 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_step == 1 ? 'Import CSV' : _step == 2 ? 'Preview & validate' : 'Import complete'),
+      title: Text(
+        _step == 1
+            ? 'Import CSV'
+            : _step == 2
+                ? 'Preview & validate'
+                : (_activeJobId != null &&
+                        !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+                    ? 'Import in progress'
+                    : 'Import complete',
+      ),
       content: SizedBox(
         width: 540,
         child: _step == 1
@@ -1397,24 +1525,50 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle, size: 32, color: NeyvoColors.success),
-                      const SizedBox(height: 12),
-                      Text('Import complete', style: NeyvoType.titleMedium),
-                      const SizedBox(height: 8),
-                      Text('${_imported ?? 0} students imported | ${_updated ?? 0} updated', style: NeyvoType.bodyMedium),
-                      if ((_failed ?? 0) > 0) Text('${_failed} rows skipped', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error)),
-                      if (_errors.isNotEmpty) ...[
+                      if (_activeJobId != null &&
+                          !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+                        ...[
+                          Icon(Icons.cloud_upload_outlined, size: 32, color: NeyvoTheme.primary),
+                          const SizedBox(height: 12),
+                          Text('Import in progress', style: NeyvoType.titleMedium),
+                          const SizedBox(height: 8),
+                          _jobTotalRows != null && _jobTotalRows! > 0
+                              ? LinearProgressIndicator(
+                                  value: ((_jobProcessedRows ?? 0) / _jobTotalRows!).clamp(0.0, 1.0),
+                                )
+                              : const LinearProgressIndicator(),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_jobProcessedRows ?? 0} processed${_jobTotalRows != null ? ' / $_jobTotalRows' : ''}',
+                            style: NeyvoType.bodyMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Status: $_activeJobStatus',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textSecondary),
+                          ),
+                        ]
+                      else ...[
+                        Icon(Icons.check_circle, size: 32, color: NeyvoColors.success),
                         const SizedBox(height: 12),
-                        ExpansionTile(
-                          title: Text('Show ${_errors.length} import errors', style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error)),
-                          children: _errors
-                              .take(50)
-                              .map((e) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(e, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13)),
-                                  ))
-                              .toList(),
-                        ),
+                        Text('Import complete', style: NeyvoType.titleMedium),
+                        const SizedBox(height: 8),
+                        Text('${_imported ?? 0} students imported | ${_updated ?? 0} updated', style: NeyvoType.bodyMedium),
+                        if ((_failed ?? 0) > 0)
+                          Text('${_failed} rows skipped', style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error)),
+                        if (_errors.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ExpansionTile(
+                            title: Text('Show ${_errors.length} import errors', style: NeyvoType.labelSmall.copyWith(color: NeyvoColors.error)),
+                            children: _errors
+                                .take(50)
+                                .map((e) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Text(e, style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.error, fontSize: 13)),
+                                    ))
+                                .toList(),
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -1430,20 +1584,42 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
           ),
         ],
         if (_step == 3) ...[
-          TextButton(onPressed: () { widget.onDone(); }, child: const Text('View Students')),
+          if (_activeJobId != null && !const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus))
+            TextButton(
+              onPressed: () async {
+                try {
+                  await NeyvoPulseApi.cancelStudentsImportJob(_activeJobId!);
+                } catch (_) {}
+              },
+              child: const Text('Cancel'),
+            ),
+          TextButton(
+            onPressed: const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus)
+                ? () {
+                    widget.onDone();
+                  }
+                : null,
+            child: const Text('View Students'),
+          ),
           FilledButton(
-            onPressed: () {
-              setState(() {
-                _step = 1;
-                _csvText = '';
-                _imported = null;
-                _updated = null;
-                _failed = null;
-                _errors = [];
-                _validRows = [];
-                _errorLines = [];
-              });
-            },
+            onPressed: const {'completed', 'failed', 'cancelled'}.contains(_activeJobStatus)
+                ? () {
+                    setState(() {
+                      _step = 1;
+                      _csvText = '';
+                      _imported = null;
+                      _updated = null;
+                      _failed = null;
+                      _errors = [];
+                      _validRows = [];
+                      _errorLines = [];
+                      _activeJobId = null;
+                      _activeJobStatus = '';
+                      _jobProcessedRows = null;
+                      _jobTotalRows = null;
+                    });
+                  }
+                : null,
             child: const Text('Import Another'),
           ),
         ],

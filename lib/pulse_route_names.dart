@@ -15,6 +15,7 @@ abstract class PulseRouteNames {
   static const String payments = '/pulse/payments';
   static const String aiInsights = '/pulse/ai-insights';
   static const String training = '/pulse/training';
+  /// Deprecated: audit log removed; deep links redirect to dashboard.
   static const String auditLog = '/pulse/audit-log';
   // Canonical integrations route for Voice OS.
   static const String integrations = '/pulse/integrations';
@@ -55,8 +56,20 @@ abstract class PulseRouteNames {
   static const String ubModelOverview = '/pulse/ub-model-overview';
   static const String health = '/pulse/health-check';
 
+  // ARIA Operators (raw paths, separate from managed_profiles)
+  static const String operatorsRoot = '/operators';
+  static const String operatorsNew = '/operators/new';
+  /// Full-screen ARIA / Vapi error (arguments: error message [String]).
+  static const String operatorsAriaError = '/operators/aria-error';
+  // Dynamic segments handled by PulseRouter:
+  // - /operators/building/{operator_id}
+  // - /operators/{operator_id}
+  // - /operators/{operator_id}/optimization
+  static String operatorsOptimization(String operatorId) => '/operators/$operatorId/optimization';
+
   // Admin-only (not in sidebar; gate by admin email when ready)
   static const String adminConsole = '/admin/console';
+  /// Deprecated: audit log removed.
   static const String adminAuditLog = '/admin/audit-log';
   static const String adminBackendTest = '/admin/backend-test';
   // Internal ops (not in sidebar)

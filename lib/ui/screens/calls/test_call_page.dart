@@ -4,24 +4,25 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/providers/account_provider.dart';
 import '../../../neyvo_pulse_api.dart';
 import '../../../pulse_route_names.dart';
 import '../../../screens/pulse_shell.dart';
 import '../../../theme/neyvo_theme.dart';
-import '../../../tenant/tenant_brand.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import '../../activation/activation_service.dart';
 
-class TestCallPage extends StatefulWidget {
+class TestCallPage extends ConsumerStatefulWidget {
   const TestCallPage({super.key});
 
   @override
-  State<TestCallPage> createState() => _TestCallPageState();
+  ConsumerState<TestCallPage> createState() => _TestCallPageState();
 }
 
-class _TestCallPageState extends State<TestCallPage> {
+class _TestCallPageState extends ConsumerState<TestCallPage> {
   bool _loading = true;
   String? _error;
   String? _trainingNumber;
@@ -47,7 +48,7 @@ class _TestCallPageState extends State<TestCallPage> {
     });
     try {
       final results = await Future.wait([
-        NeyvoPulseApi.getAccountInfo(),
+        ref.read(accountInfoProvider.future),
         NeyvoPulseApi.listNumbers(),
       ]);
       final account = results[0] as Map<String, dynamic>;
@@ -108,7 +109,7 @@ class _TestCallPageState extends State<TestCallPage> {
     final live = activationService.isLive || (status?.firstCallCompleted == true);
 
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
+      return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
     }
     if (_error != null) {
       return Center(
@@ -158,7 +159,7 @@ class _TestCallPageState extends State<TestCallPage> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.phone_in_talk_outlined, color: TenantBrand.primary(context)),
+                            Icon(Icons.phone_in_talk_outlined, color: Theme.of(context).colorScheme.primary),
                             const SizedBox(width: 10),
                             Text('Training number', style: NeyvoTextStyles.heading),
                           ],
@@ -209,7 +210,7 @@ class _TestCallPageState extends State<TestCallPage> {
                                 SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context)),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -235,7 +236,7 @@ class _TestCallPageState extends State<TestCallPage> {
                             width: double.infinity,
                             child: FilledButton(
                               onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dashboard),
-                              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context)),
+                              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
                               child: const Text('Go to Home'),
                             ),
                           ),

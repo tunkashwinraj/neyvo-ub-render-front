@@ -1,29 +1,23 @@
 // File: project_detail_page.dart
 // Purpose: Neyvo unified – project detail and script editor (Studio).
-// Connected to: GET/PATCH /api/studio/projects/:id, POST /api/studio/generate
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers/studio_project_detail_provider.dart';
 import '../neyvo_pulse_api.dart';
 
-class ProjectDetailPage extends StatefulWidget {
+class ProjectDetailPage extends ConsumerStatefulWidget {
   const ProjectDetailPage({super.key, required this.projectId});
   final String projectId;
 
   @override
-  State<ProjectDetailPage> createState() => _ProjectDetailPageState();
+  ConsumerState<ProjectDetailPage> createState() => _ProjectDetailPageState();
 }
 
-class _ProjectDetailPageState extends State<ProjectDetailPage> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _project;
+class _ProjectDetailPageState extends ConsumerState<ProjectDetailPage> {
   final TextEditingController _scriptController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
+  String _scriptSig = '';
 
   @override
   void dispose() {
@@ -31,27 +25,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    if (widget.projectId.isEmpty) {
-      setState(() { _loading = false; _error = 'No project id'; });
-      return;
-    }
-    setState(() { _loading = true; _error = null; });
-    try {
-      final res = await NeyvoPulseApi.getStudioProject(widget.projectId);
-      if (res['ok'] == true && res['project'] != null) {
-        final p = Map<String, dynamic>.from(res['project'] as Map);
-        setState(() { _project = p; _loading = false; });
-        final scripts = p['scripts'] as List?;
-        if (scripts != null && scripts.isNotEmpty) {
-          final first = scripts.first as Map<String, dynamic>?;
-          _scriptController.text = (first?['text'] as String?) ?? '';
-        }
-      } else {
-        setState(() { _error = res['error'] as String? ?? 'Not found'; _loading = false; });
-      }
-    } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+  void _syncScriptFromProject(Map<String, dynamic> p) {
+    final scripts = p['scripts'] as List?;
+    if (scripts != null && scripts.isNotEmpty) {
+      final first = scripts.first as Map<String, dynamic>?;
+      _scriptController.text = (first?['text'] as String?) ?? '';
     }
   }
 
@@ -72,52 +50,63 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final async = ref.watch(studioProjectDetailProvider(widget.projectId));
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_project?['name'] as String? ?? 'Project'),
+        title: Text(async.valueOrNull?['name'] as String? ?? 'Project'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.invalidate(studioProjectDetailProvider(widget.projectId)),
+          ),
         ],
       ),
-      body: _body(),
-    );
-  }
-
-  Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _load, child: const Text('Retry')),
-          ],
+      body: async.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(e.toString(), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => ref.invalidate(studioProjectDetailProvider(widget.projectId)),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
-      );
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _scriptController,
-            maxLines: 8,
-            decoration: const InputDecoration(
-              labelText: 'Script',
-              hintText: 'Enter text for voiceover',
-              border: OutlineInputBorder(),
+        data: (project) {
+          final sig = '${project['id']}_${project['updated_at']}';
+          if (sig != _scriptSig) {
+            _scriptSig = sig;
+            _syncScriptFromProject(project);
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _scriptController,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Script',
+                    hintText: 'Enter text for voiceover',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _generateTts,
+                  icon: const Icon(Icons.record_voice_over),
+                  label: const Text('Generate TTS'),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _generateTts,
-            icon: const Icon(Icons.record_voice_over),
-            label: const Text('Generate TTS'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

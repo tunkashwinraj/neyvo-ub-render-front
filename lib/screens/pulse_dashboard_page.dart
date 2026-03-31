@@ -4,34 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/neyvo_api.dart';
+import '../core/providers/pulse_dashboard_sections_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../pulse_route_names.dart';
 import 'pulse_shell.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
-import '../tenant/tenant_scope.dart';
-import '../ui/components/ai_orb/neyvo_ai_orb.dart';
-import '../ui/components/glass/neyvo_glass_panel.dart';
+import '../services/user_timezone_service.dart';
 import '../features/agents/create_agent_wizard.dart';
-import '../features/managed_profiles/managed_profile_api_service.dart';
-import '../features/setup/setup_api_service.dart';
 
-class PulseDashboardPage extends StatefulWidget {
+class PulseDashboardPage extends ConsumerStatefulWidget {
   const PulseDashboardPage({super.key});
 
   @override
-  State<PulseDashboardPage> createState() => _PulseDashboardPageState();
+  ConsumerState<PulseDashboardPage> createState() => _PulseDashboardPageState();
 }
 
-class _PulseDashboardPageState extends State<PulseDashboardPage> {
-  bool _loading = true;
+class _PulseDashboardPageState extends ConsumerState<PulseDashboardPage> {
+  bool _criticalLoading = false;
+  /// Set after first successful critical load; avoids replacing the whole page on later failures.
+  bool _hasSuccessfulCriticalLoad = false;
+  /// Fatal: no successful critical payload yet (full-screen retry only in that case).
   String? _error;
-
-  // When true, only the Voice OS KPIs / analytics section is refreshing.
-  // This avoids showing a full-page loader when the date filter changes.
-  bool _kpiLoading = false;
+  /// Non-fatal: refresh failed but KPIs from last success remain visible.
+  String? _criticalBanner;
+  String? _importantError;
+  String? _heavyError;
+  int _loadVersion = 0;
+  int? _criticalLatencyMs;
+  DateTime? _criticalLatencyAt;
+  bool _criticalLatencyDegraded = false;
 
   // When true, only the \"University of Bridgeport Voice OS\" hero metrics
   // (top-left summary card) are refreshing in response to the duration filter.
@@ -47,10 +51,8 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   int _liveVoicemailCalls = 0;
   int _liveRescheduledCalls = 0;
   Timer? _liveCallsTimer;
+  DateTime? _lastLiveRefreshAt;
 
-  bool _businessConfigured = false;
-  bool _agentAttached = false;
-  bool _numberLive = false;
   bool _firstCallCompleted = false;
   String _ubStatus = 'missing';
   int _operatorCount = 0;
@@ -86,23 +88,11 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     'General Front Desk Operator',
   ];
 
-  /// Map dashboard label to UB department id for wizard deep-link.
-  static String? _departmentIdForLabel(String label) {
-    const map = {
-      'Admissions Operator': 'admissions',
-      'Student Financial Services Operator': 'student_financial_services',
-      'Registrar Operator': 'registrar',
-      'Housing Operator': 'residential_life_and_housing',
-      'IT Help Desk Operator': 'information_technology_help_desk',
-      'General Front Desk Operator': null,
-    };
-    return map[label];
-  }
-
   @override
   void initState() {
     super.initState();
     _applyPresetWithoutReload('this_week');
+    _criticalLoading = true;
     _load();
     _loadLiveCallStats();
   }
@@ -181,8 +171,12 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     setState(() {
       _applyPresetWithoutReload('custom', customRange: range);
     });
-    // Refresh only the UB hero metrics for the new custom range
-    // without reloading the rest of the dashboard.
+    final sectionRange = PulseDashboardRange(
+      from: _currentIsoRange()['from'],
+      to: _currentIsoRange()['to'],
+    );
+    _loadImportantSection(sectionRange, version: _loadVersion);
+    _loadLiveCallStats();
     await _loadUbHeroSection();
   }
 
@@ -228,126 +222,176 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     if (from == null || to == null) {
       return {'from': null, 'to': null};
     }
-    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
+    String toIsoDay(DateTime d) => d.toUtc().toIso8601String().split('T').first;
     return {
       'from': toIsoDay(from),
       'to': toIsoDay(to),
     };
   }
 
-  Map<String, String?> _previousIsoRange() {
-    final from = _fromDate;
-    final to = _toDate;
-    if (from == null || to == null) {
-      return {'from': null, 'to': null};
-    }
-    final days = to.difference(from).inDays + 1;
-    final prevEnd = from.subtract(const Duration(days: 1));
-    final prevStart = prevEnd.subtract(Duration(days: days - 1));
-    String toIsoDay(DateTime d) => '${d.toUtc().toIso8601String().split('T').first}';
-    return {
-      'from': toIsoDay(prevStart),
-      'to': toIsoDay(prevEnd),
-    };
+  Future<void> _load() async {
+    final version = ++_loadVersion;
+    final range = PulseDashboardRange(
+      from: _currentIsoRange()['from'],
+      to: _currentIsoRange()['to'],
+    );
+    setState(() {
+      // Do not block the whole dashboard on network.
+      // Render the shell immediately and hydrate sections asynchronously.
+      _criticalLoading = true;
+      _error = null;
+      _criticalBanner = null;
+      _importantError = null;
+      _heavyError = null;
+    });
+
+    unawaited(_loadCriticalSection(range, version: version));
+    unawaited(_loadImportantSection(range, version: version));
+    unawaited(_loadHeavySection(range, version: version));
   }
 
-  Future<void> _load() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadCriticalSection(PulseDashboardRange range, {required int version}) async {
+    final stopwatch = Stopwatch()..start();
     try {
-      final results = await Future.wait([
-        SetupStatusApiService.getStatus(), // 0
-        ManagedProfileApiService.listProfiles(), // 1
-        NeyvoPulseApi.listNumbers(), // 2
-        NeyvoPulseApi.listCalls(from: from, to: to), // 3
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 4
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 5
-        NeyvoPulseApi.getAccountInfo(), // 6
-        NeyvoPulseApi.getUbStatus(), // 7
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 8
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 9
-      ]);
-
-      final setup = results[0] as Map<String, dynamic>;
-      final profiles = results[1] as Map<String, dynamic>;
-      final numbersRes = results[2] as Map<String, dynamic>;
-      final callsRes = results[3] as Map<String, dynamic>;
-      final perf = results[4] as Map<String, dynamic>;
-      final perfPrev = results[5] as Map<String, dynamic>;
-      final account = results[6] as Map<String, dynamic>;
-      final ubRes = results[7] as Map<String, dynamic>;
-      final successSummary = results[8] as Map<String, dynamic>;
-      final successSummaryPrev = results[9] as Map<String, dynamic>;
-      final campaignsRes = await NeyvoPulseApi.listCampaigns();
-
-      final business = Map<String, dynamic>.from(setup['business'] as Map? ?? {});
-      final numbers = (numbersRes['numbers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final profList = (profiles['profiles'] as List?)?.cast<dynamic>() ?? const [];
-      final ubStatus = (ubRes['status'] as String?)?.toLowerCase() ?? 'missing';
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final campaigns =
-          (campaignsRes['campaigns'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
-      final businessConfigured =
-          (business['status'] as String? ?? '').toLowerCase() == 'ready';
-
-      final numberLive = numbers.isNotEmpty ||
-          ((account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim().isNotEmpty == true);
-
-      final attached = profList.any((p) {
-        final m = Map<String, dynamic>.from(p as Map);
-        return (m['attached_phone_number_id']?.toString().trim().isNotEmpty == true) ||
-            (m['attached_vapi_phone_number_id']?.toString().trim().isNotEmpty == true);
-      });
-
-      final trainingNumber = (account['primary_phone_e164'] ?? account['primary_phone'])?.toString().trim();
-
-      if (!mounted) return;
+      final critical = await ref
+          .read(pulseDashboardCriticalProvider(range).future)
+          .timeout(NeyvoApi.timeoutForClass(ApiTimeoutClass.medium));
+      stopwatch.stop();
+      if (!mounted || version != _loadVersion) return;
       setState(() {
-        _businessConfigured = businessConfigured;
-        _agentAttached = attached;
-        _numberLive = numberLive;
-        _firstCallCompleted = firstCallCompleted;
-        _ubStatus = ubStatus;
-        _operatorCount = profList.length;
-        _trainingNumber = trainingNumber != null && trainingNumber.isNotEmpty ? trainingNumber : null;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _ubModel = ubRes is Map ? Map<String, dynamic>.from(ubRes as Map) : null;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
-        _recentCampaigns = campaigns.take(8).cast<Map<String, dynamic>>().toList();
-        _loading = false;
+        _hasSuccessfulCriticalLoad = true;
+        _error = null;
+        _criticalBanner = null;
+        _firstCallCompleted = critical.firstCallCompleted;
+        _ubStatus = critical.ubStatus;
+        _operatorCount = critical.operatorCount;
+        _trainingNumber = critical.trainingNumber;
+        _perf = critical.kpi;
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = false;
+        _criticalLoading = false;
+      });
+    } on TimeoutException {
+      stopwatch.stop();
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        const msg = 'Dashboard data is slow to respond. Showing the last loaded view where available.';
+        if (_hasSuccessfulCriticalLoad) {
+          _criticalBanner = msg;
+          _importantError = null;
+        } else {
+          _importantError = 'Dashboard data is slow to respond. Showing partial view.';
+        }
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = true;
+        _criticalLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      stopwatch.stop();
+      if (!mounted || version != _loadVersion) return;
       setState(() {
-        _error = e.toString();
-        _loading = false;
+        if (_hasSuccessfulCriticalLoad) {
+          _criticalBanner = e.toString();
+          _error = null;
+        } else {
+          _error = e.toString();
+          _criticalBanner = null;
+        }
+        _criticalLatencyMs = stopwatch.elapsedMilliseconds;
+        _criticalLatencyAt = DateTime.now();
+        _criticalLatencyDegraded = true;
+        _criticalLoading = false;
       });
     }
+  }
+
+  Widget _buildBackendLatencyBadge() {
+    final ms = _criticalLatencyMs;
+    final degraded = _criticalLatencyDegraded;
+    if (_criticalLoading) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: NeyvoColors.info.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: NeyvoColors.info.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          'Loading dashboard…',
+          style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.info, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+    final color = degraded
+        ? NeyvoColors.error
+        : (ms == null || ms > 2500)
+            ? NeyvoColors.warning
+            : NeyvoColors.success;
+    final label = degraded
+        ? 'Backend degraded'
+        : ms == null
+            ? 'Backend latency: —'
+            : 'Backend latency: ${ms}ms';
+    final updated = _criticalLatencyAt == null
+        ? 'No sample yet'
+        : 'sample ${UserTimezoneService.formatShort(_criticalLatencyAt!.toIso8601String())}';
+
+    final diagnosticText = [
+      'dashboard_endpoint=/api/pulse/dashboard/summary',
+      'latency_ms=${ms?.toString() ?? 'n/a'}',
+      'status=${degraded ? 'degraded' : 'ok'}',
+      'sample_at=${_criticalLatencyAt?.toIso8601String() ?? 'n/a'}',
+      'range_from=${_currentIsoRange()['from'] ?? 'n/a'}',
+      'range_to=${_currentIsoRange()['to'] ?? 'n/a'}',
+      if ((_error ?? '').isNotEmpty) 'error=$_error',
+      if ((_criticalBanner ?? '').isNotEmpty) 'critical_banner=$_criticalBanner',
+      if ((_importantError ?? '').isNotEmpty) 'important_error=$_importantError',
+      if ((_heavyError ?? '').isNotEmpty) 'heavy_error=$_heavyError',
+    ].join('\n');
+
+    return Tooltip(
+      message: 'Critical dashboard request latency ($updated)\nTap to copy diagnostics.',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: diagnosticText));
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dashboard diagnostics copied'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Text(
+            label,
+            style: NeyvoTextStyles.micro.copyWith(color: color, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Reload only the live call statistics used by the hero "Live calls" card.
   /// This is lightweight compared to the full dashboard load and is safe to run
   /// periodically while calls are in progress.
   Future<void> _loadLiveCallStats() async {
+    final now = DateTime.now();
+    if (_lastLiveRefreshAt != null &&
+        now.difference(_lastLiveRefreshAt!) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastLiveRefreshAt = now;
+
     final range = _currentIsoRange();
     final from = range['from'];
     final to = range['to'];
@@ -357,7 +401,12 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     });
 
     try {
-      final res = await NeyvoPulseApi.listCalls(from: from, to: to);
+      final res = await NeyvoPulseApi.listCalls(
+        from: from,
+        to: to,
+        limit: 80,
+        timeout: NeyvoApi.timeoutForClass(ApiTimeoutClass.medium),
+      );
       final calls = (res['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       if (!mounted) return;
       _updateLiveCallStatsFromCalls(calls);
@@ -439,7 +488,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   void _ensureLiveTimer(bool hasRunningCalls) {
     if (hasRunningCalls) {
       if (_liveCallsTimer == null || !_liveCallsTimer!.isActive) {
-        _liveCallsTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        _liveCallsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           _loadLiveCallStats();
         });
       }
@@ -452,56 +501,29 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   /// Reload only the date-scoped Voice OS analytics (KPIs, charts, recent calls, success summary)
   /// without triggering the full-page loading spinner.
   Future<void> _loadKpiSection() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-
     setState(() {
-      _kpiLoading = true;
-      _error = null;
+      _heavyError = null;
     });
 
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.listCalls(from: from, to: to), // 0
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
-      ]);
-
-      final callsRes = results[0] as Map<String, dynamic>;
-      final perf = results[1] as Map<String, dynamic>;
-      final perfPrev = results[2] as Map<String, dynamic>;
-      final successSummary = results[3] as Map<String, dynamic>;
-      final successSummaryPrev = results[4] as Map<String, dynamic>;
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
+      final sectionRange = PulseDashboardRange(
+        from: _currentIsoRange()['from'],
+        to: _currentIsoRange()['to'],
+      );
+      ref.invalidate(pulseDashboardHeavyProvider(sectionRange));
+      final heavy = await ref.read(pulseDashboardHeavyProvider(sectionRange).future);
       if (!mounted) return;
       setState(() {
-        _firstCallCompleted = firstCallCompleted;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
-        _kpiLoading = false;
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
-        _kpiLoading = false;
+        _heavyError = e.toString();
       });
     }
   }
@@ -510,56 +532,70 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
   /// This is used by the duration filter so that changing the time range
   /// does not refresh the entire dashboard, only the top summary card.
   Future<void> _loadUbHeroSection() async {
-    final range = _currentIsoRange();
-    final from = range['from'];
-    final to = range['to'];
-    final prevRange = _previousIsoRange();
-    final prevFrom = prevRange['from'];
-    final prevTo = prevRange['to'];
-
     setState(() {
       _ubHeroLoading = true;
-      _error = null;
+      _heavyError = null;
     });
 
     try {
-      final results = await Future.wait([
-        NeyvoPulseApi.listCalls(from: from, to: to), // 0
-        NeyvoPulseApi.getAnalyticsOverview(from: from, to: to), // 1
-        NeyvoPulseApi.getAnalyticsOverview(from: prevFrom, to: prevTo), // 2
-        NeyvoPulseApi.getCallsSuccessSummary(from: from, to: to), // 3
-        NeyvoPulseApi.getCallsSuccessSummary(from: prevFrom, to: prevTo), // 4
-      ]);
-
-      final callsRes = results[0] as Map<String, dynamic>;
-      final perf = results[1] as Map<String, dynamic>;
-      final perfPrev = results[2] as Map<String, dynamic>;
-      final successSummary = results[3] as Map<String, dynamic>;
-      final successSummaryPrev = results[4] as Map<String, dynamic>;
-
-      final calls = (callsRes['calls'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final firstCallCompleted = calls.any((c) {
-        final status = (c['status'] as String?)?.toLowerCase();
-        if (status == 'completed' || status == 'success') return true;
-        final endedAt = c['ended_at'];
-        return endedAt != null && status != 'failed';
-      });
-
+      final sectionRange = PulseDashboardRange(
+        from: _currentIsoRange()['from'],
+        to: _currentIsoRange()['to'],
+      );
+      ref.invalidate(pulseDashboardHeavyProvider(sectionRange));
+      final heavy = await ref.read(pulseDashboardHeavyProvider(sectionRange).future);
       if (!mounted) return;
       setState(() {
-        _firstCallCompleted = firstCallCompleted;
-        _recentCalls = calls.take(8).toList();
-        _perf = perf;
-        _successSummary = successSummary;
-        _perfPrevious = perfPrev;
-        _successSummaryPrevious = successSummaryPrev;
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
         _ubHeroLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _heavyError = e.toString();
         _ubHeroLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadImportantSection(PulseDashboardRange range, {required int version}) async {
+    try {
+      final important = await ref.read(pulseDashboardImportantProvider(range).future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _recentCalls = important.recentCalls;
+        _recentCampaigns = important.recentCampaigns;
+        _importantError = null;
+      });
+      _updateLiveCallStatsFromCalls(_recentCalls);
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _importantError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _loadHeavySection(PulseDashboardRange range, {required int version}) async {
+    try {
+      final heavy = await ref.read(pulseDashboardHeavyProvider(range).future);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _perf = heavy.perf;
+        _perfPrevious = heavy.perfPrevious;
+        _successSummary = heavy.successSummary;
+        _successSummaryPrevious = heavy.successSummaryPrevious;
+        _ubModel = heavy.ubModel;
+        _heavyError = null;
+      });
+    } catch (e) {
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _heavyError = e.toString();
       });
     }
   }
@@ -572,10 +608,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return Center(child: CircularProgressIndicator(color: TenantBrand.primary(context)));
-    }
-    if (_error != null) {
+    if (_error != null && !_hasSuccessfulCriticalLoad) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -588,106 +621,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       );
     }
 
-    final tenant = TenantScope.of(context)?.config;
-    // Treat Goodwin as the current tenant either when the tenant scope says so,
-    // or when we are running on the Goodwin domain (defensive fallback in case
-    // tenant resolution fails on the frontend).
-    final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-    final host = kIsWeb ? Uri.base.host.toLowerCase() : '';
-    final isGoodwinTenant =
-        tenantId == 'goodwin' || host.startsWith('goodwin.') || host.contains('.goodwin.');
-    final ubReady = _ubStatus == 'ready';
-
-    // Keep the dedicated "create first operator" experience only for UB.
-    // Goodwin (and other tenants) should always see the full dashboard layout,
-    // even when they have zero operators, so their home matches the UB layout.
-    final showCreateFirstOperator = !isGoodwinTenant && ubReady && _operatorCount == 0;
-
-    // Keep the dedicated "create first operator" experience for empty state.
-    if (showCreateFirstOperator) {
-      return ClipRect(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 24),
-                        const NeyvoAIOrb(state: NeyvoAIOrbState.idle, size: 140),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Create your first Operator',
-                          style: NeyvoTextStyles.title.copyWith(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: NeyvoColors.textPrimary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Choose a department to create a voice operator. You can add more later.',
-                          style: NeyvoTextStyles.body,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        NeyvoGlassPanel(
-                          glowing: true,
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (var i = 0; i < _recommendedOperators.length; i++) ...[
-                                if (i > 0) const SizedBox(height: 10),
-                                FilledButton(
-                                  onPressed: () async {
-                                    final deptId = _departmentIdForLabel(_recommendedOperators[i]);
-                                    if (deptId != null) {
-                                      final created = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => CreateAgentWizard(initialDepartmentId: deptId),
-                                      );
-                                      if (created == true && mounted) {
-                                        PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                                      }
-                                    } else {
-                                      PulseShellController.navigatePulse(context, PulseRouteNames.agents);
-                                    }
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: i == 0 ? TenantBrand.primary(context) : NeyvoColors.bgRaised,
-                                    foregroundColor: i == 0 ? NeyvoColors.white : NeyvoColors.textPrimary,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                  ),
-                                  child: Text(
-                                    i == 0 ? 'Create ${_recommendedOperators[i]}' : _recommendedOperators[i],
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              TextButton(
-                                onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.agents),
-                                child: const Text('Choose another department'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-    );
-    }
-
     final callOk = _firstCallCompleted;
-    final orbState = callOk ? NeyvoAIOrbState.idle : NeyvoAIOrbState.processing;
 
     return ClipRect(
       child: RefreshIndicator(
@@ -705,7 +639,29 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildHeroSection(context, orbState, callOk, contentWidth),
+                        if (_criticalBanner != null) ...[
+                          _SimpleCard(
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, size: 18, color: NeyvoColors.warning),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _criticalBanner!,
+                                    style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+                                  ),
+                                ),
+                                TextButton(onPressed: _load, child: const Text('Retry')),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_importantError != null || _heavyError != null) ...[
+                          _buildSectionStatusBanner(),
+                          const SizedBox(height: 12),
+                        ],
+                        _buildHeroSection(context, callOk, contentWidth),
                         const SizedBox(height: 24),
                         _buildInsightsSection(),
                         const SizedBox(height: 24),
@@ -723,8 +679,69 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, NeyvoAIOrbState orbState, bool callOk, double contentWidth) {
-    final tenant = TenantScope.of(context)?.config;
+  Widget _buildSectionStatusBanner() {
+    final items = <Widget>[];
+    if (_importantError != null) {
+      items.add(
+        Row(
+          children: [
+            const Icon(Icons.info_outline, size: 16, color: NeyvoColors.warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Recent activity is delayed. You can keep working while it refreshes.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final range = PulseDashboardRange(
+                  from: _currentIsoRange()['from'],
+                  to: _currentIsoRange()['to'],
+                );
+                _loadImportantSection(range, version: _loadVersion);
+              },
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_heavyError != null) {
+      items.add(
+        Row(
+          children: [
+            const Icon(Icons.analytics_outlined, size: 16, color: NeyvoColors.warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Advanced analytics are still loading. Core dashboard remains available.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textPrimary),
+              ),
+            ),
+            TextButton(
+              onPressed: _loadKpiSection,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _SimpleCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            items[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroSection(BuildContext context, bool callOk, double contentWidth) {
     final callsTotal = (_perf?['calls_total'] as num?)?.toInt() ??
         (_perf?['total_calls'] as num?)?.toInt() ??
         _recentCalls.length;
@@ -751,7 +768,13 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
           setState(() {
             _applyPresetWithoutReload(preset);
           });
+          final range = PulseDashboardRange(
+            from: _currentIsoRange()['from'],
+            to: _currentIsoRange()['to'],
+          );
+          _loadImportantSection(range, version: _loadVersion);
           _loadUbHeroSection();
+          _loadLiveCallStats();
         },
         onCustomTap: () async {
           await _pickCustomRange();
@@ -759,14 +782,10 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
       ),
     );
 
-    final schoolName = (tenant?.schoolName ?? 'University of Bridgeport').trim().isEmpty
-        ? 'University of Bridgeport'
-        : tenant!.schoolName!;
+    final schoolName = 'Neyvo';
     final heroTitle = '$schoolName Voice OS';
 
-    final modelLabelPrefix = (tenant?.tenantId ?? '').trim().isEmpty
-        ? 'UB'
-        : tenant!.tenantId!.toUpperCase();
+    final modelLabelPrefix = 'NEYVO';
 
     final heroCard = _SimpleCard(
       padding: const EdgeInsets.all(20),
@@ -781,6 +800,7 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
                   style: NeyvoTextStyles.heading.copyWith(fontSize: 18),
                 ),
               ),
+              _buildBackendLatencyBadge(),
               if (_ubHeroLoading) ...[
                 const SizedBox(width: 8),
                 const SizedBox(
@@ -1449,56 +1469,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     );
   }
 
-  Widget _performanceSnapshot() {
-    final calls = (_perf?['calls_total'] as num?)?.toInt();
-    final resolution = (_perf?['resolution_rate_pct'] as num?)?.toDouble() ??
-        (_perf?['resolution_rate'] as num?)?.toDouble();
-    final credits = (_perf?['credits_consumed'] as num?)?.toInt() ??
-        (_perf?['credits_used'] as num?)?.toInt();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.auto_graph_outlined, color: NeyvoColors.teal),
-            const SizedBox(width: 10),
-            Text('Performance snapshot', style: NeyvoTextStyles.heading),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _metricChip('Total calls', calls?.toString() ?? '—'),
-            _metricChip('Resolution', resolution == null ? '—' : '${resolution.toStringAsFixed(1)}%'),
-            _metricChip('Credits used', credits?.toString() ?? '—'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _metricChip(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: NeyvoColors.bgRaised.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeyvoColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: NeyvoTextStyles.heading.copyWith(fontSize: 18)),
-          const SizedBox(height: 2),
-          Text(label, style: NeyvoTextStyles.micro),
-        ],
-      ),
-    );
-  }
-
   Widget _recentCallsTable() {
     if (_recentCalls.isEmpty) {
       return Column(
@@ -1727,22 +1697,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
     );
   }
 
-  Widget _statusRow(String label, bool ok) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(ok ? Icons.check_circle : Icons.radio_button_unchecked,
-              size: 18, color: ok ? NeyvoColors.success : NeyvoColors.textMuted),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(label, style: NeyvoTextStyles.bodyPrimary),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _actionButton({
     required IconData icon,
     required String label,
@@ -1862,19 +1816,6 @@ class _PulseDashboardPageState extends State<PulseDashboardPage> {
 
       return true;
     }).toList();
-  }
-
-  Set<String> _distinctCallDepartments() {
-    final set = <String>{};
-    for (final c in _recentCalls) {
-      final department = (c['department'] ?? c['operator_department'] ?? '')
-          .toString()
-          .trim();
-      if (department.isNotEmpty) {
-        set.add(department);
-      }
-    }
-    return set;
   }
 
   String _formatDuration(int seconds) {
@@ -2189,34 +2130,6 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _TimeRangeSelector extends StatelessWidget {
-  const _TimeRangeSelector({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SegmentedButton<String>(
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        ),
-      ),
-      segments: const [
-        ButtonSegment(value: '1d', label: Text('Today')),
-        ButtonSegment(value: '7d', label: Text('7d')),
-        ButtonSegment(value: '30d', label: Text('30d')),
-      ],
-      selected: {value},
-      onSelectionChanged: (v) {
-        if (v.isNotEmpty) onChanged(v.first);
-      },
-    );
-  }
-}
-
 class _GlobalDateFilterBar extends StatelessWidget {
   const _GlobalDateFilterBar({
     required this.preset,
@@ -2487,69 +2400,6 @@ class _NextActionCompact extends StatelessWidget {
                 label,
                 style: NeyvoTextStyles.label,
                 overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NextActionCard extends StatelessWidget {
-  const _NextActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 260,
-      child: NeyvoGlassPanel(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: NeyvoColors.teal),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: NeyvoTextStyles.micro,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: onTap,
-                style: FilledButton.styleFrom(
-                  backgroundColor: NeyvoColors.teal,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-                child: Text(label),
               ),
             ),
           ],

@@ -5,71 +5,90 @@ import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
+import '../core/providers/students_hub_tab_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
 import '../theme/neyvo_theme.dart';
-import '../tenant/tenant_brand.dart';
 import '../ui/components/glass/neyvo_glass_panel.dart';
 import '../utils/csv_import.dart';
 import '../utils/phone_util.dart';
 import 'student_detail_page.dart';
 
-class StudentsHubPage extends StatefulWidget {
+class StudentsHubPage extends ConsumerStatefulWidget {
   const StudentsHubPage({super.key});
 
   @override
-  State<StudentsHubPage> createState() => _StudentsHubPageState();
+  ConsumerState<StudentsHubPage> createState() => _StudentsHubPageState();
 }
 
-class _StudentsHubPageState extends State<StudentsHubPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final GlobalKey<_DirectoryTabState> _directoryKey = GlobalKey<_DirectoryTabState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      if (!mounted) return;
-      setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _StudentsHubPageState extends ConsumerState<StudentsHubPage> {
   @override
   Widget build(BuildContext context) {
+    final tab = ref.watch(studentsHubTabProvider);
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Students'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Directory'),
-            Tab(text: 'Import'),
-            Tab(text: 'Sync'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  _hubTabPill(0, 'Directory', tab, primary),
+                  const SizedBox(width: 8),
+                  _hubTabPill(1, 'Import', tab, primary),
+                  const SizedBox(width: 8),
+                  _hubTabPill(2, 'Sync', tab, primary),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _DirectoryTab(key: _directoryKey),
-          _ImportTab(key: const ValueKey('import')),
-          _SyncTab(key: const ValueKey('sync')),
+      body: IndexedStack(
+        index: tab,
+        children: const [
+          _DirectoryTab(),
+          _ImportTab(key: ValueKey('import')),
+          _SyncTab(key: ValueKey('sync')),
         ],
       ),
-      floatingActionButton: null,
+    );
+  }
+
+  Widget _hubTabPill(int index, String label, int selected, Color primary) {
+    final on = selected == index;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => ref.read(studentsHubTabProvider.notifier).select(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? primary.withOpacity(0.18) : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: on ? primary.withOpacity(0.45) : NeyvoColors.borderSubtle),
+          ),
+          child: Text(
+            label,
+            style: NeyvoTextStyles.label.copyWith(
+              color: on ? primary : NeyvoColors.textSecondary,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -77,18 +96,30 @@ class _StudentsHubPageState extends State<StudentsHubPage>
 // --- Directory tab ---
 
 class _DirectoryTab extends StatefulWidget {
-  const _DirectoryTab({super.key});
+  const _DirectoryTab();
 
   @override
   State<_DirectoryTab> createState() => _DirectoryTabState();
 }
 
 class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderStateMixin {
+  static const int _studentsPageSize = 10;
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   bool _loading = true;
   String? _error;
-  bool _isEducationOrg = false;
+  /// True while a second request is merging last_call_* from call history (progressive load).
+  bool _enrichingLastCalls = false;
+  bool _enrichLastCallsInFlight = false;
+  int _currentPage = 1;
+  int _totalCount = 0;
+  bool _needsTotalCount = true;
+  bool _pageLoading = false;
+
+  int get _totalPages {
+    if (_totalCount <= 0) return 1;
+    return ((_totalCount + _studentsPageSize - 1) ~/ _studentsPageSize);
+  }
   final _searchController = TextEditingController();
   String _filterStatus = 'all';
   late AnimationController _tableAnimationController;
@@ -124,6 +155,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     final lastNameC = TextEditingController();
     final phoneC = TextEditingController();
     final emailC = TextEditingController();
+    final advisorNameC = TextEditingController();
+    final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
@@ -189,6 +222,22 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                             decoration: const InputDecoration(
                               labelText: 'Email (optional)',
                               hintText: 'Email address',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: advisorNameC,
+                            decoration: const InputDecoration(
+                              labelText: 'Advisor name (optional)',
+                              hintText: 'Name used for {{advisor_name}}',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: bookingUrlC,
+                            decoration: const InputDecoration(
+                              labelText: 'Booking URL (optional)',
+                              hintText: 'Used for {{booking_url}}',
                             ),
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
@@ -292,6 +341,9 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       ? null
                       : studentIdC.text.trim(),
                   notes: notesC.text.trim().isEmpty ? null : notesC.text.trim(),
+                  advisorName:
+                      advisorNameC.text.trim().isEmpty ? null : advisorNameC.text.trim(),
+                  bookingUrl: bookingUrlC.text.trim().isEmpty ? null : bookingUrlC.text.trim(),
                 );
                 if (!context.mounted) return;
                 navigator.pop();
@@ -312,6 +364,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     lastNameC.dispose();
     phoneC.dispose();
     emailC.dispose();
+    advisorNameC.dispose();
+    bookingUrlC.dispose();
     balanceC.dispose();
     dueDateC.dispose();
     lateFeeC.dispose();
@@ -557,11 +611,118 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  ({
+    bool? hasBalance,
+    bool? isOverdue,
+    String? dueBefore,
+    String? dueAfter,
+  }) _studentListFilters(bool isEducation) {
+    bool? hasBalance;
+    bool? isOverdue;
+    String? dueAfter;
+    String? dueBefore;
+    if (isEducation && _filterStatus != 'all') {
+      if (_filterStatus == 'with_balance') {
+        hasBalance = true;
+      } else if (_filterStatus == 'overdue') {
+        isOverdue = true;
+      } else if (_filterStatus == 'due_this_week') {
+        final now = DateTime.now();
+        dueAfter =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        final end = now.add(const Duration(days: 7));
+        dueBefore =
+            '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+      } else if (_filterStatus == 'no_balance') {
+        hasBalance = false;
+      }
+    }
+    return (
+      hasBalance: hasBalance,
+      isOverdue: isOverdue,
+      dueBefore: dueBefore,
+      dueAfter: dueAfter,
+    );
+  }
+
+  List<Map<String, dynamic>> _mergeLastCallFields(
+    List<Map<String, dynamic>> base,
+    List<Map<String, dynamic>> enriched,
+  ) {
+    final byId = <String, Map<String, dynamic>>{};
+    for (final e in enriched) {
+      final id = (e['id'] ?? '').toString();
+      if (id.isNotEmpty) {
+        byId[id] = e;
+      }
+    }
+    return base.map((s) {
+      final id = (s['id'] ?? '').toString();
+      final e = byId[id];
+      if (e == null) return s;
+      final m = Map<String, dynamic>.from(s);
+      if (e.containsKey('last_call_outcome')) {
+        m['last_call_outcome'] = e['last_call_outcome'];
+      }
+      if (e.containsKey('last_call_date')) {
+        m['last_call_date'] = e['last_call_date'];
+      }
+      return m;
+    }).toList();
+  }
+
+  bool _needsLastCallEnrichment(List<Map<String, dynamic>> students) {
+    for (final s in students) {
+      if (!s.containsKey('last_call_outcome') || !s.containsKey('last_call_date')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _enrichCurrentPage({required bool isEducation}) async {
+    if (_enrichLastCallsInFlight) return;
+    _enrichLastCallsInFlight = true;
+    final f = _studentListFilters(isEducation);
+    final offset = (_currentPage - 1) * _studentsPageSize;
+    try {
+      if (mounted) {
+        setState(() => _enrichingLastCalls = true);
+      }
+      final res = await NeyvoPulseApi.listStudents(
+        limit: _studentsPageSize,
+        offset: offset,
+        hasBalance: f.hasBalance,
+        isOverdue: f.isOverdue,
+        dueAfter: f.dueAfter,
+        dueBefore: f.dueBefore,
+        enrichCalls: true,
+      );
+      final enriched = (res['students'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (!mounted) return;
+      final merged = _mergeLastCallFields(_allStudents, enriched);
+      setState(() {
+        _allStudents = merged;
+        _filteredStudents = merged;
+        _enrichingLastCalls = false;
+      });
+      _filterStudents();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _enrichingLastCalls = false);
+      }
+    } finally {
+      _enrichLastCallsInFlight = false;
+    }
+  }
+
+  Future<void> _fetchPage(int page, {required bool isInitial}) async {
+    if (!mounted) return;
+    if (!isInitial) {
+      setState(() => _pageLoading = true);
+    }
     try {
       final agentsRes = await NeyvoPulseApi.listAgents();
       final agents =
@@ -569,41 +730,64 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
       final isEducation = agents.any((a) =>
           (a['industry']?.toString().toLowerCase() ?? '') == 'education');
 
-      bool? hasBalance;
-      bool? isOverdue;
-      String? dueAfter;
-      String? dueBefore;
-      if (isEducation && _filterStatus != 'all') {
-        if (_filterStatus == 'with_balance') hasBalance = true;
-        else if (_filterStatus == 'overdue') isOverdue = true;
-        else if (_filterStatus == 'due_this_week') {
-          final now = DateTime.now();
-          dueAfter =
-              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-          final end = now.add(const Duration(days: 7));
-          dueBefore =
-              '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
-        } else if (_filterStatus == 'no_balance') hasBalance = false;
-      }
+      final f = _studentListFilters(isEducation);
+      final offset = (page - 1) * _studentsPageSize;
+      final includeTotal = _needsTotalCount && page == 1;
+
       final res = await NeyvoPulseApi.listStudents(
-        hasBalance: hasBalance,
-        isOverdue: isOverdue,
-        dueAfter: dueAfter,
-        dueBefore: dueBefore,
+        limit: _studentsPageSize,
+        offset: offset,
+        hasBalance: f.hasBalance,
+        isOverdue: f.isOverdue,
+        dueAfter: f.dueAfter,
+        dueBefore: f.dueBefore,
+        enrichCalls: false,
+        includeTotal: includeTotal,
       );
       final list = (res['students'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      if (mounted) {
-        setState(() {
-          _isEducationOrg = isEducation;
-          _allStudents = list;
-          _filteredStudents = list;
-          _loading = false;
-        });
-        _filterStudents();
+
+      var totalCount = _totalCount;
+      if (includeTotal && res['total'] != null) {
+        final raw = res['total'];
+        totalCount = raw is num ? raw.toInt() : int.tryParse(raw.toString()) ?? 0;
+        _needsTotalCount = false;
+      } else if (includeTotal && res['total'] == null) {
+        totalCount = offset + list.length;
+        _needsTotalCount = false;
+      }
+
+      final tp = totalCount <= 0 ? 1 : ((totalCount + _studentsPageSize - 1) ~/ _studentsPageSize);
+      if (totalCount > 0 && page > tp) {
+        _totalCount = totalCount;
+        await _fetchPage(tp, isInitial: isInitial);
+        return;
+      }
+
+      final needsEnrichment = _needsLastCallEnrichment(list);
+
+      if (!mounted) return;
+      setState(() {
+        _allStudents = list;
+        _filteredStudents = list;
+        _currentPage = page;
+        _totalCount = totalCount;
+        _loading = false;
+        _pageLoading = false;
+        _enrichingLastCalls = list.isNotEmpty && needsEnrichment;
+        _tableAnimationStarted = false;
+        _tableAnimationController.reset();
+      });
+      _filterStudents();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _runTableEntryAnimation();
+      });
+      if (list.isNotEmpty && needsEnrichment) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _runTableEntryAnimation();
+          if (mounted) {
+            _enrichCurrentPage(isEducation: isEducation);
+          }
         });
       }
     } catch (e) {
@@ -611,9 +795,31 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
         setState(() {
           _error = e.toString();
           _loading = false;
+          _pageLoading = false;
         });
       }
     }
+  }
+
+  Future<void> _goToPage(int page) async {
+    if (_pageLoading) return;
+    final tp = _totalPages;
+    var p = page;
+    if (p < 1) p = 1;
+    if (p > tp) p = tp;
+    if (p == _currentPage && !_loading) return;
+    await _fetchPage(p, isInitial: false);
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _needsTotalCount = true;
+      _currentPage = 1;
+    });
+    await _fetchPage(1, isInitial: true);
   }
 
   @override
@@ -643,7 +849,10 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () async {
+        setState(() => _needsTotalCount = true);
+        await _fetchPage(_currentPage, isInitial: false);
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
@@ -712,8 +921,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       icon: const Icon(Icons.person_add_rounded, size: 20),
                       label: const Text('Add student'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: TenantBrand.isGoodwin(context)
-                            ? TenantBrand.primary(context)
+                        backgroundColor: true
+                            ? Theme.of(context).colorScheme.primary
                             : NeyvoColors.ubPurple,
                         foregroundColor: NeyvoColors.white,
                         padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.lg, vertical: 14),
@@ -829,8 +1038,12 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                                                 final email = (s['email'] as String?)?.trim();
                                                 final yearOfStudy = (s['year_of_study'] as String?)?.trim();
                                                 final importList = (s['import_name'] as String?)?.trim();
-                                                final lastStatus = _lastCallStatusLabel(s['last_call_outcome']);
-                                                final lastTime = _lastCallTimeLabel(s['last_call_date']);
+                                                final lastStatus = _enrichingLastCalls
+                                                    ? '…'
+                                                    : _lastCallStatusLabel(s['last_call_outcome']);
+                                                final lastTime = _enrichingLastCalls
+                                                    ? '…'
+                                                    : _lastCallTimeLabel(s['last_call_date']);
                                                 final statusColor = _lastCallStatusColor(lastStatus);
                                                 final rowOpacity = (animValue * (_filteredStudents.length + 4) - rowIndex).clamp(0.0, 1.0);
                                                 return DataRow(
@@ -948,6 +1161,55 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                       );
                     },
                   ),
+            if (!_loading && _error == null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  NeyvoSpacing.md,
+                  NeyvoSpacing.lg,
+                  NeyvoSpacing.md,
+                  NeyvoSpacing.xl,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _pageLoading || _currentPage <= 1
+                          ? null
+                          : () => _goToPage(_currentPage - 1),
+                      icon: const Icon(Icons.chevron_left),
+                      label: const Text('Prev'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: NeyvoSpacing.md),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_pageLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          Text(
+                            'Page $_currentPage of $_totalPages',
+                            style: NeyvoType.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _pageLoading || _currentPage >= _totalPages
+                          ? null
+                          : () => _goToPage(_currentPage + 1),
+                      icon: const Icon(Icons.chevron_right),
+                      label: const Text('Next'),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1174,8 +1436,8 @@ class _ImportTabState extends State<_ImportTab> {
   Future<void> _downloadTemplate() async {
     if (kIsWeb) {
       final url =
-          '${SpeariaApi.baseUrl}/api/pulse/students/import/template';
-      final ok = await SpeariaApi.launchExternal(url);
+          '${NeyvoApi.baseUrl}/api/pulse/students/import/template';
+      final ok = await NeyvoApi.launchExternal(url);
       if (ok) return;
     }
     try {
@@ -1217,6 +1479,103 @@ class _ImportTabState extends State<_ImportTab> {
         importName: _importName.trim().isEmpty ? null : _importName.trim(),
       );
       if (!mounted) return;
+
+      final jobIdRaw = res['job_id'];
+      if (jobIdRaw != null) {
+        final jobId = jobIdRaw.toString();
+        final finalJob = await showDialog<Map<String, dynamic>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            Map<String, dynamic> lastJob = {};
+          bool started = false;
+
+            return StatefulBuilder(
+              builder: (ctx, setState) {
+              if (!started) {
+                started = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  // Poll until the job reaches a terminal state.
+                  while (mounted) {
+                    final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
+                    final payload = statusRes['job'] is Map
+                        ? Map<String, dynamic>.from(statusRes['job'] as Map)
+                        : statusRes;
+                    lastJob = Map<String, dynamic>.from(payload);
+                    setState(() {});
+
+                    final status = (lastJob['status'] ?? '').toString();
+                    if (const {'completed', 'failed', 'cancelled'}.contains(status)) {
+                      if (Navigator.of(ctx).canPop()) {
+                        Navigator.of(ctx).pop(lastJob);
+                      }
+                      break;
+                    }
+                    await Future.delayed(const Duration(seconds: 2));
+                  }
+                });
+              }
+
+              final status = (lastJob['status'] ?? 'queued').toString();
+              final processedRaw = lastJob['processed_rows'];
+              final totalRaw = lastJob['total_rows'];
+              final processed = processedRaw is num ? processedRaw.toInt() : 0;
+              final total = totalRaw is num ? totalRaw.toInt() : 0;
+
+                return AlertDialog(
+                  title: const Text('Import in progress'),
+                  content: SizedBox(
+                    width: 440,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        total > 0
+                            ? LinearProgressIndicator(value: (processed / total).clamp(0.0, 1.0))
+                            : const LinearProgressIndicator(),
+                        const SizedBox(height: NeyvoSpacing.sm),
+                        Text('Status: $status', style: NeyvoType.bodyMedium),
+                        const SizedBox(height: 6),
+                        Text(
+                          total > 0 ? 'Processed: $processed / $total' : 'Processed: $processed',
+                          style: NeyvoType.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        // Best-effort cancel; final status will be reflected by polling.
+                        try {
+                          await NeyvoPulseApi.cancelStudentsImportJob(jobId);
+                          setState(() {});
+                        } catch (_) {}
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+
+        if (!mounted) return;
+        final errSample = (finalJob?['error_sample'] as List?) ?? const [];
+        final errs = errSample.map((e) => e.toString()).toList();
+
+        setState(() {
+          _imported = finalJob?['imported'] as int? ?? 0;
+          _updated = finalJob?['updated'] as int? ?? 0;
+          _failed = finalJob?['failed'] as int? ?? 0;
+          _errors = errs;
+          _loading = false;
+          _step = 3;
+        });
+        return;
+      }
+
       final rawErrs = res['errors'];
       final errs = <String>[];
       if (rawErrs is List) {
@@ -1529,15 +1888,17 @@ class _ImportTabState extends State<_ImportTab> {
 
 // --- Sync tab ---
 
-class _SyncTab extends StatefulWidget {
+class _SyncTab extends ConsumerStatefulWidget {
   const _SyncTab({super.key});
 
   @override
-  State<_SyncTab> createState() => _SyncTabState();
+  ConsumerState<_SyncTab> createState() => _SyncTabState();
 }
 
-class _SyncTabState extends State<_SyncTab> {
-  bool _loading = true;
+class _SyncTabState extends ConsumerState<_SyncTab> {
+  /// IndexedStack keeps this subtree mounted; we only hit the network when the user opens Sync.
+  bool _syncLoadStarted = false;
+  bool _loading = false;
   String? _error;
   Map<String, dynamic>? _schoolIntegration;
   bool _schoolTokenVisible = false;
@@ -1554,7 +1915,15 @@ class _SyncTabState extends State<_SyncTab> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // If hub tab is already Sync (e.g. restored state), ref.listen may not fire — load once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tab = ref.read(studentsHubTabProvider);
+      if (tab == 2 && !_syncLoadStarted) {
+        _syncLoadStarted = true;
+        _load();
+      }
+    });
   }
 
   @override
@@ -1667,6 +2036,16 @@ class _SyncTabState extends State<_SyncTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(studentsHubTabProvider, (prev, next) {
+      if (next == 2 && !_syncLoadStarted) {
+        _syncLoadStarted = true;
+        _load();
+      }
+    });
+
+    if (!_syncLoadStarted) {
+      return const SizedBox.shrink();
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1728,13 +2107,13 @@ class _SyncTabState extends State<_SyncTab> {
                       title: Text('Webhook URL',
                           style: NeyvoType.labelLarge),
                       subtitle: SelectableText(
-                          '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'),
+                          '${NeyvoApi.baseUrl}/api/pulse/integrations/school/webhook'),
                       trailing: IconButton(
                         icon: const Icon(Icons.copy),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
                               text:
-                                  '${SpeariaApi.baseUrl}/api/pulse/integrations/school/webhook'));
+                                  '${NeyvoApi.baseUrl}/api/pulse/integrations/school/webhook'));
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('URL copied')));
                         },
@@ -1905,7 +2284,7 @@ class _SyncTabState extends State<_SyncTab> {
 
   Widget _modeChip(String key, String label) {
     final selected = _modes.contains(key);
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return FilterChip(
       selected: selected,
       label: Text(label),

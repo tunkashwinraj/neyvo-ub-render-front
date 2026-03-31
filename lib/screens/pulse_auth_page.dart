@@ -3,23 +3,21 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/spearia_api.dart';
+import '../api/neyvo_api.dart';
+import '../core/providers/account_provider.dart';
 import '../theme/neyvo_theme.dart';
 import '../neyvo_pulse_api.dart';
-import '../tenant/tenant_scope.dart';
-import '../tenant/tenant_brand.dart';
-import '../ui/components/glass/neyvo_glass_panel.dart';
 
-class PulseAuthPage extends StatefulWidget {
+class PulseAuthPage extends ConsumerStatefulWidget {
   const PulseAuthPage({super.key});
 
   @override
-  State<PulseAuthPage> createState() => _PulseAuthPageState();
+  ConsumerState<PulseAuthPage> createState() => _PulseAuthPageState();
 }
 
-class _PulseAuthPageState extends State<PulseAuthPage> {
+class _PulseAuthPageState extends ConsumerState<PulseAuthPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
@@ -186,13 +184,13 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
       // Ensure the very next API call sends this user so backend tenant check uses correct account.
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        SpeariaApi.setUserId(user.uid);
+        NeyvoApi.setUserId(user.uid);
       }
       // Immediately verify tenant/org membership so that cross-tenant
       // logins are rejected at the auth screen instead of inside the
       // Pulse shell. No dashboard data is ever loaded until this succeeds.
       try {
-        await NeyvoPulseApi.getAccountInfo();
+        await ref.read(accountInfoProvider.future);
       } on ApiException catch (e) {
         // Any 403 on account = wrong portal (same as main.dart gate).
         if (e.statusCode == 403) {
@@ -232,11 +230,7 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tenant = TenantScope.of(context)?.config;
-    final primary = TenantBrand.primary(context);
-    final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-    final isGoodwin = tenantId == 'goodwin';
-    final isUb = tenantId == 'ub' || tenant == null;
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: NeyvoColors.bgLight,
       body: Container(
@@ -261,83 +255,12 @@ class _PulseAuthPageState extends State<PulseAuthPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
-                    if (isGoodwin)
-                      Image.asset(
-                        'assets/goodwin_logo/goodwin_horiz_rgb.png',
-                        fit: BoxFit.contain,
-                        height: 58,
-                      )
-                    else if (isUb)
-                      SvgPicture.asset(
-                        'assets/ub_logo/ub_logo_horizontal_purple.svg',
-                        fit: BoxFit.contain,
-                        height: 58,
-                        colorFilter: const ColorFilter.mode(
-                          NeyvoColors.ubPurple,
-                          BlendMode.srcIn,
-                        ),
-                      )
-                    else if (tenant?.logoHorizontalColorUrl != null &&
-                        tenant!.logoHorizontalColorUrl!.isNotEmpty)
-                      Builder(
-                        builder: (context) {
-                          final url = tenant.logoHorizontalColorUrl!;
-                          final lower = url.toLowerCase();
-                          if (lower.endsWith('.png') ||
-                              lower.endsWith('.jpg') ||
-                              lower.endsWith('.jpeg')) {
-                            return Image.network(
-                              url,
-                              fit: BoxFit.contain,
-                              height: 58,
-                              errorBuilder: (context, _, __) {
-                                final t = TenantScope.of(context)?.config;
-                                final isUb = t == null || t.tenantId == 'ub';
-                                if (isUb) {
-                                  return SvgPicture.asset(
-                                    'assets/ub_logo/ub_logo_horizontal_purple.svg',
-                                    fit: BoxFit.contain,
-                                    height: 58,
-                                    colorFilter: const ColorFilter.mode(
-                                      NeyvoColors.ubPurple,
-                                      BlendMode.srcIn,
-                                    ),
-                                  );
-                                }
-                                return Text(
-                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
-                                  style: NeyvoType.headlineMediumLight.copyWith(color: primary),
-                                  textAlign: TextAlign.center,
-                                );
-                              },
-                            );
-                          } else {
-                            return SvgPicture.network(
-                              url,
-                              fit: BoxFit.contain,
-                              height: 58,
-                              placeholderBuilder: (_) => const SizedBox(height: 58),
-                            );
-                          }
-                        },
-                      )
-                    else
-                      SvgPicture.asset(
-                        'assets/ub_logo/ub_logo_horizontal_purple.svg',
-                        fit: BoxFit.contain,
-                        height: 58,
-                        // Force UB purple so the logo is not black
-                        colorFilter: const ColorFilter.mode(
-                          NeyvoColors.ubPurple,
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    const SizedBox(height: NeyvoSpacing.xl),
-                    Text(
-                      'Neyvo',
-                      style: NeyvoType.displayLargeLight,
-                      textAlign: TextAlign.center,
+                    Image.asset(
+                      'assets/goodwin_logo/goodwin-horiz-rgb.png',
+                      height: 72,
+                      fit: BoxFit.contain,
                     ),
+                    const SizedBox(height: NeyvoSpacing.lg),
                     const SizedBox(height: NeyvoSpacing.sm),
                     Text(
                       'Sign in to access your voice intelligence platform.',

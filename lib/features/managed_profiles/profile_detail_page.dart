@@ -2,17 +2,17 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../utils/voice_preview_player.dart';
 
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
-import '../../tenant/tenant_brand.dart';
 import '../../ui/components/ai_orb/neyvo_ai_orb.dart';
 import '../../ui/components/glass/neyvo_glass_panel.dart';
 import 'managed_profile_api_service.dart';
+import 'messaging_defaults_test_panel.dart';
 
 class ManagedProfileDetailPage extends StatefulWidget {
   const ManagedProfileDetailPage({
@@ -48,6 +48,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   final _voicemailCtrl = TextEditingController();
   final _aiSuggestMessageCtrl = TextEditingController();
   final _vapiJsonImportController = TextEditingController();
+  final _emailToCtrl = TextEditingController();
+  final _emailSubjectCtrl = TextEditingController();
+  final _emailBodyCtrl = TextEditingController();
+  final _emailHtmlCtrl = TextEditingController();
+  final _emailFromNameCtrl = TextEditingController();
+  final _smsToCtrl = TextEditingController();
+  final _smsBodyCtrl = TextEditingController();
 
   String _tone = 'warm_friendly';
   bool _interruptEnabled = true;
@@ -68,16 +75,30 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   List<Map<String, dynamic>> _variableMetadata = [];
   List<Map<String, dynamic>> _openVariables = [];
   bool _variableMetadataLoading = false;
+  bool _messagingEmailSaving = false;
+  bool _messagingSmsSaving = false;
+  bool _messagingDefaultsLoading = false;
+  String? _messagingDefaultsError;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
+    _tabs.addListener(_onMainTabChanged);
     _load();
+  }
+
+  void _onMainTabChanged() {
+    if (_tabs.indexIsChanging) return;
+    // Reload messaging defaults when opening "Messaging" (index 3).
+    if (_tabs.index == 3 && !_loading) {
+      _loadMessagingDefaults();
+    }
   }
 
   @override
   void dispose() {
+    _tabs.removeListener(_onMainTabChanged);
     _tabs.dispose();
     _nameCtrl.dispose();
     _goalCtrl.dispose();
@@ -85,6 +106,13 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
     _voicemailCtrl.dispose();
     _aiSuggestMessageCtrl.dispose();
     _vapiJsonImportController.dispose();
+    _emailToCtrl.dispose();
+    _emailSubjectCtrl.dispose();
+    _emailBodyCtrl.dispose();
+    _emailHtmlCtrl.dispose();
+    _emailFromNameCtrl.dispose();
+    _smsToCtrl.dispose();
+    _smsBodyCtrl.dispose();
     super.dispose();
   }
 
@@ -109,6 +137,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       _error = null;
     });
     try {
+      await _ensurePulseAccountId();
       final results = await Future.wait([
         ManagedProfileApiService.getProfile(widget.profileId),
         NeyvoPulseApi.listNumbers(),
@@ -155,6 +184,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _variableDefaults = Map<String, String>.from(variableDefaults);
         _loading = false;
       });
+      await _loadMessagingDefaults();
       await _loadVariableMetadata();
       // After wallet is available, load curated voices for the effective tier.
       await _loadVoiceCatalogForTier();
@@ -187,6 +217,107 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         _openVariables = [];
         _variableMetadataLoading = false;
       });
+    }
+  }
+
+  /// Ensures [NeyvoPulseApi.defaultAccountId] is set so operator integrations GET/PUT include account_id.
+  Future<void> _ensurePulseAccountId() async {
+    if (NeyvoPulseApi.defaultAccountId.isNotEmpty) return;
+    try {
+      final res = await NeyvoPulseApi.getAccountInfo();
+      if (res['ok'] == true) {
+        final id = (res['account_id'] ?? res['accountId'] ?? '').toString().trim();
+        if (id.isNotEmpty) NeyvoPulseApi.setDefaultAccountId(id);
+      }
+    } catch (_) {
+      /* still try load; user may have session-only routing */
+    }
+  }
+
+  Future<void> _loadMessagingDefaults() async {
+    await _ensurePulseAccountId();
+    if (mounted) setState(() => _messagingDefaultsLoading = true);
+    try {
+      final res = await ManagedProfileApiService.getMessagingDefaults(widget.profileId);
+      final email = (res['email'] is Map)
+          ? Map<String, dynamic>.from(res['email'] as Map)
+          : const <String, dynamic>{};
+      final sms =
+          (res['sms'] is Map) ? Map<String, dynamic>.from(res['sms'] as Map) : const <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        _messagingDefaultsError = null;
+        _messagingDefaultsLoading = false;
+        _emailToCtrl.text = (email['to'] ?? '').toString();
+        _emailSubjectCtrl.text = (email['subject'] ?? '').toString();
+        _emailBodyCtrl.text = (email['body'] ?? '').toString();
+        _emailHtmlCtrl.text = (email['html_body'] ?? '').toString();
+        _emailFromNameCtrl.text = (email['from_name'] ?? '').toString();
+        _smsToCtrl.text = (sms['to'] ?? '').toString();
+        _smsBodyCtrl.text = (sms['body'] ?? '').toString();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messagingDefaultsLoading = false;
+        _messagingDefaultsError =
+            'Could not load saved email/SMS defaults. Check network and that account_id is set. ($e)';
+      });
+    }
+  }
+
+  Future<void> _saveEmailDefaults() async {
+    setState(() {
+      _messagingEmailSaving = true;
+      _messagingDefaultsError = null;
+    });
+    try {
+      await ManagedProfileApiService.saveEmailDefaults(
+        widget.profileId,
+        email: {
+          'to': _emailToCtrl.text.trim(),
+          'subject': _emailSubjectCtrl.text,
+          'body': _emailBodyCtrl.text,
+          'html_body': _emailHtmlCtrl.text,
+          'from_name': _emailFromNameCtrl.text.trim(),
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email message defaults saved')),
+      );
+      await _loadMessagingDefaults();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _messagingDefaultsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _messagingEmailSaving = false);
+    }
+  }
+
+  Future<void> _saveSmsDefaults() async {
+    setState(() {
+      _messagingSmsSaving = true;
+      _messagingDefaultsError = null;
+    });
+    try {
+      await ManagedProfileApiService.saveSmsDefaults(
+        widget.profileId,
+        sms: {
+          'to': _smsToCtrl.text.trim(),
+          'body': _smsBodyCtrl.text,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SMS message defaults saved')),
+      );
+      await _loadMessagingDefaults();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _messagingDefaultsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _messagingSmsSaving = false);
     }
   }
 
@@ -239,7 +370,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
               child: const Text('Purchase number'),
             ),
           ],
@@ -285,7 +416,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
             child: const Text('Attach'),
           ),
         ],
@@ -319,7 +450,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                 child: const Text('Move here'),
               ),
             ],
@@ -506,7 +637,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
   @override
   Widget build(BuildContext context) {
     final title = _nameCtrl.text.trim().isEmpty ? 'Operator' : _nameCtrl.text.trim();
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
 
     final inner = _loading
         ? Center(child: CircularProgressIndicator(color: primary))
@@ -596,6 +727,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         Tab(text: 'Personality'),
                         Tab(text: 'AI Studio'),
                         Tab(text: 'Voice'),
+                        Tab(text: 'Messaging'),
                         Tab(text: 'Additional settings'),
                       ],
                     ),
@@ -607,6 +739,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                         _tabPersonality(),
                         _tabAiStudio(),
                         _tabVoice(),
+                        _tabMessaging(),
                         _tabAdditionalSettings(),
                       ],
                     ),
@@ -827,7 +960,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
       itemBuilder: (context, index) {
         final msg = _chatMessages[index];
         final alignEnd = msg.isUser;
-        final primary = TenantBrand.primary(context);
+        final primary = Theme.of(context).colorScheme.primary;
         final bgColor = msg.isUser ? primary.withOpacity(0.18) : NeyvoColors.bgOverlay;
         final borderColor = msg.isUser ? primary.withOpacity(0.28) : NeyvoColors.borderDefault;
         return Align(
@@ -915,7 +1048,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 tooltip: 'View full system prompt and voicemail',
                 onPressed: () => _showAiStudioFullContentDialog(msg),
                 style: IconButton.styleFrom(
-                  foregroundColor: TenantBrand.primary(context),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ],
@@ -966,7 +1099,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                                 const SizedBox(height: 6),
                                 Text('After:', style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted)),
                                 const SizedBox(height: 2),
-                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: TenantBrand.primary(context))),
+                                Text(after, style: NeyvoTextStyles.bodyPrimary.copyWith(color: Theme.of(context).colorScheme.primary)),
                               ],
                             ],
                           ),
@@ -1014,7 +1147,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 FilledButton(
                   onPressed: _aiSuggestLoading ? null : () => _applySuggestion(latestIndex),
                   style: FilledButton.styleFrom(
-                    backgroundColor: TenantBrand.primary(context),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: NeyvoColors.white,
                   ),
                   child: const Text('Apply to operator'),
@@ -1064,9 +1197,9 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                   child: Column(
                     children: [
                       TabBar(
-                        labelColor: TenantBrand.primary(context),
+                        labelColor: Theme.of(context).colorScheme.primary,
                         unselectedLabelColor: NeyvoColors.textSecondary,
-                        indicatorColor: TenantBrand.primary(context),
+                        indicatorColor: Theme.of(context).colorScheme.primary,
                         tabs: const [
                           Tab(text: 'System prompt'),
                           Tab(text: 'Voicemail'),
@@ -1120,7 +1253,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
         const SizedBox(width: 8),
         FilledButton(
           onPressed: _aiSuggestLoading ? null : _sendAiStudioMessage,
-          style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
           child: _aiSuggestLoading
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: NeyvoColors.white))
               : const Text('Send'),
@@ -1583,10 +1716,10 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: TenantBrand.primary(context).withOpacity(0.2),
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: TenantBrand.primary(context))),
+                            child: Text('In prompt', style: NeyvoTextStyles.micro.copyWith(color: Theme.of(context).colorScheme.primary)),
                           ),
                         ],
                       ],
@@ -1698,7 +1831,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
               if (_voiceCatalogLoading)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: TenantBrand.primary(context))),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
                 )
               else if (_voiceCatalogError != null)
                 Padding(
@@ -1756,7 +1889,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                             tooltip: 'Play sample',
                             onPressed: () => _playVoiceSample(v),
                             style: IconButton.styleFrom(
-                              foregroundColor: TenantBrand.primary(context),
+                              foregroundColor: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -1764,7 +1897,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                             onPressed: _saving ? null : () => _selectVoice(v),
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(72, 36),
-                              backgroundColor: isSelected ? TenantBrand.primary(context).withOpacity(0.2) : null,
+                              backgroundColor: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.2) : null,
                             ),
                             child: Text(isSelected ? 'Selected' : 'Select'),
                           ),
@@ -1777,6 +1910,120 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _tabMessaging() {
+    final primary = Theme.of(context).colorScheme.primary;
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Messaging', style: NeyvoTextStyles.heading.copyWith(fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(
+                'SMS and Email message defaults for this operator only.',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              if (_messagingDefaultsLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Email Message', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              TextField(controller: _emailToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailFromNameCtrl, decoration: const InputDecoration(labelText: 'From name helper (optional)')),
+              const SizedBox(height: 8),
+              TextField(controller: _emailSubjectCtrl, decoration: const InputDecoration(labelText: 'Default subject')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailBodyCtrl,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailHtmlCtrl,
+                minLines: 2,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: 'Default html_body (optional)', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingEmailSaving ? null : _saveEmailDefaults,
+                  style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
+                  child: _messagingEmailSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save Email Message'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        NeyvoGlassPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SMS Message', style: NeyvoTextStyles.bodyPrimary.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              TextField(controller: _smsToCtrl, decoration: const InputDecoration(labelText: 'Default to')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _smsBodyCtrl,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(labelText: 'Default body', alignLabelWithHint: true),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You can use variables like {{name}}, {{date}}, {{time}}. They are filled from tool call `variables`.',
+                style: NeyvoTextStyles.micro.copyWith(color: NeyvoColors.textMuted),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _messagingSmsSaving ? null : _saveSmsDefaults,
+                  style: FilledButton.styleFrom(backgroundColor: primary, foregroundColor: NeyvoColors.white),
+                  child: _messagingSmsSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save SMS Message'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        MessagingDefaultsTestPanel(
+          operatorId: widget.profileId,
+          variableDefaults: _variableDefaults,
+        ),
+        if (_messagingDefaultsError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _messagingDefaultsError!,
+            style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.warning),
+          ),
+        ],
       ],
     );
   }
@@ -1838,7 +2085,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),
@@ -2052,7 +2299,7 @@ class _ManagedProfileDetailPageState extends State<ManagedProfileDetailPage>
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => PulseShellController.navigatePulse(context, PulseRouteNames.dialer),
-                  style: FilledButton.styleFrom(backgroundColor: TenantBrand.primary(context), foregroundColor: NeyvoColors.white),
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: NeyvoColors.white),
                   child: const Text('Open Dialer'),
                 ),
               ),

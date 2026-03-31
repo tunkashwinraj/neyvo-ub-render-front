@@ -3,12 +3,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../../api/spearia_api.dart';
+import '../../api/neyvo_api.dart';
 import '../../neyvo_pulse_api.dart';
 import '../../pulse_route_names.dart';
 import '../../screens/pulse_shell.dart';
 import '../../theme/neyvo_theme.dart';
-import '../../tenant/tenant_brand.dart';
 import 'managed_profile_api_service.dart';
 
 class CreateProfileWizard extends StatefulWidget {
@@ -465,7 +464,7 @@ class _CreateProfileWizardState extends State<CreateProfileWizard> {
   @override
   Widget build(BuildContext context) {
     final isNarrow = MediaQuery.of(context).size.width < 600;
-    final primary = TenantBrand.primary(context);
+    final primary = Theme.of(context).colorScheme.primary;
     return Dialog(
       backgroundColor: NeyvoColors.bgBase,
       insetPadding: const EdgeInsets.all(24),

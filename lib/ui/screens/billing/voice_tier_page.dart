@@ -1,68 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../neyvo_pulse_api.dart';
+import '../../../core/providers/voice_tier_page_provider.dart';
 import '../../../theme/neyvo_theme.dart';
 import '../../components/billing/credits_info_icon.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import 'plan_selector_page.dart';
 
-class VoiceTierPage extends StatefulWidget {
+class VoiceTierPage extends ConsumerStatefulWidget {
   const VoiceTierPage({super.key});
 
   @override
-  State<VoiceTierPage> createState() => _VoiceTierPageState();
+  ConsumerState<VoiceTierPage> createState() => _VoiceTierPageState();
 }
 
-class _VoiceTierPageState extends State<VoiceTierPage> {
-  bool _loading = true;
-  String? _error;
-  Map<String, dynamic>? _wallet;
-  String? _updatingTier;
-
+class _VoiceTierPageState extends ConsumerState<VoiceTierPage> {
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(voiceTierPageCtrlProvider.notifier).load();
     });
-    try {
-      final w = await NeyvoPulseApi.getBillingWallet();
-      if (!mounted) return;
-      setState(() {
-        _wallet = w;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
   }
 
   Future<void> _selectTier(String tier) async {
-    if (_updatingTier != null) return;
-    setState(() => _updatingTier = tier);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await NeyvoPulseApi.setBillingTier(tier);
+      await ref.read(voiceTierPageCtrlProvider.notifier).selectTier(tier);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Voice tier updated to ${_tierLabel(tier)}')),
       );
-      await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Failed to update tier: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _updatingTier = null);
     }
   }
 
@@ -81,23 +54,27 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _wallet == null) {
+    final s = ref.watch(voiceTierPageCtrlProvider);
+    if (s.loading && s.wallet == null) {
       return const Center(child: CircularProgressIndicator(color: NeyvoColors.teal));
     }
-    if (_error != null && _wallet == null) {
+    if (s.error != null && s.wallet == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
+            Text(s.error!, style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.error)),
             const SizedBox(height: 16),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(
+              onPressed: () => ref.read(voiceTierPageCtrlProvider.notifier).load(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
 
-    final wallet = _wallet ?? const <String, dynamic>{};
+    final wallet = s.wallet ?? const <String, dynamic>{};
     final subscriptionTier = (wallet['subscription_tier'] ?? 'free').toString().toLowerCase();
     final currentTier = (wallet['voice_tier'] ?? wallet['tier'] ?? 'ultra').toString().toLowerCase();
     final unlocked = (wallet['unlocked_tiers'] as List<dynamic>?)
@@ -219,7 +196,8 @@ class _VoiceTierPageState extends State<VoiceTierPage> {
     required bool isCurrent,
     required bool isUnlocked,
   }) {
-    final isUpdating = _updatingTier == id;
+    final s = ref.watch(voiceTierPageCtrlProvider);
+    final isUpdating = s.updatingTier == id;
     final avg3Credits = cpm * 3;
     final avg3Dollars = (usdPerMin * 3).toStringAsFixed(2);
 

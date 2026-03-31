@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/business_intelligence/bi_wizard_api_service.dart';
 import '../../../features/business_intelligence/business_model_completeness.dart';
@@ -13,16 +14,16 @@ import '../../components/ai_orb/neyvo_ai_orb.dart';
 import '../../components/glass/neyvo_glass_panel.dart';
 import 'ai_log_event.dart';
 
-class BusinessSetupInterviewPage extends StatefulWidget {
+class BusinessSetupInterviewPage extends ConsumerStatefulWidget {
   const BusinessSetupInterviewPage({super.key});
 
   @override
-  State<BusinessSetupInterviewPage> createState() =>
+  ConsumerState<BusinessSetupInterviewPage> createState() =>
       _BusinessSetupInterviewPageState();
 }
 
 class _BusinessSetupInterviewPageState
-    extends State<BusinessSetupInterviewPage> {
+    extends ConsumerState<BusinessSetupInterviewPage> {
   bool _loading = true;
   String? _error;
   String _status = 'missing';
