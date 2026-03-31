@@ -24,15 +24,15 @@ import 'widgets/neyvo_loading_screen.dart';
 
   const String _kOnboardingCompletedKey = 'neyvo_pulse_onboarding_completed';
   const String _kDefaultBaseUrl = String.fromEnvironment(
-    'SPEARIA_BASE_URL',
-    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
+  'SPEARIA_BASE_URL',
+  defaultValue: 'https://neyvo-ub-render-back.onrender.com',
   );
   /// Backend URL for the staging/testing frontend (e.g. Render service on Testing branch).
   /// Build: flutter build web --dart-define=SPEARIA_BASE_URL_STAGING=https://your-staging-back.onrender.com
   /// If not set, staging uses the same URL as prod (single Render service).
   const String _kStagingBaseUrl = String.fromEnvironment(
-    'SPEARIA_BASE_URL_STAGING',
-    defaultValue: 'https://goodwin-neyvo-back.onrender.com',
+  'SPEARIA_BASE_URL_STAGING',
+  defaultValue: 'https://neyvo-ub-render-back.onrender.com',
   );
 
 /// When running locally, force tenant via: flutter run -d chrome --dart-define=NEYVO_TENANT=goodwin
