@@ -442,19 +442,10 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
     if (kIsWeb) debugPrint('PulseShell building (index: $_selectedIndex)');
 
     final tenant = TenantScope.of(context)?.config;
-    final isGoodwin = tenant?.tenantId == 'goodwin';
-    final Color sidebarBgColor = isGoodwin && tenant?.primaryColor != null
-        ? tenant!.primaryColor!
-        : NeyvoColors.sidebarBg;
-    final Color sidebarAccentColor = isGoodwin && tenant?.secondaryColor != null
-        ? tenant!.secondaryColor!
-        : NeyvoColors.ubLightBlue;
-    final Color sidebarSelectedColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.85)
-        : NeyvoColors.sidebarSelected;
-    final Color sidebarHoverColor = isGoodwin
-        ? sidebarBgColor.withOpacity(0.5)
-        : NeyvoColors.sidebarHover;
+    final Color sidebarBgColor = NeyvoColors.sidebarBg;
+    final Color sidebarAccentColor = NeyvoColors.ubLightBlue;
+    final Color sidebarSelectedColor = NeyvoColors.sidebarSelected;
+    final Color sidebarHoverColor = NeyvoColors.sidebarHover;
 
     final brandPrimary = TenantBrand.primary(context);
     final brandSecondary = TenantBrand.secondary(context);
@@ -487,26 +478,6 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                         final scope = TenantScope.of(context);
                         final tenant = scope?.config;
                         final tenantId = (tenant?.tenantId ?? '').toLowerCase();
-                        final isGoodwin = tenantId == 'goodwin';
-                        final isUb = tenantId == 'ub' || tenant == null;
-                        if (isGoodwin) {
-                          return Image.asset(
-                            'assets/goodwin_logo/goodwin_horiz_white.png',
-                            fit: BoxFit.contain,
-                            height: 46,
-                          );
-                        }
-                        if (isUb) {
-                          return SvgPicture.asset(
-                            'assets/ub_logo/ub_logo_horizontal_white.svg',
-                            fit: BoxFit.contain,
-                            height: 46,
-                            colorFilter: const ColorFilter.mode(
-                              NeyvoColors.white,
-                              BlendMode.srcIn,
-                            ),
-                          );
-                        }
                         final logoUrl = tenant?.logoHorizontalWhiteUrl ?? tenant?.logoHorizontalColorUrl;
                         if (logoUrl != null && logoUrl.isNotEmpty) {
                           final lower = logoUrl.toLowerCase();
@@ -516,24 +487,14 @@ class _PulseShellState extends State<PulseShell> with SingleTickerProviderStateM
                               fit: BoxFit.contain,
                               height: 46,
                               errorBuilder: (context, _, __) {
-                                final t = TenantScope.of(context)?.config;
-                                final isUb = t == null || t.tenantId == 'ub';
-                                if (isUb) {
-                                  return SvgPicture.asset(
-                                    'assets/ub_logo/ub_logo_horizontal_white.svg',
-                                    fit: BoxFit.contain,
-                                    height: 46,
-                                    colorFilter: const ColorFilter.mode(
-                                      NeyvoColors.white,
-                                      BlendMode.srcIn,
-                                    ),
-                                  );
-                                }
-                                return Text(
-                                  (t?.schoolName ?? 'Neyvo').trim().isEmpty ? 'Neyvo' : (t?.schoolName ?? 'Neyvo'),
-                                  style: NeyvoTextStyles.heading.copyWith(color: NeyvoColors.white),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                return SvgPicture.asset(
+                                  'assets/ub_logo/ub_logo_horizontal_white.svg',
+                                  fit: BoxFit.contain,
+                                  height: 46,
+                                  colorFilter: const ColorFilter.mode(
+                                    NeyvoColors.white,
+                                    BlendMode.srcIn,
+                                  ),
                                 );
                               },
                             );

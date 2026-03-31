@@ -1,8 +1,7 @@
 // lib/theme/neyvo_theme.dart
-// Neyvo — Goodwin University style guide (April 2024).
-// Working State 2 marker – Goodwin theme applied across the app.
-// Colors: Dark Blue #005cb9 (Pantone 300), Light Blue #00a7e0 (Pantone 2995 C), Green #80bc00.
-// Typography: Freight Sans Pro (preferred) → Roboto Slab (headings) + Open Sans (body) as web alternates.
+// Neyvo — University of Bridgeport style guide.
+// Colors: UB Purple #592c82 (Pantone 268 C) and Light Blue #00a7e0 (Pantone 2995 C).
+// Typography: Museo Slab / Freight Sans → Roboto Slab (headings) + Open Sans (body) as web alternates.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,9 +11,9 @@ import 'package:google_fonts/google_fonts.dart';
 // ═══════════════════════════════════════════════════════════════════════════
 
 class NeyvoColors {
-  // Primary palette (Goodwin style guide)
-  static const Color ubPurple = Color(0xFF005CB9);    // Goodwin dark blue
-  static const Color ubLightBlue = Color(0xFF00A7E0); // Goodwin light blue
+  // Primary palette (University of Bridgeport style guide)
+  static const Color ubPurple = Color(0xFF592C82);    // UB purple
+  static const Color ubLightBlue = Color(0xFF00A7E0); // UB light blue
   static const Color white = Color(0xFFFFFFFF);
 
   // Backgrounds — white with subtle tints
@@ -42,12 +41,12 @@ class NeyvoColors {
   static const Color textMuted = textLightMuted;
 
   // Brand variants
-  static const Color ubPurpleSoft = Color(0xFF2F79C7);   // lighter Goodwin blue
+  static const Color ubPurpleSoft = Color(0xFF7B4FA8);   // lighter UB purple
   static const Color ubLightBlueSoft = Color(0xFF4DB8E8);
-  static const Color teal = ubPurple;
+  static const Color teal = ubPurple;               // alias for primary accent
   static const Color tealGlow = Color(0x1A592C82);
   static const Color tealLight = ubPurpleSoft;
-  static const Color coral = Color(0xFF80BC00);  // Goodwin green accent
+  static const Color coral = ubLightBlue;           // use UB light blue as secondary accent
 
   // Status — purple primary, light blue for info/success
   static const Color success = ubLightBlue;
