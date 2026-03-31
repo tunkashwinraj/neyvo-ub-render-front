@@ -57,3 +57,8 @@ age.key
 
 # Allow encrypted secret snapshots
 !/ops/secrets/**/*.enc
+#
+# Google/Firebase credentials (never commit)
+android/app/google-services.json
+google-credentials.json
+service-account.json
