@@ -1,21 +1,19 @@
 // lib/theme/neyvo_theme.dart
-// Neyvo — Goodwin University style guide (April 2024).
-// Working State 2 marker – Goodwin theme applied across the app.
-// Colors: Dark Blue #005cb9 (Pantone 300), Light Blue #00a7e0 (Pantone 2995 C), Green #80bc00.
-// Typography: Freight Sans Pro (preferred) → Roboto Slab (headings) + Open Sans (body) as web alternates.
+// Neyvo — University of Bridgeport style guide.
+// Colors: UB Purple #592c82 (Pantone 268 C) and Light Blue #00a7e0 (Pantone 2995 C).
+// Typography: Museo Slab / Freight Sans → Roboto Slab (headings) + Open Sans (body) as web alternates.
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NEYVO COLORS — GOODWIN STYLE GUIDE
 // ═══════════════════════════════════════════════════════════════════════════
 
 class NeyvoColors {
-  // Primary palette (single source of truth)
-  // Goodwin style guide (digital RGB):
-  // Dark blue #005CB9, light blue #00A7E0, green #80BC00.
-  static const Color ubPurple = Color(0xFF005CB9); // primary dark blue
-  static const Color ubLightBlue = Color(0xFF00A7E0); // secondary light blue
+  // Primary palette (University of Bridgeport style guide)
+  static const Color ubPurple = Color(0xFF592C82);    // UB purple
+  static const Color ubLightBlue = Color(0xFF00A7E0); // UB light blue
   static const Color white = Color(0xFFFFFFFF);
 
   // Backgrounds — white with subtle tints
@@ -28,13 +26,13 @@ class NeyvoColors {
   static const Color bgOverlay = Color(0xFFF5F6F8);
   static const Color bgHover = Color(0xFFF0F2F5);
 
-  // Borders — derived from primary blue
-  static const Color borderLight = Color(0x1A005CB9); // 10%
-  static const Color borderSubtle = Color(0x0F005CB9); // 6%
-  static const Color borderDefault = borderLight;
-  static const Color borderStrong = Color(0x33005CB9); // 20%
+  // Borders — purple and light blue tints
+  static const Color borderLight = Color(0x1A592C82);   // 10% purple
+  static const Color borderSubtle = Color(0x0F592C82);   // 6% purple
+  static const Color borderDefault = Color(0x1A592C82);
+  static const Color borderStrong = Color(0x33592C82);   // 20% purple
 
-  // Text — dark neutrals for readability on light UI
+  // Text — purple primary, light blue accent for links/secondary
   static const Color textLightPrimary = Color(0xFF1A1D2E);  // dark for readability
   static const Color textLightSecondary = Color(0xFF4A4E6A);
   static const Color textLightMuted = Color(0xFF6B6F82);
@@ -43,12 +41,12 @@ class NeyvoColors {
   static const Color textMuted = textLightMuted;
 
   // Brand variants
-  static const Color ubPurpleSoft = Color(0xFF2D7CC8);
-  static const Color ubLightBlueSoft = Color(0xFF5FC6EA);
-  static const Color teal = ubPurple;
-  static const Color tealGlow = Color(0x1A005CB9);
+  static const Color ubPurpleSoft = Color(0xFF7B4FA8);   // lighter UB purple
+  static const Color ubLightBlueSoft = Color(0xFF4DB8E8);
+  static const Color teal = ubPurple;               // alias for primary accent
+  static const Color tealGlow = Color(0x1A592C82);
   static const Color tealLight = ubPurpleSoft;
-  static const Color coral = Color(0xFF80BC00);  // Goodwin green accent
+  static const Color coral = ubLightBlue;           // use UB light blue as secondary accent
 
   // Status — purple primary, light blue for info/success
   static const Color success = ubLightBlue;
@@ -58,70 +56,40 @@ class NeyvoColors {
 
   // Sidebar — Goodwin dark blue with subtle elevation states
   static const Color sidebarBg = ubPurple;
-  static const Color sidebarSelected = Color(0xFF0B73D1); // selected band
-  static const Color sidebarHover = Color(0x33005CB9); // 20% primary overlay
+  static const Color sidebarSelected = Color(0xFF7B4FA8);   // lighter purple band
+  static const Color sidebarHover = Color(0x33592C82);     // 20% purple overlay
   static const Color sidebarBgLight = ubPurple;
   static const Color sidebarSelectedLight = sidebarSelected;
   static const Color sidebarHoverLight = sidebarHover;
 }
 
-TextStyle _robotoSlab({
-  double? fontSize,
-  FontWeight? fontWeight,
-  double? letterSpacing,
-  Color? color,
-}) {
-  return TextStyle(
-    fontFamily: 'Roboto Slab',
-    fontSize: fontSize,
-    fontWeight: fontWeight,
-    letterSpacing: letterSpacing,
-    color: color,
-  );
-}
-
-TextStyle _openSans({
-  double? fontSize,
-  FontWeight? fontWeight,
-  double? letterSpacing,
-  Color? color,
-}) {
-  return TextStyle(
-    fontFamily: 'Open Sans',
-    fontSize: fontSize,
-    fontWeight: fontWeight,
-    letterSpacing: letterSpacing,
-    color: color,
-  );
-}
-
 /// Typography scale — Roboto Slab (headings) + Open Sans (body) per UB style guide.
 class NeyvoTextStyles {
-  static TextStyle get display => _robotoSlab(
+  static TextStyle get display => GoogleFonts.robotoSlab(
     fontSize: 28, fontWeight: FontWeight.w700,
     letterSpacing: -0.5, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get title => _robotoSlab(
+  static TextStyle get title => GoogleFonts.robotoSlab(
     fontSize: 20, fontWeight: FontWeight.w600,
     letterSpacing: -0.3, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get heading => _robotoSlab(
+  static TextStyle get heading => GoogleFonts.robotoSlab(
     fontSize: 16, fontWeight: FontWeight.w600,
     letterSpacing: -0.2, color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get body => _openSans(
+  static TextStyle get body => GoogleFonts.openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoTheme.textSecondary,
   );
-  static TextStyle get bodyPrimary => _openSans(
+  static TextStyle get bodyPrimary => GoogleFonts.openSans(
     fontSize: 14, fontWeight: FontWeight.w400,
     color: NeyvoTheme.textPrimary,
   );
-  static TextStyle get label => _openSans(
+  static TextStyle get label => GoogleFonts.openSans(
     fontSize: 12, fontWeight: FontWeight.w500,
     letterSpacing: 0.3, color: NeyvoTheme.textSecondary,
   );
-  static TextStyle get micro => _openSans(
+  static TextStyle get micro => GoogleFonts.openSans(
     fontSize: 11, fontWeight: FontWeight.w500,
     letterSpacing: 0.5, color: NeyvoTheme.textMuted,
   );
@@ -222,85 +190,85 @@ class NeyvoRadius {
 
 /// Typography — Roboto Slab (H1/H2) + Open Sans (body) per UB style guide.
 class NeyvoType {
-  static TextStyle get displayLarge => _robotoSlab(
+  static TextStyle get displayLarge => GoogleFonts.robotoSlab(
         fontSize: 32, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: NeyvoColors.textPrimary,
       );
-  static TextStyle get headlineLarge => _robotoSlab(
+  static TextStyle get headlineLarge => GoogleFonts.robotoSlab(
         fontSize: 24, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get headlineMedium => _robotoSlab(
+  static TextStyle get headlineMedium => GoogleFonts.robotoSlab(
         fontSize: 20, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get titleLarge => _robotoSlab(
+  static TextStyle get titleLarge => GoogleFonts.robotoSlab(
         fontSize: 18, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get titleMedium => _robotoSlab(
+  static TextStyle get titleMedium => GoogleFonts.robotoSlab(
         fontSize: 16, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodyLarge => _openSans(
+  static TextStyle get bodyLarge => GoogleFonts.openSans(
         fontSize: 16, fontWeight: FontWeight.w400,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodyMedium => _openSans(
+  static TextStyle get bodyMedium => GoogleFonts.openSans(
         fontSize: 14, fontWeight: FontWeight.w400,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get bodySmall => _openSans(
+  static TextStyle get bodySmall => GoogleFonts.openSans(
         fontSize: 12, fontWeight: FontWeight.w400,
         color: NeyvoColors.textSecondary,
       );
-  static TextStyle get labelLarge => _openSans(
+  static TextStyle get labelLarge => GoogleFonts.openSans(
         fontSize: 14, fontWeight: FontWeight.w600,
         color: NeyvoColors.textPrimary,
       );
-  static TextStyle get labelSmall => _openSans(
+  static TextStyle get labelSmall => GoogleFonts.openSans(
         fontSize: 11, fontWeight: FontWeight.w500,
         color: NeyvoColors.textMuted,
       );
 
   // Light theme
-  static TextStyle get displayLargeLight => _robotoSlab(
+  static TextStyle get displayLargeLight => GoogleFonts.robotoSlab(
         fontSize: 32, fontWeight: FontWeight.w700,
         letterSpacing: -0.5, color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get headlineLargeLight => _robotoSlab(
+  static TextStyle get headlineLargeLight => GoogleFonts.robotoSlab(
         fontSize: 24, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get headlineMediumLight => _robotoSlab(
+  static TextStyle get headlineMediumLight => GoogleFonts.robotoSlab(
         fontSize: 20, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get titleLargeLight => _robotoSlab(
+  static TextStyle get titleLargeLight => GoogleFonts.robotoSlab(
         fontSize: 18, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get titleMediumLight => _robotoSlab(
+  static TextStyle get titleMediumLight => GoogleFonts.robotoSlab(
         fontSize: 16, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodyLargeLight => _openSans(
+  static TextStyle get bodyLargeLight => GoogleFonts.openSans(
         fontSize: 16, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodyMediumLight => _openSans(
+  static TextStyle get bodyMediumLight => GoogleFonts.openSans(
         fontSize: 14, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get bodySmallLight => _openSans(
+  static TextStyle get bodySmallLight => GoogleFonts.openSans(
         fontSize: 12, fontWeight: FontWeight.w400,
         color: NeyvoColors.textLightSecondary,
       );
-  static TextStyle get labelLargeLight => _openSans(
+  static TextStyle get labelLargeLight => GoogleFonts.openSans(
         fontSize: 14, fontWeight: FontWeight.w600,
         color: NeyvoColors.textLightPrimary,
       );
-  static TextStyle get labelSmallLight => _openSans(
+  static TextStyle get labelSmallLight => GoogleFonts.openSans(
         fontSize: 11, fontWeight: FontWeight.w500,
         color: NeyvoColors.textLightMuted,
       );
@@ -319,7 +287,7 @@ class NeyvoThemeData {
   }) {
     final primary = primaryColor ?? NeyvoColors.ubPurple;
     final secondary = secondaryColor ?? NeyvoColors.ubLightBlue;
-    final _ = accentColor; // kept for API compatibility
+    final accent = accentColor ?? NeyvoColors.ubLightBlue;
     final colorScheme = ColorScheme.light(
       primary: primary,
       secondary: secondary,
