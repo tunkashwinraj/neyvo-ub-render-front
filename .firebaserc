@@ -13,6 +13,16 @@
           "https://neyvoub-back.onrender.com"
         ]
       }
+    },
+    "neyvo-ub-render-front": {
+      "hosting": {
+        "default": [
+          "neyvo-ub-render-front"
+        ],
+        "staging": [
+          "neyvo-ub-render-front-staging"
+        ]
+      }
     }
   },
   "etags": {}

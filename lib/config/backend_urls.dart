@@ -6,7 +6,7 @@
 
 /// Default backend URL (no trailing slash). Edit this value to point the app at
 /// staging, production, or another host.
-const String kNeyvoBackendUrl = 'https://neyvoub-back.onrender.com';
+const String kNeyvoBackendUrl = 'https://neyvo-ub-render-back.onrender.com';
 
 String _normalizeBaseUrl(String u) => u.trim().replaceAll(RegExp(r'/+$'), '');
 
