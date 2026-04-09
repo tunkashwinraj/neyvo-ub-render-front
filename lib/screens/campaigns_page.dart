@@ -940,7 +940,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
     }
   }
 
-  /// Full campaign export (name, id, phone, status, outcome, action insights).
+  /// Full campaign export (CSV: name, id, phone, status, outcome, saved action insights).
   /// Uses async export job when available; otherwise synchronous GET /export.
   Future<void> _exportCampaignFull(String campaignId) async {
     if (!mounted) return;
@@ -994,7 +994,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 ),
                 const SizedBox(height: NeyvoSpacing.sm),
                 Text(
-                  'Generating spreadsheet with action insights for all contacts. This may take a few minutes for larger campaigns.',
+                  'Uses saved action insights from each call when available. Large lists may still take a short while.',
                   style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -2500,7 +2500,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'download', child: ListTile(leading: Icon(Icons.download_outlined, size: 20), title: Text('Download report'), dense: true)),
-                  const PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.table_chart_outlined, size: 20), title: Text('Export campaign (with action insights)'), dense: true)),
+                  const PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.table_chart_outlined, size: 20), title: Text('Export campaign (CSV)'), dense: true)),
                   if (status == 'running')
                     const PopupMenuItem(value: 'pause', child: ListTile(leading: Icon(Icons.pause_circle_outline, size: 20), title: Text('Pause'), dense: true)),
                   if (status == 'paused')

@@ -1301,7 +1301,7 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> getCallActionable(String campaignId, String vapiCallId) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls/${Uri.encodeComponent(vapiCallId)}/actionable');
 
-  /// Full campaign export: name, student id, phone, status, outcome, action insights (OpenAI).
+  /// Full campaign export: name, student id, phone, status, outcome, action insights (cached on call log when present).
   /// Large campaigns can take minutes, so callers can override timeout.
   static Future<Map<String, dynamic>> getCampaignExport(
     String campaignId, {
