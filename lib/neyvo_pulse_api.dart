@@ -1318,6 +1318,66 @@ class NeyvoPulseApi {
   static Future<Map<String, dynamic>> downloadCampaignExportJob(String jobId) async =>
       _get('/api/pulse/campaigns/export/jobs/${Uri.encodeComponent(jobId)}/download', timeout: const Duration(minutes: 5));
 
+  /// Server-built campaign CSV: `{ ok, filename, csv_content }`.
+  ///
+  /// Tries async job path (`POST .../export/jobs` with 90s timeout, poll, then download). If the
+  /// server has no job API or creation fails, falls back to synchronous `GET .../export` (10 min).
+  ///
+  /// When a job runs to completion then fails terminal status, or poll times out, throws (no sync fallback).
+  /// [onProgress] is only called along the job poll path.
+  static Future<Map<String, dynamic>> fetchCampaignSpreadsheetExport(
+    String campaignId, {
+    void Function({required int processed, required int total, required String status})? onProgress,
+  }) async {
+    Map<String, dynamic> create;
+    try {
+      create = await _post(
+        '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export/jobs',
+        {},
+        timeout: const Duration(seconds: 90),
+      );
+    } catch (_) {
+      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+    }
+
+    final jobId = (create['job_id'] ?? '').toString();
+    if (create['ok'] != true || jobId.isEmpty) {
+      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+    }
+
+    Map<String, dynamic>? terminalStatus;
+    for (var i = 0; i < 240; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      final Map<String, dynamic> status;
+      try {
+        status = await getCampaignExportJobStatus(jobId);
+      } catch (_) {
+        return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+      }
+      final processed = (status['processed_items'] as num?)?.toInt() ?? 0;
+      final total = (status['total_items'] as num?)?.toInt() ?? 0;
+      final stText = (status['status'] ?? '').toString();
+      onProgress?.call(processed: processed, total: total, status: stText);
+      final st = stText.toLowerCase();
+      if (st == 'completed' || st == 'failed' || st == 'cancelled') {
+        terminalStatus = status;
+        break;
+      }
+    }
+    if (terminalStatus == null) {
+      throw Exception('Export timed out while waiting for completion');
+    }
+    final st = (terminalStatus['status'] ?? '').toString().toLowerCase();
+    if (st != 'completed') {
+      throw Exception(terminalStatus['error']?.toString() ?? 'Export ended with status: $st');
+    }
+    try {
+      return await downloadCampaignExportJob(jobId);
+    } catch (_) {
+      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+    }
+  }
+
   /// List calls placed for a campaign (full call docs including transcript, outcome_type). Use [limit] to fetch more (e.g. 500 for "all").
   static Future<Map<String, dynamic>> getCampaignCalls(String campaignId, {int limit = 100}) async =>
       _get('/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/calls', params: {'limit': limit});

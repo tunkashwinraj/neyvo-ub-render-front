@@ -859,50 +859,53 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
   }
 
   Future<void> _downloadCampaignReport(String campaignId) async {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Preparing campaign report…',
+                style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
     try {
-      final res = await NeyvoPulseApi.getCampaignReport(campaignId);
-      if (res['ok'] != true || !mounted) return;
-      final campaign = Map<String, dynamic>.from(res['campaign'] as Map);
-      final agent = res['agent'] != null ? Map<String, dynamic>.from(res['agent'] as Map) : null;
-      final template = res['template'] != null ? Map<String, dynamic>.from(res['template'] as Map) : null;
-      final items = (res['call_items'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final callDetails = (res['call_details'] as Map?)?.map((k, v) => MapEntry(k as String, Map<String, dynamic>.from(v as Map))) ?? {};
-      final sb = StringBuffer();
-      sb.writeln('Campaign Report');
-      sb.writeln('Name,${_escapeCsv(campaign['name']?.toString() ?? '')}');
-      sb.writeln('Status,${campaign['status'] ?? ''}');
-      sb.writeln('Total Planned,${campaign['total_planned'] ?? ''}');
-      sb.writeln('Created,${UserTimezoneService.format(campaign['created_at'])}');
-      sb.writeln('');
-      if (agent != null) {
-        sb.writeln('Agent');
-        sb.writeln('Name,${_escapeCsv(agent['name']?.toString() ?? '')}');
-        sb.writeln('Voice Tier,${agent['voice_tier_override'] ?? agent['voice_tier'] ?? ''}');
-        sb.writeln('');
-      }
-      if (template != null) {
-        sb.writeln('Template,${_escapeCsv(template['name']?.toString() ?? template['id']?.toString() ?? '')}');
-        sb.writeln('');
-      }
-      sb.writeln('Call Items');
-      sb.writeln('Name,Phone,Student ID,Status,Attempt,VAPI Call ID,Duration (s),Summary,Sentiment');
-      for (final it in items) {
-        final vapiId = (it['vapi_call_id'] ?? '').toString();
-        final detail = callDetails[vapiId];
-        final duration = detail?['duration_seconds'] ?? '';
-        final summary = _escapeCsv((detail?['summary'] ?? '').toString().replaceAll('\n', ' '));
-        final sentiment = (detail?['sentiment'] ?? '').toString();
-        sb.writeln('"${_escapeCsv(it['name']?.toString() ?? '')}","${_escapeCsv(it['phone']?.toString() ?? '')}",${it['student_id'] ?? ''},${it['status'] ?? ''},${it['attempt'] ?? ''},$vapiId,$duration,"$summary",$sentiment');
-      }
-      final date = DateTime.now().toIso8601String().substring(0, 10);
-      final name = (campaign['name'] ?? 'campaign').toString().replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(RegExp(r'\s+'), '_');
+      final res = await NeyvoPulseApi.fetchCampaignSpreadsheetExport(campaignId);
       if (!mounted) return;
-      await downloadCsv('campaign_report_${name}_$date.csv', '\uFEFF${sb.toString()}', context);
+      Navigator.of(context).pop();
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error']?.toString() ?? 'Download failed'),
+            backgroundColor: NeyvoTheme.error,
+          ),
+        );
+        return;
+      }
+      final filename = res['filename']?.toString() ?? 'campaign_export.csv';
+      final csvContent = res['csv_content']?.toString() ?? '';
+      await downloadCsv(filename, '\uFEFF$csvContent', context);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Download failed: $e'), backgroundColor: NeyvoTheme.error),
-      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
     }
   }
 
@@ -937,10 +940,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
     }
   }
 
-  String _escapeCsv(String s) => s.replaceAll('"', '""');
-
   /// Full campaign export (name, id, phone, status, outcome, action insights).
-  /// Uses async backend job + polling to avoid request timeout.
+  /// Uses async export job when available; otherwise synchronous GET /export.
   Future<void> _exportCampaignFull(String campaignId) async {
     if (!mounted) return;
     final DateTime exportStartedAt = DateTime.now();
@@ -1004,50 +1005,18 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       ),
     );
     try {
-      final create = await NeyvoPulseApi.createCampaignExportJob(campaignId);
-      Map<String, dynamic> res;
-      if (create['ok'] == true && (create['job_id'] ?? '').toString().isNotEmpty) {
-        setDialogState?.call(() {
-          exportStatusLabel = 'Export job started. Processing contacts...';
-        });
-        final jobId = (create['job_id'] ?? '').toString();
-        Map<String, dynamic>? terminalStatus;
-        for (int i = 0; i < 240; i++) {
-          await Future.delayed(const Duration(seconds: 2));
+      final res = await NeyvoPulseApi.fetchCampaignSpreadsheetExport(
+        campaignId,
+        onProgress: ({required int processed, required int total, required String status}) {
           if (!mounted) return;
-          final status = await NeyvoPulseApi.getCampaignExportJobStatus(jobId);
           setDialogState?.call(() {
-            final int latestProcessed = (status['processed_items'] as num?)?.toInt() ?? 0;
-            final int? latestTotal = (status['total_items'] as num?)?.toInt();
-            processedItems = latestProcessed;
-            totalItems = latestTotal;
-            final stText = (status['status'] ?? '').toString();
-            exportStatusLabel = stText.isNotEmpty ? 'Status: $stText' : 'Processing contacts...';
+            processedItems = processed;
+            totalItems = total;
+            exportStatusLabel =
+                status.isNotEmpty ? 'Status: $status' : 'Processing contacts...';
           });
-          final st = (status['status'] ?? '').toString().toLowerCase();
-          if (st == 'completed' || st == 'failed' || st == 'cancelled') {
-            terminalStatus = status;
-            break;
-          }
-        }
-        if (terminalStatus == null) {
-          throw Exception('Export timed out while waiting for completion');
-        }
-        final st = (terminalStatus['status'] ?? '').toString().toLowerCase();
-        if (st != 'completed') {
-          throw Exception(terminalStatus['error']?.toString() ?? 'Export ended with status: $st');
-        }
-        res = await NeyvoPulseApi.downloadCampaignExportJob(jobId);
-      } else {
-        // Fallback for environments where Cloud Tasks export queue is not enabled yet.
-        setDialogState?.call(() {
-          exportStatusLabel = 'Using direct export mode...';
-        });
-        res = await NeyvoPulseApi.getCampaignExport(
-          campaignId,
-          timeout: const Duration(minutes: 10),
-        );
-      }
+        },
+      );
       if (!mounted) return;
       Navigator.of(context).pop();
       if (res['ok'] != true) {

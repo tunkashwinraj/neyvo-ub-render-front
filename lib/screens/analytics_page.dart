@@ -1650,33 +1650,55 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Future<void> _downloadSingleCampaignReport(String campaignId) async {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Preparing campaign report…',
+                style: NeyvoTextStyles.body.copyWith(color: NeyvoColors.textMuted),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
     try {
-      final res = await NeyvoPulseApi.getCampaignReport(campaignId);
-      if (res['ok'] != true || !mounted) return;
-      final campaign = Map<String, dynamic>.from(res['campaign'] as Map);
-      final items = (res['call_items'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? [];
-      final callDetails = (res['call_details'] as Map?)?.map((k, v) => MapEntry(k as String, Map<String, dynamic>.from(v as Map))) ?? {};
-      final sb = StringBuffer();
-      sb.writeln('Campaign,${_escapeCsv(campaign['name']?.toString() ?? '')}');
-      sb.writeln('Status,${campaign['status'] ?? ''}');
-      sb.writeln('Call Items,,,,');
-      sb.writeln('Name,Phone,Status,VAPI Call ID,Summary');
-      for (final it in items) {
-        final vapiId = (it['vapi_call_id'] ?? '').toString();
-        final detail = callDetails[vapiId];
-        final summary = _escapeCsv((detail?['summary'] ?? '').toString().replaceAll('\n', ' '));
-        sb.writeln('"${_escapeCsv(it['name']?.toString() ?? '')}","${_escapeCsv(it['phone']?.toString() ?? '')}",${it['status'] ?? ''},$vapiId,"$summary"');
+      final res = await NeyvoPulseApi.fetchCampaignSpreadsheetExport(campaignId);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error']?.toString() ?? 'Download failed'),
+            backgroundColor: NeyvoTheme.error,
+          ),
+        );
+        return;
       }
-      final date = DateTime.now().toIso8601String().substring(0, 10);
-      if (!mounted) return;
-      await downloadCsv('campaign_report_$date.csv', '\uFEFF${sb.toString()}', context);
+      final filename = res['filename']?.toString() ?? 'campaign_export.csv';
+      final csvContent = res['csv_content']?.toString() ?? '';
+      await downloadCsv(filename, '\uFEFF$csvContent', context);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: NeyvoTheme.error),
+        );
+      }
     }
   }
-
-  String _escapeCsv(String s) => s.replaceAll('"', '""');
 
   void _showCampaignReportPicker() {
     showModalBottomSheet<void>(
