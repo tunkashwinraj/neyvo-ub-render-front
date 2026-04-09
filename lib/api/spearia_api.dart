@@ -640,13 +640,19 @@ class SpeariaApi {
     _pulseTabCancelToken ??= CancelToken();
     final token = _pulseTabCancelToken!;
     final dioClient = SpeariaApi().dio;
+    // Dio applies BaseOptions.connectTimeout (~20–30s) unless overridden. Long-running
+    // Pulse reads (e.g. campaign CSV export) must raise connect + receive or Dio throws
+    // DioExceptionType.connectionTimeout before the server finishes.
+    final effectiveTimeout = timeout ?? _defaultTimeout;
     try {
       final resp = await dioClient.get<dynamic>(
         path,
         queryParameters: p.isEmpty ? null : p,
         cancelToken: token,
         options: Options(
-          receiveTimeout: timeout ?? _defaultTimeout,
+          connectTimeout: effectiveTimeout,
+          sendTimeout: effectiveTimeout,
+          receiveTimeout: effectiveTimeout,
           responseType: ResponseType.json,
           headers: extraHeaders,
         ),
