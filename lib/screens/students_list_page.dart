@@ -232,6 +232,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
         studentName: name,
         studentId: student['id']?.toString(),
         balance: student['balance']?.toString(),
+        amount: student['amount']?.toString(),
+        fundName: student['fund_name']?.toString(),
         dueDate: student['due_date']?.toString(),
         lateFee: student['late_fee']?.toString(),
       );
@@ -1029,6 +1031,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
     final advisorNameC = TextEditingController();
     final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
+    final amountC = TextEditingController();
+    final fundNameC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
     final studentIdC = TextEditingController();
@@ -1111,6 +1115,22 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
                 const SizedBox(height: NeyvoSpacing.md),
                 TextField(controller: balanceC, decoration: const InputDecoration(labelText: 'Balance (optional)', hintText: '\$1,000')),
                 const SizedBox(height: NeyvoSpacing.md),
+                TextField(
+                  controller: amountC,
+                  decoration: const InputDecoration(
+                    labelText: 'Suggested amount (optional)',
+                    hintText: '{{suggestedAmount}} e.g. 500',
+                  ),
+                ),
+                const SizedBox(height: NeyvoSpacing.md),
+                TextField(
+                  controller: fundNameC,
+                  decoration: const InputDecoration(
+                    labelText: 'Fund name (optional)',
+                    hintText: '{{fundName}}',
+                  ),
+                ),
+                const SizedBox(height: NeyvoSpacing.md),
                 TextField(controller: dueDateC, decoration: const InputDecoration(labelText: 'Due Date (optional)', hintText: '2026-02-25')),
                 const SizedBox(height: NeyvoSpacing.md),
                 TextField(controller: lateFeeC, decoration: const InputDecoration(labelText: 'Late Fee (optional)', hintText: '\$75')),
@@ -1149,6 +1169,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
                   lastName: lastName.isNotEmpty ? lastName : null,
                   email: emailC.text.trim().isEmpty ? null : emailC.text.trim(),
                   balance: balanceC.text.trim().isEmpty ? null : balanceC.text.trim(),
+                  amount: amountC.text.trim().isEmpty ? null : amountC.text.trim(),
+                  fundName: fundNameC.text.trim().isEmpty ? null : fundNameC.text.trim(),
                   dueDate: dueDateC.text.trim().isEmpty ? null : dueDateC.text.trim(),
                   lateFee: lateFeeC.text.trim().isEmpty ? null : lateFeeC.text.trim(),
                   studentId: studentIdC.text.trim().isEmpty ? null : studentIdC.text.trim(),

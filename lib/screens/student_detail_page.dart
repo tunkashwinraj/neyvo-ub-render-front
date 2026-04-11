@@ -33,6 +33,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
   final _advisorName = TextEditingController();
   final _bookingUrl = TextEditingController();
   final _balance = TextEditingController();
+  final _amount = TextEditingController();
+  final _fundName = TextEditingController();
   final _dueDate = TextEditingController();
   final _lateFee = TextEditingController();
   final _studentId = TextEditingController();
@@ -57,6 +59,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
     _advisorName.dispose();
     _bookingUrl.dispose();
     _balance.dispose();
+    _amount.dispose();
+    _fundName.dispose();
     _dueDate.dispose();
     _lateFee.dispose();
     _studentId.dispose();
@@ -82,6 +86,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
     _advisorName.text = s['advisor_name']?.toString() ?? '';
     _bookingUrl.text = s['booking_url']?.toString() ?? '';
     _balance.text = s['balance']?.toString() ?? '';
+    _amount.text = s['amount']?.toString() ?? '';
+    _fundName.text = s['fund_name']?.toString() ?? '';
     _dueDate.text = s['due_date']?.toString() ?? '';
     _lateFee.text = s['late_fee']?.toString() ?? '';
     _studentId.text = s['student_id']?.toString() ?? '';
@@ -133,6 +139,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
         advisorName: _advisorName.text.trim().isEmpty ? null : _advisorName.text.trim(),
         bookingUrl: _bookingUrl.text.trim().isEmpty ? null : _bookingUrl.text.trim(),
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
+        amount: _amount.text.trim().isEmpty ? null : _amount.text.trim(),
+        fundName: _fundName.text.trim().isEmpty ? null : _fundName.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
         schoolStudentId: _studentId.text.trim().isEmpty ? null : _studentId.text.trim(),
@@ -184,6 +192,8 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
         studentPhone: phone,
         studentName: name,
         balance: _balance.text.trim().isEmpty ? null : _balance.text.trim(),
+        amount: _amount.text.trim().isEmpty ? null : _amount.text.trim(),
+        fundName: _fundName.text.trim().isEmpty ? null : _fundName.text.trim(),
         dueDate: _dueDate.text.trim().isEmpty ? null : _dueDate.text.trim(),
         lateFee: _lateFee.text.trim().isEmpty ? null : _lateFee.text.trim(),
       );
@@ -512,6 +522,22 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage> with Sing
               TextField(controller: _studentId, decoration: const InputDecoration(labelText: 'Student ID (school internal)', hintText: 'Optional')),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _balance, decoration: const InputDecoration(labelText: 'Balance')),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: _amount,
+                decoration: const InputDecoration(
+                  labelText: 'Suggested amount (optional)',
+                  hintText: 'Used for {{suggestedAmount}}',
+                ),
+              ),
+              const SizedBox(height: NeyvoSpacing.md),
+              TextField(
+                controller: _fundName,
+                decoration: const InputDecoration(
+                  labelText: 'Fund name (optional)',
+                  hintText: 'Used for {{fundName}}',
+                ),
+              ),
               const SizedBox(height: NeyvoSpacing.md),
               TextField(controller: _dueDate, decoration: const InputDecoration(labelText: 'Due date')),
               const SizedBox(height: NeyvoSpacing.md),

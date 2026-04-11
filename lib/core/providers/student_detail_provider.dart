@@ -149,6 +149,8 @@ class StudentDetailCtrl extends _$StudentDetailCtrl {
     String? schoolStudentId,
     String? notes,
     Map<String, dynamic>? customFields,
+    String? amount,
+    String? fundName,
   }) async {
     state = state.copyWith(saving: true);
     try {
@@ -162,6 +164,8 @@ class StudentDetailCtrl extends _$StudentDetailCtrl {
         advisorName: advisorName,
         bookingUrl: bookingUrl,
         balance: balance,
+        amount: amount,
+        fundName: fundName,
         dueDate: dueDate,
         lateFee: lateFee,
         schoolStudentId: schoolStudentId,
@@ -183,6 +187,8 @@ class StudentDetailCtrl extends _$StudentDetailCtrl {
     String? balance,
     String? dueDate,
     String? lateFee,
+    String? amount,
+    String? fundName,
   }) async {
     state = state.copyWith(calling: true);
     try {
@@ -192,6 +198,8 @@ class StudentDetailCtrl extends _$StudentDetailCtrl {
         studentName: studentName,
         studentId: studentId,
         balance: balance,
+        amount: amount,
+        fundName: fundName,
         dueDate: dueDate,
         lateFee: lateFee,
       );

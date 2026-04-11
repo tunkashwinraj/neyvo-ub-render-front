@@ -1,7 +1,8 @@
 {
   "projects": {
     "default": "goodwin-neyvo",
-    "goodwin-neyvo": "goodwin-neyvo"
+    "goodwin-neyvo": "goodwin-neyvo",
+    "neyvo-ub-render-front": "neyvo-ub-render-front"
   },
   "targets": {
     "goodwin-neyvo": {

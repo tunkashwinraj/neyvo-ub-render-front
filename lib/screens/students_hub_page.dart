@@ -158,6 +158,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
     final advisorNameC = TextEditingController();
     final bookingUrlC = TextEditingController();
     final balanceC = TextEditingController();
+    final amountC = TextEditingController();
+    final fundNameC = TextEditingController();
     final dueDateC = TextEditingController();
     final lateFeeC = TextEditingController();
     final studentIdC = TextEditingController();
@@ -265,6 +267,22 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                           ),
                           const SizedBox(height: NeyvoSpacing.md),
                           TextField(
+                            controller: amountC,
+                            decoration: const InputDecoration(
+                              labelText: 'Suggested amount (optional)',
+                              hintText: '{{suggestedAmount}}',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
+                            controller: fundNameC,
+                            decoration: const InputDecoration(
+                              labelText: 'Fund name (optional)',
+                              hintText: '{{fundName}}',
+                            ),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          TextField(
                             controller: dueDateC,
                             decoration: const InputDecoration(
                               labelText: 'Due Date (optional)',
@@ -334,6 +352,8 @@ class _DirectoryTabState extends State<_DirectoryTab> with SingleTickerProviderS
                   email: emailC.text.trim().isEmpty ? null : emailC.text.trim(),
                   balance:
                       balanceC.text.trim().isEmpty ? null : balanceC.text.trim(),
+                  amount: amountC.text.trim().isEmpty ? null : amountC.text.trim(),
+                  fundName: fundNameC.text.trim().isEmpty ? null : fundNameC.text.trim(),
                   dueDate: dueDateC.text.trim().isEmpty ? null : dueDateC.text.trim(),
                   lateFee:
                       lateFeeC.text.trim().isEmpty ? null : lateFeeC.text.trim(),

@@ -458,12 +458,16 @@ class NeyvoPulseApi {
     String? yearOfStudy,
     String? advisorName,
     String? bookingUrl,
+    String? amount,
+    String? fundName,
   }) async =>
       _post('/api/pulse/students', {
         'name': name,
         'phone': phone,
         if (email != null) 'email': email,
         if (balance != null) 'balance': balance,
+        if (amount != null) 'amount': amount,
+        if (fundName != null) 'fund_name': fundName,
         if (dueDate != null) 'due_date': dueDate,
         if (lateFee != null) 'late_fee': lateFee,
         if (studentId != null) 'student_id': studentId,
@@ -493,12 +497,16 @@ class NeyvoPulseApi {
     String? yearOfStudy,
     String? advisorName,
     String? bookingUrl,
+    String? amount,
+    String? fundName,
   }) async =>
       _patch('/api/pulse/students/$studentId', {
         if (name != null) 'name': name,
         if (phone != null) 'phone': phone,
         if (email != null) 'email': email,
         if (balance != null) 'balance': balance,
+        if (amount != null) 'amount': amount,
+        if (fundName != null) 'fund_name': fundName,
         if (dueDate != null) 'due_date': dueDate,
         if (lateFee != null) 'late_fee': lateFee,
         if (schoolStudentId != null) 'student_id': schoolStudentId,
@@ -930,6 +938,8 @@ class NeyvoPulseApi {
     String? balance,
     String? dueDate,
     String? lateFee,
+    String? amount,
+    String? fundName,
     String? schoolName,
   }) async {
     final body = <String, dynamic>{
@@ -943,6 +953,8 @@ class NeyvoPulseApi {
     if (phoneNumberId != null) body['phone_number_id'] = phoneNumberId;
     if (numberId != null) body['number_id'] = numberId;
     if (balance != null) body['balance'] = balance;
+    if (amount != null) body['amount'] = amount;
+    if (fundName != null) body['fund_name'] = fundName;
     if (dueDate != null) body['due_date'] = dueDate;
     if (lateFee != null) body['late_fee'] = lateFee;
     if (schoolName != null) body['school_name'] = schoolName;

@@ -532,7 +532,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Image.asset(
-                      'assets/goodwin_logo/goodwin-horiz-white.png',
+                      'assets/ub_logo/ub_logo_horizontal_white.png',
                       height: 36,
                       fit: BoxFit.contain,
                     ),
