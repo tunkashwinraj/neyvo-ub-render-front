@@ -61,7 +61,7 @@ String get _kFallbackAccountId {
   // Configure backend base URL once. In dev you can override via:
   // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000
   NeyvoApi.setBaseUrl(baseUrl);
-  NeyvoApi.setDefaultTimeout(const Duration(seconds: 30));
+  NeyvoApi.setDefaultTimeout(const Duration(seconds: 45));
 
     tz.initializeTimeZones();
 

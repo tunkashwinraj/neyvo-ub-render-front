@@ -11,6 +11,7 @@ import 'package:flutter_dropzone/flutter_dropzone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/neyvo_api.dart';
+import '../core/pulse_api_timeouts.dart';
 import '../core/providers/students_hub_tab_provider.dart';
 import '../features/managed_profiles/managed_profile_api_service.dart';
 import '../neyvo_pulse_api.dart';
@@ -1515,8 +1516,25 @@ class _ImportTabState extends State<_ImportTab> {
               if (!started) {
                 started = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  final pollStarted = DateTime.now();
+                  var importLongWaitNotified = false;
                   // Poll until the job reaches a terminal state.
                   while (mounted) {
+                    if (!importLongWaitNotified &&
+                        DateTime.now().difference(pollStarted) > pulseImportPollMaxWait) {
+                      importLongWaitNotified = true;
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Import is taking longer than usual. You can leave this open or cancel. '
+                              'The job keeps running in the background.',
+                            ),
+                            duration: Duration(seconds: 8),
+                          ),
+                        );
+                      }
+                    }
                     final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
                     final payload = statusRes['job'] is Map
                         ? Map<String, dynamic>.from(statusRes['job'] as Map)

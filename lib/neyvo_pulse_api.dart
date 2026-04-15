@@ -4,6 +4,7 @@
 
 import '../api/api_response_cache.dart';
 import '../api/neyvo_api.dart';
+import '../core/pulse_api_timeouts.dart';
 
 export '../core/pulse_request_cancelled.dart';
 
@@ -544,17 +545,17 @@ class NeyvoPulseApi {
     final body = <String, dynamic>{'csv': csvContent};
     if (importName != null && importName.trim().isNotEmpty) body['import_name'] = importName.trim();
     if (chunkSize != null) body['chunk_size'] = chunkSize;
-    return _post('/api/pulse/students/import/csv', body);
+    return _post('/api/pulse/students/import/csv', body, timeout: pulseImportCsvPost);
   }
 
   /// GET /api/pulse/students/import/jobs/{job_id}
   static Future<Map<String, dynamic>> getStudentsImportJobStatus(String jobId) async {
-    return _get('/api/pulse/students/import/jobs/$jobId');
+    return _get('/api/pulse/students/import/jobs/$jobId', timeout: pulseImportJobPoll);
   }
 
   /// POST /api/pulse/students/import/jobs/{job_id}/cancel
   static Future<Map<String, dynamic>> cancelStudentsImportJob(String jobId) async {
-    return _post('/api/pulse/students/import/jobs/$jobId/cancel', {});
+    return _post('/api/pulse/students/import/jobs/$jobId/cancel', {}, timeout: pulseImportJobPoll);
   }
 
   // Payments
@@ -1565,7 +1566,7 @@ class NeyvoPulseApi {
 
   /// Build immutable audience snapshot + validation.
   static Future<Map<String, dynamic>> prepareCampaign(String campaignId) async =>
-      _post('/api/pulse/campaigns/$campaignId/prepare', {});
+      _post('/api/pulse/campaigns/$campaignId/prepare', {}, timeout: pulseCampaignPrepare);
 
   /// Latest validation + snapshot status.
   static Future<Map<String, dynamic>> getCampaignValidation(String campaignId) async =>
@@ -1605,7 +1606,7 @@ class NeyvoPulseApi {
     return SpeariaApi.postJsonMap(
       '/api/pulse/campaigns/$campaignId/start',
       body: body,
-      timeout: const Duration(seconds: 120),
+      timeout: pulseCampaignStart,
     );
   }
 
@@ -1639,13 +1640,13 @@ class NeyvoPulseApi {
     return SpeariaApi.postJsonMap(
       '/api/pulse/campaigns/$campaignId/retry',
       body: body,
-      timeout: const Duration(seconds: 60),
+      timeout: pulseCampaignRetry,
     );
   }
 
   /// Rebuild audience: deletes snapshot and unlocks audience config.
   static Future<Map<String, dynamic>> rebuildCampaignAudience(String campaignId) async =>
-      _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {});
+      _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {}, timeout: pulseCampaignRebuildAudience);
 
   /// Pause a running campaign (stops refilling the pool; active calls still finish).
   static Future<Map<String, dynamic>> pauseCampaign(String campaignId) async =>

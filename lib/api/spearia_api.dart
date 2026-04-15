@@ -159,7 +159,7 @@ class SpeariaApi {
       case ApiTimeoutClass.medium:
         return const Duration(seconds: 15);
       case ApiTimeoutClass.heavy:
-        return const Duration(seconds: 45);
+        return const Duration(seconds: 90);
     }
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/neyvo_api.dart';
+import '../core/pulse_api_timeouts.dart';
 import '../core/providers/students_list_provider.dart';
 import '../neyvo_pulse_api.dart';
 import '../utils/export_csv.dart';
@@ -772,6 +773,8 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
     bool cancelRequested = false;
     bool closed = false;
     Map<String, dynamic> lastJob = {};
+    final pollStarted = DateTime.now();
+    var importLongWaitNotified = false;
 
     try {
       final finalJob = await showDialog<Map<String, dynamic>>(
@@ -793,6 +796,21 @@ class _StudentsListPageState extends ConsumerState<StudentsListPage> with Single
                   if (closed) return;
                   timer = Timer.periodic(const Duration(seconds: 2), (t) async {
                     try {
+                      if (!importLongWaitNotified &&
+                          DateTime.now().difference(pollStarted) > pulseImportPollMaxWait) {
+                        importLongWaitNotified = true;
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Import is taking longer than usual. You can leave this open or cancel. '
+                                'The job keeps running in the background.',
+                              ),
+                              duration: Duration(seconds: 8),
+                            ),
+                          );
+                        }
+                      }
                       final res = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
                       setFromResponse(res);
                       final status = (lastJob['status'] ?? '').toString();
@@ -1355,7 +1373,24 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
             _loading = false;
             _step = 3;
           });
+          final pollStarted = DateTime.now();
+          var importLongWaitNotified = false;
           while (mounted) {
+            if (!importLongWaitNotified &&
+                DateTime.now().difference(pollStarted) > pulseImportPollMaxWait) {
+              importLongWaitNotified = true;
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Import is taking longer than usual. You can leave this open or cancel. '
+                      'The job keeps running in the background.',
+                    ),
+                    duration: Duration(seconds: 8),
+                  ),
+                );
+              }
+            }
             final statusRes = await NeyvoPulseApi.getStudentsImportJobStatus(jobId);
             final payload = statusRes['job'] is Map
                 ? Map<String, dynamic>.from(statusRes['job'] as Map)
