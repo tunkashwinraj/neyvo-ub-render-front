@@ -119,6 +119,16 @@ class NeyvoPulseApi {
     return SpeariaApi.postJsonMap(path, body: body, timeout: timeout);
   }
 
+  /// Same as [_post] but uses Dio so long-running POSTs (large JSON body) honor [timeout] on web.
+  static Future<Map<String, dynamic>> _postDio(
+    String path,
+    Map<String, dynamic> body, {
+    required Duration timeout,
+  }) async {
+    if (_defaultAccountId.isNotEmpty) body['account_id'] = body['account_id'] ?? _defaultAccountId;
+    return SpeariaApi.postJsonMapDio(path, body: body, timeout: timeout);
+  }
+
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
     if (_defaultAccountId.isNotEmpty) body['account_id'] = body['account_id'] ?? _defaultAccountId;
     final v = await SpeariaApi.patchJson(path, body: body);
@@ -545,7 +555,7 @@ class NeyvoPulseApi {
     final body = <String, dynamic>{'csv': csvContent};
     if (importName != null && importName.trim().isNotEmpty) body['import_name'] = importName.trim();
     if (chunkSize != null) body['chunk_size'] = chunkSize;
-    return _post('/api/pulse/students/import/csv', body, timeout: pulseImportCsvPost);
+    return _postDio('/api/pulse/students/import/csv', body, timeout: pulseImportCsvPost);
   }
 
   /// GET /api/pulse/students/import/jobs/{job_id}

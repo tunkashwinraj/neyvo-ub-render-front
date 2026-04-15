@@ -35,6 +35,12 @@ String get _kFallbackAccountId {
   Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Configure API timeouts before any other async work so early requests never use
+    // the library default (short) window.
+    final baseUrlEarly = resolveNeyvoApiBaseUrl();
+    NeyvoApi.setBaseUrl(baseUrlEarly);
+    NeyvoApi.setDefaultTimeout(const Duration(minutes: 3));
+
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -56,14 +62,11 @@ String get _kFallbackAccountId {
     NeyvoApi.setDefaultAccountId(null);
   }
 
-  final baseUrl = resolveNeyvoApiBaseUrl();
-
-  // Configure backend base URL once. In dev you can override via:
-  // flutter run -d chrome --web-port 9095 --dart-define=API_BASE_URL=http://127.0.0.1:8000
-  NeyvoApi.setBaseUrl(baseUrl);
-  // Generous default: many Pulse routes omit per-call timeouts; slow Firestore/campaign work
-  // should complete before the client gives up (platform proxy may still impose its own cap).
-  NeyvoApi.setDefaultTimeout(const Duration(minutes: 3));
+    // Base URL and default timeout were set at startup; keep in sync if resolve changes.
+    final baseUrl = resolveNeyvoApiBaseUrl();
+    if (baseUrl != baseUrlEarly) {
+      NeyvoApi.setBaseUrl(baseUrl);
+    }
 
     tz.initializeTimeZones();
 

@@ -277,6 +277,66 @@ class SpeariaApi {
     );
   }
 
+  /// POST JSON using Dio with explicit connect/send/receive timeouts.
+  ///
+  /// Use for very large bodies (e.g. student CSV import). On Flutter web, `package:http`
+  /// plus [Future.timeout] has been observed to fail around ~30s even when a longer
+  /// duration is passed; Dio applies the full timeout to the upload and response.
+  static Future<Map<String, dynamic>> postJsonMapDio(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, dynamic>? params,
+    required Duration timeout,
+    bool adminAuth = false,
+  }) async {
+    _ensureBaseUrlOrThrow();
+    final p = Map<String, dynamic>.from(_withAccountId(params) ?? {});
+    final b = _withAccountId(body);
+    final dioClient = SpeariaApi().dio;
+    try {
+      final resp = await dioClient.post<dynamic>(
+        path,
+        queryParameters: p.isEmpty ? null : p,
+        data: b,
+        options: Options(
+          connectTimeout: timeout,
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+          responseType: ResponseType.json,
+          headers: _headers(
+            headers: null,
+            adminAuth: adminAuth,
+            path: path,
+            includeJsonContentType: true,
+          ),
+        ),
+      );
+      final data = resp.data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      throw ApiException(
+        'Expected JSON object but got ${data.runtimeType}',
+        uri: _uri(path, params: params),
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final respBody = e.response?.data;
+      String msg = e.message ?? 'HTTP error';
+      if (respBody is Map && respBody['error'] != null) {
+        msg = respBody['error'].toString();
+      } else if (respBody is String && respBody.isNotEmpty) {
+        msg = respBody;
+      }
+      throw ApiException(
+        msg,
+        statusCode: status,
+        uri: e.requestOptions.uri,
+        payload: respBody,
+      );
+    }
+  }
+
   static Future<dynamic> putJson(
     String path, {
     Map<String, dynamic>? body,
