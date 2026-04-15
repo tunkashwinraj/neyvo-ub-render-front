@@ -434,7 +434,7 @@ class NeyvoPulseApi {
     return _post('/api/pulse/students/match-phones', {
       'student_ids': studentIds,
       'phones': phones,
-    });
+    }, timeout: pulseMatchPhonesPost);
   }
 
   static Future<Map<String, dynamic>> getStudent(String studentId) async =>

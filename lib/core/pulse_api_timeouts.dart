@@ -1,8 +1,11 @@
 // HTTP timeouts for long-running Pulse API operations (import, campaigns).
 // Global NeyvoApi.setDefaultTimeout stays moderate; these apply per-call only.
 
-/// POST /api/pulse/students/import/csv — large payload, parse, enqueue.
-const Duration pulseImportCsvPost = Duration(minutes: 5);
+/// POST /api/pulse/students/import/csv — large payload, parse, enqueue (sync path can be slow).
+const Duration pulseImportCsvPost = Duration(minutes: 12);
+
+/// POST /api/pulse/students/match-phones — campaign CSV audience resolution (large phone lists).
+const Duration pulseMatchPhonesPost = Duration(minutes: 8);
 
 /// GET /api/pulse/students/import/jobs/{id} — per poll; generous for slow Firestore.
 const Duration pulseImportJobPoll = Duration(seconds: 90);
