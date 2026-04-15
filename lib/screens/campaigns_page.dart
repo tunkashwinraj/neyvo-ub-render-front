@@ -1620,7 +1620,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       ));
       return;
     }
-    final isRerun = c['status'] == 'completed' || c['status'] == 'running';
+    final statusRun = (c['status'] ?? '').toString().toLowerCase().trim();
+    final isRerun = statusRun == 'completed' || statusRun == 'running';
     // For first-time start, ensure snapshot and validation are ready. For rerun, skip (snapshot already existed).
     if (!isRerun) {
       final ready = await _ensureCampaignSnapshotReady(id);
@@ -1630,8 +1631,8 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Starting campaign...'),
-            duration: Duration(seconds: 2),
+            content: Text('Starting campaign… (this can take a minute for large audiences)'),
+            duration: Duration(minutes: 2),
           ),
         );
       }
@@ -2207,12 +2208,15 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                                 });
                               },
                             ),
+                          ],
+                          if (c['status'] == 'draft' ||
+                              c['status'] == 'scheduled' ||
+                              c['status'] == 'ready')
                             IconButton(
                               icon: const Icon(Icons.play_arrow),
-                              tooltip: 'Start campaign',
+                              tooltip: 'Run campaign',
                               onPressed: () => _startOrRerunCampaign(c),
                             ),
-                          ],
                           if (c['status'] == 'completed' || c['status'] == 'running')
                             IconButton(
                               icon: const Icon(Icons.replay),
@@ -2304,9 +2308,10 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             ) ??
             const <String, int>{};
         final operatorGoal = report['operator_goal']?.toString() ?? '';
-        final canStart = status == 'draft' || status == 'scheduled';
-        final canRerun = status == 'completed' || status == 'running';
-        final canEdit = status == 'draft' || status == 'scheduled';
+        final canStart =
+            statusLower == 'draft' || statusLower == 'scheduled' || statusLower == 'ready';
+        final canRerun = statusLower == 'completed' || statusLower == 'running';
+        final canEdit = statusLower == 'draft' || statusLower == 'scheduled';
         // Can delete any campaign except when running (soft delete preserves data)
         final canDelete = status != 'running';
         final templateName = c['template_id']?.toString() ?? '—';
@@ -2380,7 +2385,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             }
             return campaignPnId;
           }
-          if (status == 'draft' || status == 'scheduled') {
+          if (statusLower == 'draft' || statusLower == 'scheduled' || statusLower == 'ready') {
             return 'Not started yet';
           }
           return '—';
@@ -2520,7 +2525,10 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                   if (canEdit)
                     const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined, size: 20), title: Text('Edit'), dense: true)),
                   if (canStart)
-                    const PopupMenuItem(value: 'start', child: ListTile(leading: Icon(Icons.play_arrow, size: 20), title: Text('Start campaign'), dense: true)),
+                    const PopupMenuItem(
+                        value: 'start',
+                        child: ListTile(
+                            leading: Icon(Icons.play_arrow, size: 20), title: Text('Run campaign'), dense: true)),
                   if (canStart && audienceIds.isNotEmpty)
                     const PopupMenuItem(value: 'start_subset', child: ListTile(leading: Icon(Icons.playlist_add_check_circle_outlined, size: 20), title: Text('Start subset'), dense: true)),
                   if (canRerun)
@@ -2605,6 +2613,52 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                   snapshotStatus: (c['snapshot_status'] ?? metrics['snapshot_status'] ?? 'none').toString(),
                 ),
                 const SizedBox(height: NeyvoSpacing.md),
+                if (canStart)
+                  Card(
+                    color: NeyvoTheme.bgCard,
+                    child: Padding(
+                      padding: const EdgeInsets.all(NeyvoSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.play_circle_outline, size: 22, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: NeyvoSpacing.sm),
+                              Text(
+                                'Run campaign',
+                                style: NeyvoType.titleMedium.copyWith(color: NeyvoTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: NeyvoSpacing.sm),
+                          Text(
+                            'Audience is prepared. Confirm the outbound number in the header, then launch.',
+                            style: NeyvoType.bodySmall.copyWith(color: NeyvoTheme.textSecondary),
+                          ),
+                          const SizedBox(height: NeyvoSpacing.md),
+                          Wrap(
+                            spacing: NeyvoSpacing.md,
+                            runSpacing: NeyvoSpacing.sm,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: () => _startOrRerunCampaign(c),
+                                icon: const Icon(Icons.play_arrow, size: 20),
+                                label: const Text('Run campaign'),
+                              ),
+                              if (audienceIds.isNotEmpty)
+                                OutlinedButton.icon(
+                                  onPressed: () => _startCampaignWithSubset(campaignId, audienceIds),
+                                  icon: const Icon(Icons.playlist_add_check_circle_outlined, size: 20),
+                                  label: const Text('Start subset'),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (canStart) const SizedBox(height: NeyvoSpacing.md),
                 Builder(
                   builder: (context) {
                     final lastErr = (metrics['last_error'] ?? c['last_error'])?.toString().trim() ?? '';
@@ -3169,7 +3223,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
                 FilledButton.icon(
                   onPressed: () => _startOrRerunCampaign(campaign),
                   icon: const Icon(Icons.play_arrow, size: 20),
-                  label: const Text('Start campaign'),
+                  label: const Text('Run campaign'),
                   style: FilledButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,

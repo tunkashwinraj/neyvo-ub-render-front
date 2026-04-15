@@ -1576,7 +1576,11 @@ class NeyvoPulseApi {
 
   /// Build immutable audience snapshot + validation.
   static Future<Map<String, dynamic>> prepareCampaign(String campaignId) async =>
-      _post('/api/pulse/campaigns/$campaignId/prepare', {}, timeout: pulseCampaignPrepare);
+      _postDio(
+        '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/prepare',
+        {},
+        timeout: pulseCampaignPrepare,
+      );
 
   /// Latest validation + snapshot status.
   static Future<Map<String, dynamic>> getCampaignValidation(String campaignId) async =>
@@ -1613,8 +1617,8 @@ class NeyvoPulseApi {
       if (maxAttempts != null) 'max_attempts': maxAttempts,
       if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
     };
-    return SpeariaApi.postJsonMap(
-      '/api/pulse/campaigns/$campaignId/start',
+    return SpeariaApi.postJsonMapDio(
+      '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/start',
       body: body,
       timeout: pulseCampaignStart,
     );
@@ -1647,8 +1651,8 @@ class NeyvoPulseApi {
       'student_ids': studentIds,
       if (phoneNumberId != null && phoneNumberId.isNotEmpty) 'phone_number_id': phoneNumberId,
     };
-    return SpeariaApi.postJsonMap(
-      '/api/pulse/campaigns/$campaignId/retry',
+    return SpeariaApi.postJsonMapDio(
+      '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/retry',
       body: body,
       timeout: pulseCampaignRetry,
     );
@@ -1656,7 +1660,11 @@ class NeyvoPulseApi {
 
   /// Rebuild audience: deletes snapshot and unlocks audience config.
   static Future<Map<String, dynamic>> rebuildCampaignAudience(String campaignId) async =>
-      _post('/api/pulse/campaigns/$campaignId/rebuild-audience', {}, timeout: pulseCampaignRebuildAudience);
+      _postDio(
+        '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/rebuild-audience',
+        {},
+        timeout: pulseCampaignRebuildAudience,
+      );
 
   /// Pause a running campaign (stops refilling the pool; active calls still finish).
   static Future<Map<String, dynamic>> pauseCampaign(String campaignId) async =>
