@@ -147,6 +147,8 @@ class SpeariaApi {
   /// Optional: adjust default request timeout
   static void setDefaultTimeout(Duration d) {
     _defaultTimeout = d;
+    // Rebuild Dio so [connectTimeout]/[receiveTimeout] match (cached instance would keep old values).
+    _dio = null;
   }
 
   /// Timeout buckets for endpoint classes.
@@ -159,7 +161,7 @@ class SpeariaApi {
       case ApiTimeoutClass.medium:
         return const Duration(seconds: 15);
       case ApiTimeoutClass.heavy:
-        return const Duration(seconds: 90);
+        return const Duration(minutes: 3);
     }
   }
 

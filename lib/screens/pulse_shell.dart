@@ -384,7 +384,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     try {
       final acc = await ref
           .read(accountInfoProvider.future)
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 60));
       if (acc['ok'] == true && acc['account_id'] != null) {
         final accountId = acc['account_id']?.toString() ?? '';
         if (accountId.isNotEmpty) {
@@ -427,7 +427,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
     try {
       final res = await ref
           .read(accountInfoProvider.future)
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 60));
       if (res['ok'] == true && res['account_id'] != null) {
         final accountId = res['account_id']?.toString() ?? '';
         NeyvoPulseApi.setDefaultAccountId(accountId);
@@ -453,7 +453,7 @@ class _PulseShellState extends ConsumerState<PulseShell> with SingleTickerProvid
   Future<void> _syncTimezoneFromSettings() async {
     try {
       final settingsRes =
-          await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 6));
+          await NeyvoPulseApi.getSettings().timeout(const Duration(seconds: 45));
       final tzStr = (settingsRes['settings'] as Map?)?['timezone']?.toString();
       UserTimezoneService.setTimezone(tzStr);
       ref.read(userTimezoneProvider.notifier).syncFromService();

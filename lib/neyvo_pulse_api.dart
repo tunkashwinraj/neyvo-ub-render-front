@@ -1333,7 +1333,7 @@ class NeyvoPulseApi {
 
   /// Server-built campaign CSV: `{ ok, filename, csv_content }`.
   ///
-  /// Tries async job path (`POST .../export/jobs` with 90s timeout, poll, then download). If the
+  /// Tries async job path (`POST .../export/jobs` with long timeout, poll, then download). If the
   /// server has no job API or creation fails, falls back to synchronous `GET .../export` (10 min).
   ///
   /// When a job runs to completion then fails terminal status, or poll times out, throws (no sync fallback).
@@ -1347,7 +1347,7 @@ class NeyvoPulseApi {
       create = await _post(
         '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export/jobs',
         {},
-        timeout: const Duration(seconds: 90),
+        timeout: const Duration(minutes: 3),
       );
     } catch (_) {
       return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
