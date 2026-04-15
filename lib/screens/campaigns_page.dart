@@ -19,6 +19,7 @@ import '../services/user_timezone_service.dart';
 import '../theme/neyvo_theme.dart';
 import '../utils/csv_import.dart';
 import '../utils/export_csv.dart';
+import '../utils/phone_util.dart';
 import '../widgets/neyvo_empty_state.dart';
 import 'call_detail_page.dart';
 
@@ -549,7 +550,12 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           id = byStudentId[sid.toLowerCase()]?.toString();
         }
         if ((id == null || id.isEmpty) && phone.isNotEmpty) {
-          id = byPhone[_normalizePhone(phone)]?.toString();
+          final d = _normalizePhone(phone);
+          id = byPhone[d]?.toString();
+          // Backend stores E.164 as +1…; map keys may be 11-digit while CSV digits are 10.
+          if ((id == null || id.isEmpty) && d.length == 10) {
+            id = byPhone['1$d']?.toString();
+          }
         }
 
         if (id != null && id.isNotEmpty) {
@@ -1796,9 +1802,11 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
             if (query.trim().isEmpty) return true;
             final s = byId[id];
             final name = (s?['name'] ?? '').toString().toLowerCase();
-            final phone = (s?['phone'] ?? '').toString().toLowerCase();
+            final phone = (s?['phone'] ?? '').toString();
             final q = query.toLowerCase();
-            return name.contains(q) || phone.contains(q);
+            return name.contains(q) ||
+                phone.toLowerCase().contains(q) ||
+                phoneMatchesSearchQuery(phone, query);
           }).toList();
           return AlertDialog(
             title: const Text('Start with selected contacts'),
@@ -4497,14 +4505,18 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
               ),
               const SizedBox(height: NeyvoSpacing.sm),
               Builder(builder: (context) {
-                final q = _audienceSearchController.text.trim().toLowerCase();
+                final rawQ = _audienceSearchController.text.trim();
+                final q = rawQ.toLowerCase();
                 final visible = q.isEmpty
                     ? filtered
                     : filtered.where((s) {
                         final name = (s['name'] ?? '').toString().toLowerCase();
-                        final phone = (s['phone'] ?? '').toString().toLowerCase();
+                        final phone = (s['phone'] ?? '').toString();
                         final sid = (s['student_id'] ?? s['id'] ?? '').toString().toLowerCase();
-                        return name.contains(q) || phone.contains(q) || sid.contains(q);
+                        return name.contains(q) ||
+                            phone.toLowerCase().contains(q) ||
+                            phoneMatchesSearchQuery(phone, rawQ) ||
+                            sid.contains(q);
                       }).toList();
                 // Bounded list height so Flutter can lazily build rows (no shrinkWrap freeze on 1000+ contacts).
                 return SizedBox(

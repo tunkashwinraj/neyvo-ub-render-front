@@ -36,3 +36,29 @@ String normalizePhoneInput(String? raw) {
   if (normalized.isNotEmpty) return normalized;
   return (raw ?? '').trim();
 }
+
+/// True if [storedDisplayPhone] matches [query] for list/search UIs.
+///
+/// Stored values are usually E.164 (+1…) while users often type Excel/CSV-style
+/// numbers with spaces, parentheses, or dashes. [name.contains] alone misses those.
+bool phoneMatchesSearchQuery(String? storedDisplayPhone, String query) {
+  final raw = query.trim();
+  if (raw.isEmpty) return true;
+  final ph = (storedDisplayPhone ?? '').trim();
+  if (ph.isEmpty) return false;
+  if (ph.toLowerCase().contains(raw.toLowerCase())) return true;
+  final qDigits = _extractDigits(raw);
+  if (qDigits.length < 3) return false;
+  final pDigits = _extractDigits(ph);
+  if (pDigits.isEmpty) return false;
+  if (qDigits.length == 10) {
+    var p10 = pDigits;
+    if (p10.length == 11 && p10.startsWith('1')) {
+      p10 = p10.substring(1);
+    } else if (p10.length > 10) {
+      p10 = p10.substring(p10.length - 10);
+    }
+    if (p10 == qDigits) return true;
+  }
+  return pDigits.contains(qDigits) || qDigits.contains(pDigits);
+}
