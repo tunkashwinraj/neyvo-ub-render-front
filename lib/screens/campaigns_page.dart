@@ -3953,11 +3953,17 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       if (s == 'scheduled') {
         headline = 'Scheduled';
       } else if (s == 'ready') {
-        headline = 'Ready to start';
+        // "Ready" is a backend status meaning snapshot/validation passed — dialing only begins after Run campaign.
+        headline = 'Prepared — not dialing yet';
       } else {
         headline = 'Draft';
       }
-      detail = 'Audience: $audienceSummaryText • $totalPlanned target(s) when you launch';
+      if (s == 'ready') {
+        detail =
+            'Audience is locked and valid. Tap Run campaign (card below or ⋮ menu) to start calls • $totalPlanned contact(s).';
+      } else {
+        detail = 'Audience: $audienceSummaryText • $totalPlanned target(s) when you launch';
+      }
     } else if (s.startsWith('stopped') || s == 'stopped_no_credits') {
       accent = NeyvoTheme.error;
       icon = Icons.stop_circle_outlined;
