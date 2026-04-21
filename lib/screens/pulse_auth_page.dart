@@ -256,9 +256,10 @@ class _PulseAuthPageState extends ConsumerState<PulseAuthPage> {
                   children: [
                     const SizedBox(height: NeyvoSpacing.xxl),
                     Image.asset(
-                      'assets/goodwin_logo/goodwin-horiz-rgb.png',
+                      'assets/ub_logo/ub-logo-rgb-horizontal.jpg',
                       height: 72,
                       fit: BoxFit.contain,
+                      semanticLabel: 'University of Bridgeport',
                     ),
                     const SizedBox(height: NeyvoSpacing.lg),
                     const SizedBox(height: NeyvoSpacing.sm),
