@@ -1343,29 +1343,35 @@ class NeyvoPulseApi {
 
   /// Server-built campaign CSV: `{ ok, filename, csv_content }`.
   ///
-  /// Tries async job path (`POST .../export/jobs` with long timeout, poll, then download). If the
-  /// server has no job API or creation fails, falls back to synchronous `GET .../export` (10 min).
+  /// Uses the Cloud Tasks job path only: `POST .../export/jobs`, poll, then download.
+  /// Does not fall back to synchronous `GET .../export` (avoids long server work when jobs are configured).
   ///
-  /// When a job runs to completion then fails terminal status, or poll times out, throws (no sync fallback).
   /// [onProgress] is only called along the job poll path.
   static Future<Map<String, dynamic>> fetchCampaignSpreadsheetExport(
     String campaignId, {
     void Function({required int processed, required int total, required String status})? onProgress,
   }) async {
-    Map<String, dynamic> create;
+    final Map<String, dynamic> create;
     try {
       create = await _post(
         '/api/pulse/campaigns/${Uri.encodeComponent(campaignId)}/export/jobs',
         {},
         timeout: const Duration(minutes: 3),
       );
-    } catch (_) {
-      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+    } catch (e) {
+      throw Exception(
+        'Could not start campaign export job (Cloud Tasks). '
+        'Configure GCP + TASK_HANDLER_* on the API (docs/CLOUD_TASKS_SETUP.md). $e',
+      );
     }
 
     final jobId = (create['job_id'] ?? '').toString();
     if (create['ok'] != true || jobId.isEmpty) {
-      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+      final detail = (create['message'] ?? create['error'] ?? create).toString();
+      throw Exception(
+        'Campaign export job was not accepted: $detail. '
+        'Ensure Cloud Tasks is enabled and enqueue credentials are valid.',
+      );
     }
 
     Map<String, dynamic>? terminalStatus;
@@ -1374,8 +1380,8 @@ class NeyvoPulseApi {
       final Map<String, dynamic> status;
       try {
         status = await getCampaignExportJobStatus(jobId);
-      } catch (_) {
-        return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+      } catch (e) {
+        throw Exception('Campaign export status poll failed: $e');
       }
       final processed = (status['processed_items'] as num?)?.toInt() ?? 0;
       final total = (status['total_items'] as num?)?.toInt() ?? 0;
@@ -1396,8 +1402,8 @@ class NeyvoPulseApi {
     }
     try {
       return await downloadCampaignExportJob(jobId);
-    } catch (_) {
-      return getCampaignExport(campaignId, timeout: const Duration(minutes: 10));
+    } catch (e) {
+      throw Exception('Campaign export download failed: $e');
     }
   }
 
