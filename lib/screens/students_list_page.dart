@@ -1350,7 +1350,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Template: name,phone,email,student_id,balance,due_date,late_fee,notes (first_name/last_name also supported)')),
+          const SnackBar(content: Text('Template: first_name,last_name,student_id,date_of_birth,zip_code,phone,email,department,year_of_study,balance,amount,fund_name,due_date,late_fee,notes,advisor_name,booking_url')),
         );
       }
     }
@@ -1501,7 +1501,7 @@ class _ImportCsvDialogState extends State<_ImportCsvDialog> {
                   ),
                   const SizedBox(height: 8),
               Text(
-                'Required: name or first_name, and phone. Optional: last_name, student_id, email, department, year_of_study, balance, due_date, late_fee, notes. Duplicates are detected by student_id, then phone, then email.',
+                'Required: name or first_name, and phone. Optional: last_name, student_id, date_of_birth, zip_code, email, department, year_of_study, balance, due_date, late_fee, notes. Duplicates are detected by student_id, then phone, then email.',
                     style: NeyvoType.bodySmall.copyWith(color: NeyvoColors.textMuted),
                     textAlign: TextAlign.center,
                   ),

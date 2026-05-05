@@ -456,7 +456,7 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Template: name,phone,email,student_id,balance,due_date,late_fee,notes (first_name/last_name also supported)',
+            'Template: first_name,last_name,student_id,date_of_birth,zip_code,phone,email,department,year_of_study,balance,amount,fund_name,due_date,late_fee,notes,advisor_name,booking_url',
           ),
         ),
       );
