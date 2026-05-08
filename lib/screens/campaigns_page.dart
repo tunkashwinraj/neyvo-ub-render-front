@@ -1717,6 +1717,14 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
 
       // If there's no complete snapshot yet, run prepare once.
       if (status != 'complete') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Preparing audience snapshot…'),
+              duration: Duration(seconds: 6),
+            ),
+          );
+        }
         final res = await NeyvoPulseApi.prepareCampaign(campaignId);
         final preparedValidation =
             (res['validation'] as Map?)?.cast<String, dynamic>();
@@ -1724,16 +1732,40 @@ class _CampaignsPageState extends ConsumerState<CampaignsPage> {
           report = preparedValidation;
           ok = report?['ok'] == true;
         }
-        // Refresh authoritative status from /validation.
-        try {
-          final v2 = await NeyvoPulseApi.getCampaignValidation(campaignId);
-          final vv = Map<String, dynamic>.from(v2 as Map);
+
+        // The prepare endpoint may kick off async work; poll /validation briefly
+        // so a just-started snapshot doesn't immediately look "not ready".
+        Future<Map<String, dynamic>?> fetchValidation() async {
+          try {
+            final v2 = await NeyvoPulseApi.getCampaignValidation(campaignId);
+            return Map<String, dynamic>.from(v2 as Map);
+          } catch (_) {
+            return null;
+          }
+        }
+
+        final deadlines = <Duration>[
+          const Duration(milliseconds: 800),
+          const Duration(milliseconds: 1200),
+          const Duration(milliseconds: 1800),
+          const Duration(milliseconds: 2500),
+          const Duration(milliseconds: 3500),
+          const Duration(milliseconds: 5000),
+          const Duration(milliseconds: 6500),
+          const Duration(milliseconds: 8000),
+          const Duration(milliseconds: 10000),
+        ];
+
+        for (final d in deadlines) {
+          await Future.delayed(d);
+          final vv = await fetchValidation();
+          if (vv == null) continue;
           status = (vv['snapshot_status'] ?? status).toString().toLowerCase().trim();
-          report =
-              (vv['validation_report'] as Map?)?.cast<String, dynamic>() ?? report;
+          report = (vv['validation_report'] as Map?)?.cast<String, dynamic>() ?? report;
           ok = ok || (report != null && report['ok'] == true);
-        } catch (_) {
-          // If validation fetch fails, fall through to status checks below.
+          if (status == 'complete') break;
+          // If backend marks invalid, stop polling and show the validation guidance below.
+          if (status == 'invalid') break;
         }
       }
 

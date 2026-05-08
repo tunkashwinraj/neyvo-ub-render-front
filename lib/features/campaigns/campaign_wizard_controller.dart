@@ -112,10 +112,42 @@ class CampaignWizardController extends ChangeNotifier {
     if (campaignId == null) return;
     final res = await NeyvoPulseApi.prepareCampaign(campaignId!);
     validationReport = res;
-    // Fetch authoritative snapshot status / size from backend
-    final v = await NeyvoPulseApi.getCampaignValidation(campaignId!);
-    snapshotStatus = (v['snapshot_status'] ?? 'none').toString();
-    snapshotAudienceSize = (v['snapshot_audience_size'] as int?) ?? 0;
+    // Fetch authoritative snapshot status / size from backend.
+    // Prepare may be asynchronous, so poll briefly for completion.
+    Map<String, dynamic>? v;
+    Future<Map<String, dynamic>?> fetch() async {
+      try {
+        final vv = await NeyvoPulseApi.getCampaignValidation(campaignId!);
+        return Map<String, dynamic>.from(vv as Map);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    v = await fetch();
+    String status = (v?['snapshot_status'] ?? 'none').toString().toLowerCase().trim();
+    if (status != 'complete') {
+      final delays = <Duration>[
+        const Duration(milliseconds: 800),
+        const Duration(milliseconds: 1200),
+        const Duration(milliseconds: 1800),
+        const Duration(milliseconds: 2500),
+        const Duration(milliseconds: 3500),
+        const Duration(milliseconds: 5000),
+        const Duration(milliseconds: 6500),
+        const Duration(milliseconds: 8000),
+      ];
+      for (final d in delays) {
+        await Future.delayed(d);
+        v = await fetch() ?? v;
+        status = (v?['snapshot_status'] ?? status).toString().toLowerCase().trim();
+        if (status == 'complete' || status == 'invalid') break;
+      }
+    }
+
+    snapshotStatus = (v?['snapshot_status'] ?? 'none').toString();
+    snapshotAudienceSize = (v?['snapshot_audience_size'] as int?) ?? 0;
+    validationReport = (v?['validation_report'] as Map?)?.cast<String, dynamic>() ?? validationReport;
     notifyListeners();
   }
 
